@@ -26,18 +26,13 @@ const SECTIONS: OptionSection[] = [
       { id: "xlarge",       label: "XLarge",       hint: "Enterprise scale · ~3.6 K problems · stresses everything" },
     ],
   },
-  {
-    title: "Segments",
-    subtitle: "synthetic segment catalogs · open /segments to view",
-    options: [
-      { id: "seg-empty",      label: "Empty",      hint: "0 segments · exercises empty-state banner" },
-      { id: "seg-few",        label: "Few (3)",    hint: "3 segments · fits in grid, no overflow, no UNASSIGNED" },
-      { id: "seg-overflow",   label: "Overflow",   hint: "12 segments · 6 quadrants + +6 in chip popover" },
-      { id: "seg-unassigned", label: "Unassigned", hint: "4 segments · 20% of problems match none · UNASSIGNED slot" },
-      { id: "seg-multi",      label: "Multi",      hint: "5 segments · 30% in 2+ segments · dual-counting" },
-      { id: "seg-imbalanced", label: "Imbalanced", hint: "5 segments · one dominant (~70%) · leader stays clear" },
-    ],
-  },
+  // Segments section retired in lockstep with `SHOW_SEGMENT_VIEW =
+  // false` in Overview.tsx — the segment view is hidden from the UI,
+  // so the synthetic segment catalogs in the demo panel exercise a
+  // surface the user can't reach. The `seg-*` scenario IDs are kept
+  // recognised in the underlying utils/debugScenario.ts switch (and
+  // still work via URL deep-link) so re-enabling the view also
+  // re-enables their selectors here if we add the section back.
   {
     title: "MTTA",
     subtitle: "synthetic comments stream · open /analytics → Responder velocity",
