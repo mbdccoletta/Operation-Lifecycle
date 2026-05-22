@@ -11,7 +11,7 @@
 // JSON" serialises whatever's currently on-screen for archival /
 // shipping to engineering.
 
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useEffect } from "react";
 import { useScenario, Scenario } from "../utils/debugScenario";
 import {
   runBenchmark, runSweep,
@@ -22,6 +22,19 @@ import {
 // `Scenario` union — adding a new perf-* size means adding it here
 // AND to the DebugScenarioPanel sections list.
 const PERF_SCENARIOS: Scenario[] = ["perf-1k", "perf-10k", "perf-30k", "perf-50k"];
+
+// Module-level store for benchmark results so they SURVIVE the
+// component's unmount/remount cycle (which happens when the user
+// toggles between perf-* scenarios outside of the panel, or if a
+// teardown step accidentally drops the panel's render condition).
+// The pattern mirrors `useScenario` itself — single source of truth
+// outside React's reconciliation tree, listeners notified on change.
+let cachedResults: BenchmarkResult[] = [];
+const resultsListeners = new Set<(rs: BenchmarkResult[]) => void>();
+function setCachedResults(rs: BenchmarkResult[]): void {
+  cachedResults = rs;
+  resultsListeners.forEach((cb) => cb(rs));
+}
 
 interface ProgressState {
   scenarioIndex: number;
@@ -48,7 +61,14 @@ export const PerfBenchmarkPanel: React.FC = () => {
   const [scenario] = useScenario();
   const [running, setRunning] = useState(false);
   const [progress, setProgress] = useState<ProgressState | null>(null);
-  const [results, setResults] = useState<BenchmarkResult[]>([]);
+  // Hydrate from the module-level cache so a previous run's results
+  // re-appear when the panel re-mounts (e.g. after the scenario flips
+  // through `real` during teardown).
+  const [results, setResults] = useState<BenchmarkResult[]>(() => cachedResults);
+  useEffect(() => {
+    resultsListeners.add(setResults);
+    return () => { resultsListeners.delete(setResults); };
+  }, []);
 
   const runSingle = useCallback(async () => {
     // If the current scenario isn't a perf-*, default to perf-10k
@@ -62,7 +82,7 @@ export const PerfBenchmarkPanel: React.FC = () => {
       const r = await runBenchmark(target, {
         onProgress: (step) => setProgress({ scenarioIndex: 0, scenarioId: target, step }),
       });
-      setResults([r]);
+      setCachedResults([r]);
     } finally {
       setRunning(false);
       setProgress(null);
@@ -79,7 +99,7 @@ export const PerfBenchmarkPanel: React.FC = () => {
           prev ? { ...prev, step } : null
         ),
       });
-      setResults(rs);
+      setCachedResults(rs);
     } finally {
       setRunning(false);
       setProgress(null);
@@ -91,14 +111,36 @@ export const PerfBenchmarkPanel: React.FC = () => {
     const filename = results.length === 1
       ? `perf-${results[0].scenarioId}-${results[0].startedAt.slice(0, 19).replace(/[:T]/g, "-")}.json`
       : `perf-sweep-${results[0].startedAt.slice(0, 19).replace(/[:T]/g, "-")}.json`;
-    downloadJson(filename, {
+    const payload = {
       app: "Operation Lifecycle",
       // Keep the schema versioned so older result files can be
       // detected + skipped by future result loaders.
       schemaVersion: 1,
       capturedAt: results[0].startedAt,
       results,
-    });
+    };
+    try {
+      downloadJson(filename, payload);
+    } catch (err) {
+      // Some kiosked / locked-down browsers refuse `download` attribute.
+      // Fallback: open the JSON in a new tab so the user can copy or
+      // save it manually. Also dump to console for screenshot use.
+      // eslint-disable-next-line no-console
+      console.error("[PerfLab] downloadJson failed — opening in new tab", err);
+      try {
+        const w = window.open();
+        if (w) {
+          w.document.title = filename;
+          w.document.body.style.fontFamily = "monospace";
+          w.document.body.innerText = JSON.stringify(payload, null, 2);
+        }
+      } catch {
+        // eslint-disable-next-line no-console
+        console.warn("[PerfLab] Fallback also blocked. Payload dumped below — copy from console.");
+        // eslint-disable-next-line no-console
+        console.log(payload);
+      }
+    }
   }, [results]);
 
   return (

@@ -172,7 +172,17 @@ export const DebugScenarioPanel: React.FC = () => {
                     // no reason. Collapsing on commit keeps the
                     // chip footprint small until they explicitly
                     // re-open it.
-                    onClick={() => { setScenario(opt.id); setCollapsed(true); }}
+                    onClick={() => {
+                      setScenario(opt.id);
+                      // Auto-collapse on commit keeps the panel small
+                      // for the regular scenarios — EXCEPT for perf-*
+                      // scenarios where the next step is to interact
+                      // with the benchmark controls (Run / Sweep / ⤓)
+                      // which only appear inside this panel. Keeping
+                      // it open avoids a confusing "click cenário →
+                      // panel disappears → where do I run the bench?".
+                      if (!opt.id.startsWith("perf-")) setCollapsed(true);
+                    }}
                     title={opt.hint}
                     style={{
                       textAlign: "left",

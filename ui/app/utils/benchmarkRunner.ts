@@ -220,7 +220,13 @@ export async function runBenchmark(
   });
 
   await captureStep("teardown", async () => {
-    setScenario("real");
+    // INTENTIONALLY does NOT call `setScenario("real")`. Doing so
+    // would unmount the PerfBenchmarkPanel (its render condition is
+    // `scenario.startsWith("perf-")`), which would tear down the
+    // `results` state mid-run and orphan the ⤓ JSON button. Leaving
+    // the synthetic scenario active keeps the panel mounted so the
+    // user can inspect + export results. Real-data restore is a
+    // manual "Real" click in the DEMO panel.
     await sleep(400);
   });
 
