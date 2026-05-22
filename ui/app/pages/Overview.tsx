@@ -229,6 +229,42 @@ interface OverviewProps {
   groupBy?: OverviewGroupBy;
 }
 
+/** Small chip rendered inside each mobile headline card, mirroring the
+ *  desktop ring's `▲ +N /1h` (or `▼ -N` / `— neutral`) sub-label.
+ *
+ *  `risingIsGood` flips the colour semantic: TOTAL and ACTIVE rising is
+ *  BAD (more incidents → red ▲), while RESOLVED rising is GOOD (faster
+ *  recovery → green ▲). Matches `drawSatellite`'s logic 1:1.
+ *
+ *  The component is a plain styled element — animations live in CSS
+ *  (`.neo-mobile-ring-trend` uses a `key`-driven re-mount + keyframes
+ *  to draw attention when the value flips direction). */
+function MobileRingTrend({ delta, risingIsGood }: { delta: number; risingIsGood: boolean }) {
+  if (delta === 0) {
+    return (
+      <span className="neo-mobile-ring-trend neo-mobile-ring-trend-neutral">
+        — neutral
+      </span>
+    );
+  }
+  const isUp = delta > 0;
+  const isGood = isUp ? risingIsGood : !risingIsGood;
+  const cls = isGood ? "neo-mobile-ring-trend-good" : "neo-mobile-ring-trend-bad";
+  const dirCls = isUp ? "neo-mobile-ring-trend-up" : "neo-mobile-ring-trend-down";
+  const arrow = isUp ? "▲" : "▼";
+  // `key` rerolls the CSS animation when the delta sign flips, so the
+  // chip pulses to draw attention to a direction change.
+  return (
+    <span
+      key={`${isUp}-${delta}`}
+      className={`neo-mobile-ring-trend ${cls} ${dirCls}`}
+    >
+      <span className="neo-mobile-ring-trend-arrow" aria-hidden="true">{arrow}</span>
+      {isUp ? "+" : ""}{delta} /1h
+    </span>
+  );
+}
+
 export const Overview = ({ groupBy = "category" }: OverviewProps) => {
   const navigate = useNavigate();
   // URL-synced view + data mode — picks initial values from search
@@ -830,6 +866,51 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
       resolvedByCategory: statusCategoryCounts.CLOSED,
     };
   }, [statusCategoryLoading, scenario, statusCategoryTotals, statusCategoryCounts]);
+
+  // Hour-over-hour trend deltas for the mobile headline strip (and
+  // any other consumer that wants the same /1h figures the desktop
+  // rings show below their numbers).
+  //
+  // Derived from the loaded `rawProblems` list — not from the count
+  // query — because the trend is a RECENT RATE (events in last 1h vs
+  // events 1–2h ago) and the list (sorted `event.start desc`,
+  // ramping from 250 records up) always covers that window even on
+  // tenants with thousands of historical problems. Computing this
+  // server-side would mean a third DQL per page-load for a
+  // diff-of-two-counts that's already trivially derivable here.
+  const mobileRingTrends = useMemo(() => {
+    const now = Date.now();
+    const oneHourAgo  = now - 3_600_000;
+    const twoHoursAgo = now - 7_200_000;
+    let totalRecent = 0, totalPrevious = 0;
+    let activeRecent = 0, activeOlder = 0;
+    let resolvedRecent = 0, resolvedPrevious = 0;
+    for (const p of rawProblems) {
+      const startTs = new Date(p["event.start"]).getTime();
+      const endTs   = p["event.end"] ? new Date(p["event.end"]).getTime() : null;
+      // TOTAL: counts NEW problems started in the last hour vs 1-2h ago
+      if (startTs >= oneHourAgo)       totalRecent++;
+      else if (startTs >= twoHoursAgo) totalPrevious++;
+      // ACTIVE: counts problems that ARE active now vs problems that
+      // WERE active 1h ago. "Was active at cutoff" = started before
+      // 1h ago AND (still active OR closed after the cutoff).
+      const isActiveNow = p["event.status"] === "ACTIVE";
+      const wasActiveAt1hAgo = startTs <= oneHourAgo
+        && (isActiveNow || (endTs !== null && endTs > oneHourAgo));
+      if (isActiveNow)      activeRecent++;
+      if (wasActiveAt1hAgo) activeOlder++;
+      // RESOLVED: counts problems that closed in the last hour vs 1-2h ago.
+      if (p["event.status"] === "CLOSED" && endTs !== null) {
+        if (endTs >= oneHourAgo)       resolvedRecent++;
+        else if (endTs >= twoHoursAgo) resolvedPrevious++;
+      }
+    }
+    return {
+      total: totalRecent - totalPrevious,
+      active: activeRecent - activeOlder,
+      resolved: resolvedRecent - resolvedPrevious,
+    };
+  }, [rawProblems]);
 
   // ── Grouping resolution (category vs segment mode) ────────────────
   // In "category" mode the 6 Davis categories are the quadrants and
@@ -1912,6 +1993,53 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
         <CategoryFilterChips />
       </div>
 
+      {/* Mobile headline strip — TOTAL / ACTIVE / RESOLVED, sourced from
+          the same count-query override that feeds the desktop's central
+          rings. Placed BEFORE the chart so it reads as the page's
+          headline summary (matches the visual hierarchy native Davis
+          uses for "N active / M total"). Each cell carries the same
+          /1h trend delta the desktop draws under its rings — see
+          `mobileRingTrends` above for the derivation. */}
+      {isMobileOrTablet && (
+        <div className="neo-mobile-rings" role="group" aria-label="Headline counts">
+          <div className="neo-mobile-ring neo-mobile-ring-total">
+            <span className="neo-mobile-ring-label">TOTAL</span>
+            <span className="neo-mobile-ring-value">
+              {constellationCountOverrides?.total ?? problems.length}
+            </span>
+            <MobileRingTrend delta={mobileRingTrends.total} risingIsGood={false} />
+          </div>
+          <button
+            type="button"
+            className={`neo-mobile-ring neo-mobile-ring-active${statusFilter === "ACTIVE" ? " is-active" : ""}`}
+            onClick={() => setStatusFilter(statusFilter === "ACTIVE" ? null : "ACTIVE")}
+            aria-pressed={statusFilter === "ACTIVE"}
+            title="Filter list to Active problems"
+          >
+            <span className="neo-mobile-ring-label">ACTIVE</span>
+            <span className="neo-mobile-ring-value">
+              {constellationCountOverrides?.active
+                ?? problems.filter((p) => p["event.status"] === "ACTIVE").length}
+            </span>
+            <MobileRingTrend delta={mobileRingTrends.active} risingIsGood={false} />
+          </button>
+          <button
+            type="button"
+            className={`neo-mobile-ring neo-mobile-ring-resolved${statusFilter === "CLOSED" ? " is-active" : ""}`}
+            onClick={() => setStatusFilter(statusFilter === "CLOSED" ? null : "CLOSED")}
+            aria-pressed={statusFilter === "CLOSED"}
+            title="Filter list to Resolved problems"
+          >
+            <span className="neo-mobile-ring-label">RESOLVED</span>
+            <span className="neo-mobile-ring-value">
+              {constellationCountOverrides?.resolved
+                ?? problems.filter((p) => p["event.status"] === "CLOSED").length}
+            </span>
+            <MobileRingTrend delta={mobileRingTrends.resolved} risingIsGood />
+          </button>
+        </div>
+      )}
+
       {/* ═══ PULSE SEISMOGRAPH ═══ */}
       <div
         className={`neo-pulse-container${pulseExpanded ? " neo-pulse-container-expanded" : ""}`}
@@ -2070,52 +2198,6 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
         </div>
       ) : (
         <div className="neo-list-section">
-          {/* Mobile headline strip — surfaces the same three counts
-              the desktop's central rings show (TOTAL / ACTIVE /
-              RESOLVED). On mobile the constellation is hidden
-              (viewMode forced to "list" in useEffect above) so
-              these would otherwise be invisible.
-              Numbers come from the count-query override when ready,
-              with a list-derived fallback so the strip doesn't
-              flash zeros on first paint. Tapping ACTIVE / RESOLVED
-              applies the status filter so users can drill the list
-              the same way they'd click the desktop ring. */}
-          {isMobileOrTablet && (
-            <div className="neo-mobile-rings" role="group" aria-label="Headline counts">
-              <div className="neo-mobile-ring neo-mobile-ring-total">
-                <span className="neo-mobile-ring-label">TOTAL</span>
-                <span className="neo-mobile-ring-value">
-                  {constellationCountOverrides?.total ?? problems.length}
-                </span>
-              </div>
-              <button
-                type="button"
-                className={`neo-mobile-ring neo-mobile-ring-active${statusFilter === "ACTIVE" ? " is-active" : ""}`}
-                onClick={() => setStatusFilter(statusFilter === "ACTIVE" ? null : "ACTIVE")}
-                aria-pressed={statusFilter === "ACTIVE"}
-                title="Filter list to Active problems"
-              >
-                <span className="neo-mobile-ring-label">ACTIVE</span>
-                <span className="neo-mobile-ring-value">
-                  {constellationCountOverrides?.active
-                    ?? problems.filter((p) => p["event.status"] === "ACTIVE").length}
-                </span>
-              </button>
-              <button
-                type="button"
-                className={`neo-mobile-ring neo-mobile-ring-resolved${statusFilter === "CLOSED" ? " is-active" : ""}`}
-                onClick={() => setStatusFilter(statusFilter === "CLOSED" ? null : "CLOSED")}
-                aria-pressed={statusFilter === "CLOSED"}
-                title="Filter list to Resolved problems"
-              >
-                <span className="neo-mobile-ring-label">RESOLVED</span>
-                <span className="neo-mobile-ring-value">
-                  {constellationCountOverrides?.resolved
-                    ?? problems.filter((p) => p["event.status"] === "CLOSED").length}
-                </span>
-              </button>
-            </div>
-          )}
           {/* Pinned-filter banners — extracted in audit Step 3 into a
               dedicated `<PinnedBanners>` component (one renderer per
               filter variant: pinned problem, affected entity, root

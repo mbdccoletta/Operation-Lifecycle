@@ -1542,6 +1542,69 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   max-width: 100%;
 }
 
+/* Trend chip rendered below the value — same `▲ +N /1h` / `▼ -N` /
+   `— neutral` vocabulary the desktop ring uses. Re-mounts via React
+   `key` whenever the delta flips, which restarts the keyframe
+   animation below so the chip pulses to flag the direction change. */
+.neo-mobile-ring-trend {
+  font: 600 11px var(--neo-mono);
+  letter-spacing: -0.2px;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-top: 2px;
+  /* Pulse-in animation — runs once per `key` change so a flap from
+     +1 → +2 → +3 each plays a brief beat without becoming distracting. */
+  animation: neo-trend-pulse 360ms ease-out;
+}
+.neo-mobile-ring-trend-neutral {
+  color: var(--neo-text-3);
+  opacity: 0.65;
+  animation: none;
+}
+/* Color contract matches the desktop draw helper:
+   - rising-is-bad   → red ▲ / green ▼
+   - rising-is-good  → green ▲ / red ▼          */
+.neo-mobile-ring-trend-good { color: #22d3a0; }
+.neo-mobile-ring-trend-bad  { color: #ff4d6a; }
+/* Drop a soft glow on the chip so the colour reads at a glance even
+   inside a small card — matches the shadowBlur the canvas helper uses. */
+.neo-mobile-ring-trend-good { text-shadow: 0 0 6px rgba(34,211,160,0.45); }
+.neo-mobile-ring-trend-bad  { text-shadow: 0 0 6px rgba(255,77,106,0.45); }
+
+/* The arrow gets its OWN motion so it reads as actively pointing
+   somewhere (up = climbing, down = falling) without distracting from
+   the number itself. Loops indefinitely while the chip is alive. */
+.neo-mobile-ring-trend-arrow {
+  display: inline-block;
+  animation: neo-trend-arrow-up 1.4s ease-in-out infinite;
+}
+.neo-mobile-ring-trend-down .neo-mobile-ring-trend-arrow {
+  animation-name: neo-trend-arrow-down;
+}
+
+@keyframes neo-trend-pulse {
+  0%   { transform: scale(0.85); opacity: 0; }
+  60%  { transform: scale(1.08); opacity: 1; }
+  100% { transform: scale(1);    opacity: 1; }
+}
+@keyframes neo-trend-arrow-up {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-2px); }
+}
+@keyframes neo-trend-arrow-down {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(2px); }
+}
+/* Respect the OS-level reduced-motion preference — drop the loop and
+   the entry pulse, keep the colour cue intact. */
+@media (prefers-reduced-motion: reduce) {
+  .neo-mobile-ring-trend,
+  .neo-mobile-ring-trend-arrow {
+    animation: none;
+  }
+}
+
 /* List actions row — search + icon buttons + sort + count */
 .neo-list-actions {
   display: flex; align-items: center; gap: 8px;
