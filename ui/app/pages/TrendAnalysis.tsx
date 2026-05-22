@@ -10,6 +10,7 @@ import React, { useEffect, useMemo, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useProblems, type Problem } from "../hooks/useProblems";
 import { useTimeRange } from "../hooks/useTimeRange";
+import { useDevice } from "../hooks/useDevice";
 import { SegmentSelector, TimeframeSelector } from "@dynatrace/strato-components-preview/filters";
 import type { Timeframe } from "@dynatrace/strato-components-preview/core";
 import { getCategoryLabel, formatDuration, formatStartedDate, getImpactLabel } from "../utils/formatters";
@@ -18,6 +19,7 @@ import { useCategoryFilterOnly, useSetCategoryCounts } from "../contexts/Categor
 import { useTriggerRefresh } from "../contexts/RefreshSignalContext";
 import { useCategoryCounts } from "../hooks/useCategoryCounts";
 import { parseStratoTimeframe } from "../utils/timeframe";
+import { DisplaySettingsPanel } from "../components/DisplaySettingsPanel";
 import { CategoryFilterChips } from "../components/CategoryFilterChips";
 import { Sparkline } from "../components/Sparkline";
 import { usePageVisible, useDelayedLoading } from "../hooks/useUiUtils";
@@ -65,6 +67,10 @@ function priorityScore(p: Problem): number {
 
 export const TrendAnalysis = () => {
   const navigate = useNavigate();
+  // Mobile/tablet detection — used to relocate the SegmentSelector
+  // from the header's left cluster to the right cluster (next to
+  // the TimeframeSelector) on small viewports.
+  const { isMobileOrTablet } = useDevice();
 
   // ── Filter / timeframe / refresh — mirror the Overview pattern ──
   // Default: **Today** (UTC start-of-day → now). Mirrors Overview's
@@ -323,9 +329,13 @@ export const TrendAnalysis = () => {
     <div className="neo-analytics-page">
       <header className="neo-header">
         <div className="neo-header-left">
-          <SegmentSelector />
+          {/* SegmentSelector lives on the LEFT on desktop; on
+              mobile it relocates next to TimeframeSelector below. */}
+          {!isMobileOrTablet && <SegmentSelector />}
+          <DisplaySettingsPanel inline />
         </div>
         <div className="neo-header-right">
+          {isMobileOrTablet && <SegmentSelector />}
           <TimeframeSelector value={timeframe} onChange={handleTimeframeChange} clearable={false} />
           <div className="neo-refresh-group" role="group" aria-label="Refresh controls">
             <button

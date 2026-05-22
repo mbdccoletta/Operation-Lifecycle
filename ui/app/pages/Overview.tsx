@@ -22,6 +22,7 @@ import { ProblemActivityFeed } from "../components/ProblemActivityFeed";
 import { MetricChip, METRIC_COLORS } from "../components/MetricChip";
 import { MetricFilterChip } from "../components/MetricFilterChip";
 import { MobileIncidentList } from "../components/MobileIncidentList";
+import { DisplaySettingsPanel } from "../components/DisplaySettingsPanel";
 import { useDevice } from "../hooks/useDevice";
 import {
   MetricKey,
@@ -38,6 +39,8 @@ import { LoadMoreFooter } from "../components/LoadMoreFooter";
 import { ProblemSearch } from "../components/ProblemSearch";
 import { useCategoryFilterOnly, useSetCategoryCounts } from "../contexts/CategoryFilterContext";
 import { useTriggerRefresh } from "../contexts/RefreshSignalContext";
+// IntensityContext is consumed by the global DisplaySettingsPanel
+// (rendered in App.tsx); Overview no longer reads it directly.
 import { useCategoryCounts } from "../hooks/useCategoryCounts";
 import { parseStratoTimeframe, parseStratoTimeframeAsString } from "../utils/timeframe";
 import { getStatusLabel } from "../utils/formatters";
@@ -1719,7 +1722,16 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
       {/* ═══ CONSOLIDATED TOOLBAR — segment + view + timeframe ═══ */}
       <header className="neo-header">
         <div className="neo-header-left">
-          <SegmentSelector />
+          {/* SegmentSelector lives on the LEFT on desktop but
+              moves to the RIGHT (next to the TimeframeSelector)
+              on mobile/tablet — the user reported the segment
+              chip felt orphaned over there with no related
+              control beside it. */}
+          {!isMobileOrTablet && <SegmentSelector />}
+          {/* Display settings chip — sits immediately to the right
+              of the SegmentSelector. Lets the user adjust font
+              scale without leaving the header. */}
+          <DisplaySettingsPanel inline />
           {/* Constellation/List toggle — sits immediately next to
               the SegmentSelector so the two compact controls form
               one visual cluster at the left edge of the header.
@@ -1733,6 +1745,11 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
           )}
         </div>
         <div className="neo-header-right">
+          {/* Mobile-only: SegmentSelector follows here, immediately
+              before TimeframeSelector, so segments + timeframe form
+              a related cluster on small screens. On desktop the
+              segment chip lives on the left next to view toggles. */}
+          {isMobileOrTablet && <SegmentSelector />}
           {/* Visualization mode + View-by grouping toggles — both
               are constellation-view affordances:
                 • `dataMode` (Rising/Oldest/Crit/Total) drives how
@@ -1833,6 +1850,11 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
               <option value={300}>Every 5m</option>
               <option value={1800}>Every 30m</option>
             </select>
+            {/* Visual intensity + font-scale controls moved out of
+                this header into a globally-rendered floating panel
+                (see `<DisplaySettingsPanel>` in App.tsx). The
+                panel is reachable from every page, and the
+                preferences persist via IntensityContext. */}
             <RefreshStatus lastRefreshAt={lastRefreshAt} intervalSec={refreshIntervalSec} />
           </div>
         </div>

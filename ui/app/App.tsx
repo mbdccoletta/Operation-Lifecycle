@@ -16,6 +16,9 @@ import { DebugScenarioPanel } from "./components/DebugScenarioPanel";
 import { TimeRangeProvider } from "./hooks/useTimeRange";
 import { CategoryFilterProvider } from "./contexts/CategoryFilterContext";
 import { RefreshSignalProvider } from "./contexts/RefreshSignalContext";
+import { IntensityProvider } from "./contexts/IntensityContext";
+// DisplaySettingsPanel is rendered inline by each page's header
+// (Overview, TrendAnalysis) — no longer a global floating widget.
 import { useActiveProblemsCount } from "./hooks/useActiveProblemsCount";
 import "./styles/theme.css";
 
@@ -150,6 +153,11 @@ const AppContent = () => {
       </nav>
 
       <DebugScenarioPanel />
+      {/* DisplaySettingsPanel moved out of App.tsx — it's now
+          rendered INLINE inside each page header next to the
+          SegmentSelector (Overview, TrendAnalysis). The pages
+          import and render `<DisplaySettingsPanel inline />`
+          themselves. */}
     </div>
   );
 };
@@ -157,15 +165,17 @@ const AppContent = () => {
 export const App = () => {
   return (
     <ErrorBoundary>
-      <SegmentsProvider>
-        <TimeRangeProvider>
-          <CategoryFilterProvider>
-            <RefreshSignalProvider>
-              <AppContent />
-            </RefreshSignalProvider>
-          </CategoryFilterProvider>
-        </TimeRangeProvider>
-      </SegmentsProvider>
+      <IntensityProvider>
+        <SegmentsProvider>
+          <TimeRangeProvider>
+            <CategoryFilterProvider>
+              <RefreshSignalProvider>
+                <AppContent />
+              </RefreshSignalProvider>
+            </CategoryFilterProvider>
+          </TimeRangeProvider>
+        </SegmentsProvider>
+      </IntensityProvider>
     </ErrorBoundary>
   );
 };

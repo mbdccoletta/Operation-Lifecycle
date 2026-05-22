@@ -56,12 +56,18 @@
   --neo-sans: var(--dt-typography-text-base-default-family, "Bernina Sans", "DynatraceFlow", "Roboto", "Helvetica", -apple-system, system-ui, sans-serif);
 
   /* Type scale (Strato sizes — 12 is the platform minimum for legibility) */
-  --neo-fs-xs:   var(--dt-typography-text-small-default-size,  12px);
-  --neo-fs-sm:   var(--dt-typography-text-base-default-size,   14px);
-  --neo-fs-md:   var(--dt-typography-heading-level-6-size,     16px);
-  --neo-fs-lg:   var(--dt-typography-heading-level-4-size,     20px);
-  --neo-fs-xl:   var(--dt-typography-heading-level-3-size,     24px);
-  --neo-fs-xxl:  var(--dt-typography-heading-level-1-size,     32px);
+  /* Font-size tokens multiplied by `--neo-fs-mult` so they
+     respond to the Display panel's Font size picker. Default
+     multiplier is 1 (set further down in :root); Small/Large
+     override it. Every class consuming these tokens scales in
+     lockstep — `.neo-team-kpi-value`, `.neo-team-kpi-label`,
+     section titles, chips, etc. */
+  --neo-fs-xs:   calc(var(--dt-typography-text-small-default-size,  12px) * var(--neo-fs-mult, 1));
+  --neo-fs-sm:   calc(var(--dt-typography-text-base-default-size,   14px) * var(--neo-fs-mult, 1));
+  --neo-fs-md:   calc(var(--dt-typography-heading-level-6-size,     16px) * var(--neo-fs-mult, 1));
+  --neo-fs-lg:   calc(var(--dt-typography-heading-level-4-size,     20px) * var(--neo-fs-mult, 1));
+  --neo-fs-xl:   calc(var(--dt-typography-heading-level-3-size,     24px) * var(--neo-fs-mult, 1));
+  --neo-fs-xxl:  calc(var(--dt-typography-heading-level-1-size,     32px) * var(--neo-fs-mult, 1));
 
   /* Strato uses 400 / 500 / 700 */
   --neo-fw-regular:  var(--dt-typography-text-base-default-weight,    400);
@@ -79,6 +85,111 @@
   /* Motion easing kept local — Strato exposes timings but not the
      same curve we use. */
   --neo-transition: cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* ── Visual-intensity knobs ─────────────────────────────────────
+     These tune how loud highlights, status chips, focus rings and
+     active states feel across the app. Defaults match the
+     "normal" preset; the `[data-intensity="subtle"]` and
+     `[data-intensity="bold"]` rules below override them when the
+     user picks a different level via the IntensityContext.
+
+     • `--intensity-row-wash`     — `color-mix` % for the highlighted
+                                    row's background tint.
+     • `--intensity-row-edge`     — `color-mix` % for the accent
+                                    edge bar's main glow shadow.
+     • `--intensity-row-edge-2`   — secondary diffuse glow %.
+     • `--intensity-pill-bg`      — `color-mix` % for status chip
+                                    background tint (Active / Closed).
+     • `--intensity-pill-glow`    — px radius of the pill's glow
+                                    shadow (`0` disables it).
+     • `--intensity-pill-weight`  — font-weight on the pill label.
+   ─────────────────────────────────────────────────────────────── */
+  --intensity-row-wash:     2.5%;
+  --intensity-row-edge:     30%;
+  --intensity-row-edge-2:   15%;
+  --intensity-pill-bg:      16%;
+  --intensity-pill-glow:    0px;
+  --intensity-pill-weight:  700;
+}
+
+/* ── Font-scale: text only, layout untouched ───────────────────
+   We deliberately do NOT use `zoom` here — zoom rescales the
+   entire layout (padding, icons, borders, gaps), which makes
+   the chrome feel heavier even when the user only wanted bigger
+   text. Instead we change the root `font-size` so:
+     • Elements sized in `rem` / `em` scale with the user's pick.
+     • Inherited text (anything without an explicit `font-size`
+       in `px`) scales too.
+     • Padding, borders, icon dimensions stay fixed.
+   Known limitation: a fair share of the app's text uses
+   `font-size: <N>px` directly in theme.css. Those rules ignore
+   the root scale by design. We expose `--neo-fs-mult` so the
+   most visible text classes (KPI values, row metrics, page
+   titles, etc.) can opt in via `font-size: calc(<base> * var(--neo-fs-mult))`.
+   ─────────────────────────────────────────────────────────── */
+:root {
+  --neo-fs-mult: 1;
+}
+[data-font-scale="small"]  {
+  font-size: 14.5px;   /* default 16 px */
+  --neo-fs-mult: 0.92;
+}
+[data-font-scale="normal"] {
+  font-size: 16px;
+  --neo-fs-mult: 1;
+}
+[data-font-scale="large"]  {
+  font-size: 18.5px;
+  --neo-fs-mult: 1.16;
+}
+
+/* ── Global intensity tint via filter ──────────────────────────
+   Applied on the app's root data-theme wrapper. `filter` creates
+   a containing block for fixed-position descendants, so the
+   floating widgets (DEMO panel, Display panel) get the tint
+   too — which is actually what we want; their accent chips
+   should feel consistent with the rest of the page.
+   ────────────────────────────────────────────────────────── */
+/* Normal is the canonical baseline. Medium and Bold pump up
+   colour intensity via TWO complementary mechanisms:
+     1. Override `--neo-bg` to a truly neutral near-black (no
+        slate-blue undertone). The canonical `#05080f` has
+        5/8/15 R/G/B — the extra blue is invisible at saturate
+        1.0 but turns the whole page navy when saturated. By
+        flattening the bg to R=G=B BEFORE the filter runs, the
+        saturate boost has no blue undertone to amplify.
+     2. Apply a global `filter: saturate() contrast()` on the
+        data-theme wrapper so every colour in the app (chips,
+        pills, charts, rings) gains intensity in one step.
+   Per-surface `--intensity-*` vars also step up at each level
+   for the surfaces that already consume them. Subtle stays in
+   the Intensity type for back-compat but isn't surfaced in the
+   UI; it falls through to the Normal baseline. */
+[data-intensity="medium"] {
+  /* Neutralised near-black — drops the slight blue cast of the
+     canonical bg so the filter below can saturate cleanly. */
+  --neo-bg: #060606;
+  --intensity-row-wash:     4.5%;
+  --intensity-row-edge:     42%;
+  --intensity-row-edge-2:   21%;
+  --intensity-pill-bg:      21%;
+  --intensity-pill-glow:    4px;
+  --intensity-pill-weight:  750;
+}
+[data-intensity="medium"] [data-theme] {
+  filter: saturate(1.18) contrast(1.05);
+}
+[data-intensity="bold"] {
+  --neo-bg: #050505;
+  --intensity-row-wash:     7%;
+  --intensity-row-edge:     55%;
+  --intensity-row-edge-2:   28%;
+  --intensity-pill-bg:      26%;
+  --intensity-pill-glow:    8px;
+  --intensity-pill-weight:  800;
+}
+[data-intensity="bold"] [data-theme] {
+  filter: saturate(1.35) contrast(1.10);
 }
 
 /* Light mode — Strato handles most of the colour flip via the tokens
@@ -109,7 +220,7 @@ body, #root {
   font-family: var(--neo-sans);
   -webkit-font-smoothing: antialiased;
   margin: 0; padding: 0; overflow-x: hidden;
-  font-size: 14px; line-height: 1.5;
+  font-size: calc(14px * var(--neo-fs-mult, 1)); line-height: 1.5;
 }
 /* Aggressive catch-all that overrides Strato Surface / Page chrome.
    `!important` stays here intentionally — Strato applies its own
@@ -148,13 +259,16 @@ span,p,div,h1,h2,h3,h4,h5,h6,label { color: var(--neo-text); }
   display: flex; align-items: center; justify-content: space-between;
   gap: 12px;
   padding: 6px 16px;
-  background: rgba(5,8,15,0.85);
-  backdrop-filter: blur(20px) saturate(1.8);
-  -webkit-backdrop-filter: blur(20px) saturate(1.8);
+  /* Solid bg (no backdrop-filter) — the previous translucent
+     `rgba(5,8,15,0.85)` + `blur(20px) saturate(1.8)` created a
+     visible misty band over the content scrolling underneath,
+     which the user perceived as a "film". A solid `--neo-bg`
+     reads as a flat panel that the user can ignore. */
+  background: var(--neo-bg);
   border-bottom: 1px solid var(--neo-border);
 }
 [data-theme="light"] .neo-header {
-  background: rgba(248,250,252,0.85);
+  background: var(--neo-bg);
 }
 .neo-header-left {
   display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0;
@@ -216,7 +330,7 @@ span,p,div,h1,h2,h3,h4,h5,h6,label { color: var(--neo-text); }
 }
 .ptl-activity-sort-label {
   font-family: var(--neo-mono);
-  font-size: 10.5px;
+  font-size: calc(10.5px * var(--neo-fs-mult, 1));
   font-weight: 600;
   letter-spacing: 0.4px;
   text-transform: uppercase;
@@ -239,7 +353,7 @@ span,p,div,h1,h2,h3,h4,h5,h6,label { color: var(--neo-text); }
 .neo-segctrl-btn {
   padding: 5px 14px;
   font-family: var(--neo-mono);
-  font-size: 11px;
+  font-size: calc(11px * var(--neo-fs-mult, 1));
   font-weight: 600;
   letter-spacing: 0.5px;
   color: rgba(148,163,184,0.85);
@@ -307,7 +421,7 @@ span,p,div,h1,h2,h3,h4,h5,h6,label { color: var(--neo-text); }
 }
 .neo-refresh-icon {
   display: inline-block;
-  font-size: 16px;
+  font-size: calc(16px * var(--neo-fs-mult, 1));
   line-height: 1;
 }
 @keyframes neo-spin {
@@ -319,7 +433,7 @@ span,p,div,h1,h2,h3,h4,h5,h6,label { color: var(--neo-text); }
 }
 .neo-refresh-interval {
   font-family: var(--neo-mono);
-  font-size: 11px;
+  font-size: calc(11px * var(--neo-fs-mult, 1));
   font-weight: 600;
   background: rgba(15,23,42,0.55);
   color: rgba(226,232,240,0.92);
@@ -340,7 +454,7 @@ span,p,div,h1,h2,h3,h4,h5,h6,label { color: var(--neo-text); }
 }
 .neo-refresh-status {
   font-family: var(--neo-mono);
-  font-size: 11px;
+  font-size: calc(11px * var(--neo-fs-mult, 1));
   color: rgba(148,163,184,0.85);
   letter-spacing: 0.2px;
   white-space: nowrap;
@@ -350,11 +464,11 @@ span,p,div,h1,h2,h3,h4,h5,h6,label { color: var(--neo-text); }
   display: flex; flex-direction: column; gap: 2px;
 }
 .neo-header-active {
-  font-size: 13px; font-weight: 600; letter-spacing: -0.3px;
+  font-size: calc(13px * var(--neo-fs-mult, 1)); font-weight: 600; letter-spacing: -0.3px;
   display: flex; align-items: center; gap: 6px;
 }
 .neo-header-timeframe {
-  font-size: 12px; color: var(--neo-text-3); font-family: var(--neo-mono);
+  font-size: calc(12px * var(--neo-fs-mult, 1)); color: var(--neo-text-3); font-family: var(--neo-mono);
   letter-spacing: 0.5px; text-transform: uppercase;
 }
 
@@ -429,7 +543,7 @@ span,p,div,h1,h2,h3,h4,h5,h6,label { color: var(--neo-text); }
   align-items: center;
   padding: 0 10px 0 12px;
   font-family: var(--neo-mono);
-  font-size: 11px;
+  font-size: calc(11px * var(--neo-fs-mult, 1));
   font-weight: 600;
   letter-spacing: 0.3px;
   text-transform: uppercase;
@@ -437,7 +551,7 @@ span,p,div,h1,h2,h3,h4,h5,h6,label { color: var(--neo-text); }
   border-right: 1px solid var(--neo-border);
 }
 .neo-view-toggle-by .neo-toggle-btn {
-  font-size: 12px;
+  font-size: calc(12px * var(--neo-fs-mult, 1));
   font-weight: 600;
   letter-spacing: 0.2px;
   padding: 6px 12px;
@@ -480,7 +594,7 @@ span,p,div,h1,h2,h3,h4,h5,h6,label { color: var(--neo-text); }
 }
 .neo-pulse-loading {
   height: 116px; display: flex; align-items: center; justify-content: center;
-  font-size: 12px; color: var(--neo-text-3); font-family: var(--neo-mono);
+  font-size: calc(12px * var(--neo-fs-mult, 1)); color: var(--neo-text-3); font-family: var(--neo-mono);
   letter-spacing: 1px; text-transform: uppercase;
 }
 .neo-pulse-clear {
@@ -494,7 +608,7 @@ span,p,div,h1,h2,h3,h4,h5,h6,label { color: var(--neo-text); }
   border-radius: 6px;
   padding: 4px 10px;
   font-family: var(--neo-mono);
-  font-size: 11px;
+  font-size: calc(11px * var(--neo-fs-mult, 1));
   font-weight: 700;
   letter-spacing: 0.5px;
   text-transform: uppercase;
@@ -539,7 +653,7 @@ span,p,div,h1,h2,h3,h4,h5,h6,label { color: var(--neo-text); }
 }
 .neo-pulse-label {
   position: absolute; bottom: 4px; left: 50%; transform: translateX(-50%);
-  font-size: 12px; font-family: var(--neo-mono); color: var(--neo-info);
+  font-size: calc(12px * var(--neo-fs-mult, 1)); font-family: var(--neo-mono); color: var(--neo-info);
   background: rgba(5,8,15,0.8); padding: 2px 8px; border-radius: 3px;
   letter-spacing: -0.2px;
 }
@@ -551,7 +665,7 @@ span,p,div,h1,h2,h3,h4,h5,h6,label { color: var(--neo-text); }
    "controls dominating the data". */
 @media (max-width: 640px) {
   .neo-pulse-label {
-    font-size: 10px;
+    font-size: calc(10px * var(--neo-fs-mult, 1));
     padding: 1px 6px;
     bottom: 2px;
     /* On very narrow viewports the AM/PM range can collide with the
@@ -563,7 +677,7 @@ span,p,div,h1,h2,h3,h4,h5,h6,label { color: var(--neo-text); }
   }
   .neo-pulse-clear {
     top: 4px; right: 4px;
-    font-size: 9.5px;
+    font-size: calc(9.5px * var(--neo-fs-mult, 1));
     padding: 2px 7px;
     letter-spacing: 0.3px;
     /* Drop the heavy box-shadow + backdrop-filter on mobile —
@@ -594,7 +708,7 @@ span,p,div,h1,h2,h3,h4,h5,h6,label { color: var(--neo-text); }
   margin: 2px 0 0;
   padding: 0 12px;
   font-family: var(--neo-mono);
-  font-size: 16px;
+  font-size: calc(16px * var(--neo-fs-mult, 1));
   font-weight: 600;
   letter-spacing: 0.5px;
   text-transform: uppercase;
@@ -622,7 +736,7 @@ span,p,div,h1,h2,h3,h4,h5,h6,label { color: var(--neo-text); }
 }
 .neo-empty-segments-icon {
   font-family: var(--neo-mono);
-  font-size: 26px;
+  font-size: calc(26px * var(--neo-fs-mult, 1));
   line-height: 1;
   color: rgba(180,210,255,0.85);
   flex: 0 0 auto;
@@ -630,7 +744,7 @@ span,p,div,h1,h2,h3,h4,h5,h6,label { color: var(--neo-text); }
 .neo-empty-segments-body { flex: 1 1 auto; min-width: 0; }
 .neo-empty-segments-title {
   font-family: var(--neo-mono);
-  font-size: 13px;
+  font-size: calc(13px * var(--neo-fs-mult, 1));
   font-weight: 700;
   letter-spacing: 0.4px;
   color: rgba(226,232,240,0.95);
@@ -639,7 +753,7 @@ span,p,div,h1,h2,h3,h4,h5,h6,label { color: var(--neo-text); }
 }
 [data-theme="light"] .neo-empty-segments-title { color: rgba(15,23,42,0.95); }
 .neo-empty-segments-hint {
-  font-size: 12px;
+  font-size: calc(12px * var(--neo-fs-mult, 1));
   line-height: 1.45;
   color: rgba(148,163,184,0.85);
 }
@@ -663,7 +777,7 @@ span,p,div,h1,h2,h3,h4,h5,h6,label { color: var(--neo-text); }
 .neo-active-titlebar > .neo-active-title { margin: 0; padding: 0; }
 .neo-info-pill {
   font-family: var(--neo-mono);
-  font-size: 10px;
+  font-size: calc(10px * var(--neo-fs-mult, 1));
   font-weight: 600;
   letter-spacing: 0.4px;
   text-transform: uppercase;
@@ -688,7 +802,7 @@ span,p,div,h1,h2,h3,h4,h5,h6,label { color: var(--neo-text); }
 }
 .neo-overflow-chip {
   font-family: var(--neo-mono);
-  font-size: 11px;
+  font-size: calc(11px * var(--neo-fs-mult, 1));
   font-weight: 600;
   letter-spacing: 0.3px;
   color: rgba(226,232,240,0.95);
@@ -748,7 +862,7 @@ span,p,div,h1,h2,h3,h4,h5,h6,label { color: var(--neo-text); }
   font-family: var(--neo-mono);
 }
 .neo-overflow-popover-header > span:first-child {
-  font-size: 11px;
+  font-size: calc(11px * var(--neo-fs-mult, 1));
   font-weight: 700;
   letter-spacing: 0.4px;
   text-transform: uppercase;
@@ -756,7 +870,7 @@ span,p,div,h1,h2,h3,h4,h5,h6,label { color: var(--neo-text); }
 }
 [data-theme="light"] .neo-overflow-popover-header > span:first-child { color: rgba(15,23,42,0.95); }
 .neo-overflow-popover-sub {
-  font-size: 10px;
+  font-size: calc(10px * var(--neo-fs-mult, 1));
   color: rgba(148,163,184,0.85);
   text-transform: none;
   letter-spacing: 0;
@@ -776,7 +890,7 @@ span,p,div,h1,h2,h3,h4,h5,h6,label { color: var(--neo-text); }
   border: 0;
   border-left: 2px solid transparent;
   font-family: var(--neo-mono);
-  font-size: 12px;
+  font-size: calc(12px * var(--neo-fs-mult, 1));
   color: rgba(226,232,240,0.88);
   cursor: pointer;
   text-align: left;
@@ -806,7 +920,7 @@ span,p,div,h1,h2,h3,h4,h5,h6,label { color: var(--neo-text); }
 }
 .neo-overflow-popover-tag {
   flex: 0 0 auto;
-  font-size: 9px;
+  font-size: calc(9px * var(--neo-fs-mult, 1));
   font-weight: 600;
   letter-spacing: 0.5px;
   text-transform: uppercase;
@@ -824,7 +938,7 @@ span,p,div,h1,h2,h3,h4,h5,h6,label { color: var(--neo-text); }
 .neo-overflow-popover-count {
   flex: 0 0 auto;
   font-weight: 700;
-  font-size: 12px;
+  font-size: calc(12px * var(--neo-fs-mult, 1));
   color: rgba(180,210,255,0.95);
   min-width: 24px;
   text-align: right;
@@ -842,7 +956,7 @@ span,p,div,h1,h2,h3,h4,h5,h6,label { color: var(--neo-text); }
   gap: 4px 14px;
   padding: 6px 12px 4px;
   font-family: var(--neo-mono);
-  font-size: 10px;
+  font-size: calc(10px * var(--neo-fs-mult, 1));
   color: rgba(148,163,184,0.85);
 }
 [data-theme="light"] .neo-category-legend { color: rgba(71,85,105,0.95); }
@@ -873,7 +987,7 @@ span,p,div,h1,h2,h3,h4,h5,h6,label { color: var(--neo-text); }
 [data-theme="light"] .neo-category-legend-name { color: rgba(15,23,42,0.85); }
 .neo-category-legend-count {
   font-weight: 700;
-  font-size: 10px;
+  font-size: calc(10px * var(--neo-fs-mult, 1));
   color: rgba(226,232,240,0.95);
   background: rgba(180,210,255,0.12);
   border: 1px solid rgba(180,210,255,0.22);
@@ -897,13 +1011,15 @@ span,p,div,h1,h2,h3,h4,h5,h6,label { color: var(--neo-text); }
   position: sticky;
   top: 0;
   z-index: 20;
-  background: linear-gradient(180deg, rgba(8,12,22,0.92) 0%, rgba(8,12,22,0.72) 100%);
-  backdrop-filter: blur(8px);
-  border-bottom: 1px solid rgba(180,210,255,0.10);
+  /* Solid bg replaces the previous translucent gradient + blur.
+     With backdrop-filter on, the page bg behind the sticky strip
+     read as a hazy band — perceived as "film" when scrolling. */
+  background: var(--neo-bg);
+  border-bottom: 1px solid var(--neo-border);
 }
 [data-theme="light"] .neo-sticky-filter {
-  background: linear-gradient(180deg, rgba(255,255,255,0.92) 0%, rgba(255,255,255,0.78) 100%);
-  border-bottom-color: rgba(15,23,42,0.10);
+  background: var(--neo-bg);
+  border-bottom-color: var(--neo-border);
 }
 
 /* Davis-category FILTER bar — shared chip strip used across every
@@ -917,14 +1033,14 @@ span,p,div,h1,h2,h3,h4,h5,h6,label { color: var(--neo-text); }
   gap: 8px;
   padding: 10px 12px 8px;
   font-family: var(--neo-mono);
-  font-size: 11px;
+  font-size: calc(11px * var(--neo-fs-mult, 1));
   color: rgba(148,163,184,0.85);
 }
 [data-theme="light"] .neo-category-filters { color: rgba(71,85,105,0.95); }
 .neo-category-filters-label {
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  font-size: 10px;
+  font-size: calc(10px * var(--neo-fs-mult, 1));
   font-weight: 700;
   color: rgba(180,210,255,0.70);
   margin-right: 6px;
@@ -940,7 +1056,7 @@ span,p,div,h1,h2,h3,h4,h5,h6,label { color: var(--neo-text); }
   border-radius: 14px;
   cursor: pointer;
   font-family: var(--neo-mono);
-  font-size: 11px;
+  font-size: calc(11px * var(--neo-fs-mult, 1));
   letter-spacing: 0.2px;
   color: rgba(226,232,240,0.95);
   transition: background 0.15s, border-color 0.15s, opacity 0.15s, transform 0.15s;
@@ -979,12 +1095,12 @@ span,p,div,h1,h2,h3,h4,h5,h6,label { color: var(--neo-text); }
   font-weight: 600;
   letter-spacing: 0.4px;
   text-transform: uppercase;
-  font-size: 11px;
+  font-size: calc(11px * var(--neo-fs-mult, 1));
 }
 .neo-category-filter-count {
   flex: 0 0 auto;
   font-weight: 800;
-  font-size: 12px;
+  font-size: calc(12px * var(--neo-fs-mult, 1));
   color: rgba(226,232,240,0.98);
   background: rgba(180,210,255,0.16);
   border: 1px solid rgba(180,210,255,0.28);
@@ -1047,7 +1163,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   border-radius: 12px;
   padding: 5px 9px;
   font-family: var(--neo-mono);
-  font-size: 10px;
+  font-size: calc(10px * var(--neo-fs-mult, 1));
   font-weight: 600;
   letter-spacing: 0.3px;
   cursor: pointer;
@@ -1139,7 +1255,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
 }
 .neo-float-card-close {
   position: absolute; top: 8px; right: 10px;
-  font-size: 12px; color: var(--neo-text-3); cursor: pointer;
+  font-size: calc(12px * var(--neo-fs-mult, 1)); color: var(--neo-text-3); cursor: pointer;
   width: 20px; height: 20px; display: flex; align-items: center; justify-content: center;
   border-radius: 4px;
 }
@@ -1153,7 +1269,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
 .neo-float-card-severity[data-severity="ok"] { background: var(--neo-success); }
 .neo-float-card-severity[data-severity="resolved"] { background: var(--neo-text-3); }
 .neo-float-card-title {
-  font-size: 13px; font-weight: 600; margin-bottom: 6px;
+  font-size: calc(13px * var(--neo-fs-mult, 1)); font-weight: 600; margin-bottom: 6px;
   padding-left: 12px; letter-spacing: -0.2px;
   display: -webkit-box; -webkit-line-clamp: 2;
   -webkit-box-orient: vertical; overflow: hidden;
@@ -1163,11 +1279,11 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   color: var(--neo-text-3); letter-spacing: -0.2px; padding-left: 12px;
 }
 .neo-float-card-entities {
-  font-size: 12px; color: var(--neo-text-3); margin-top: 6px;
+  font-size: calc(12px * var(--neo-fs-mult, 1)); color: var(--neo-text-3); margin-top: 6px;
   padding-left: 12px; font-family: var(--neo-mono);
 }
 .neo-float-card-action {
-  font-size: 12px; color: var(--neo-accent); font-weight: 600;
+  font-size: calc(12px * var(--neo-fs-mult, 1)); color: var(--neo-accent); font-weight: 600;
   margin-top: 8px; padding-left: 12px; letter-spacing: -0.2px;
 }
 
@@ -1211,7 +1327,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   border: none;
   border-radius: 50%;
   cursor: pointer;
-  font-size: 11px;
+  font-size: calc(11px * var(--neo-fs-mult, 1));
   line-height: 1;
   padding: 0;
   transition: background 0.15s ease, color 0.15s ease;
@@ -1285,7 +1401,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   border-left: 3px solid var(--neo-accent);
   border-radius: var(--neo-radius-sm);
   font-family: var(--neo-mono);
-  font-size: 12px;
+  font-size: calc(12px * var(--neo-fs-mult, 1));
   color: var(--neo-text);
   letter-spacing: -0.1px;
   animation: neo-pinned-in 0.22s var(--neo-transition);
@@ -1302,13 +1418,13 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   flex-shrink: 0;
 }
 .neo-pinned-label {
-  font-size: 10px; font-weight: 700;
+  font-size: calc(10px * var(--neo-fs-mult, 1)); font-weight: 700;
   letter-spacing: 1.2px;
   text-transform: uppercase;
   color: var(--neo-text-3);
 }
 .neo-pinned-id {
-  font-size: 13px; font-weight: 700;
+  font-size: calc(13px * var(--neo-fs-mult, 1)); font-weight: 700;
   color: var(--neo-text);
   letter-spacing: -0.1px;
 }
@@ -1329,7 +1445,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   border-radius: 4px;
   color: var(--neo-accent);
   font-family: var(--neo-mono);
-  font-size: 11px; font-weight: 600;
+  font-size: calc(11px * var(--neo-fs-mult, 1)); font-weight: 600;
   letter-spacing: 0.3px;
   cursor: pointer;
   transition: background 0.15s var(--neo-transition),
@@ -1375,7 +1491,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
      so it doesn't pretend to be a button on a touch surface. */
   .neo-list-actions > .neo-count-pill {
     margin-left: auto;
-    font-size: 11px;
+    font-size: calc(11px * var(--neo-fs-mult, 1));
   }
 }
 
@@ -1403,7 +1519,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   .neo-metric-filter-chip-wrap .neo-metric-filter-chip {
     height: 24px;
     padding: 0 8px;
-    font-size: 10px;
+    font-size: calc(10px * var(--neo-fs-mult, 1));
   }
   .neo-metric-filter-chip-wrap .neo-metric-filter-chip-on {
     padding-right: 3px;
@@ -1418,7 +1534,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
 @media (max-width: 640px) {
   .neo-category-filter-chip {
     padding: 4px 9px 4px 7px;
-    font-size: 10px;
+    font-size: calc(10px * var(--neo-fs-mult, 1));
     border-radius: 12px;
   }
 }
@@ -1465,7 +1581,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
 .neo-category-filters-summary {
   flex: 1 1 auto;
   font-family: var(--neo-mono);
-  font-size: 11px;
+  font-size: calc(11px * var(--neo-fs-mult, 1));
   letter-spacing: 0.3px;
   color: var(--neo-text-2);
   text-align: right;
@@ -1478,7 +1594,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   font-weight: 700;
 }
 .neo-category-filters-caret {
-  font-size: 9px;
+  font-size: calc(9px * var(--neo-fs-mult, 1));
   color: var(--neo-text-3);
   flex-shrink: 0;
 }
@@ -1511,7 +1627,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   background: var(--neo-surface);
   border: 1px solid var(--neo-border);
   color: var(--neo-text-2);
-  font-size: 16px; font-weight: 500; line-height: 1;
+  font-size: calc(16px * var(--neo-fs-mult, 1)); font-weight: 500; line-height: 1;
   cursor: pointer;
   transition: background 0.15s var(--neo-transition),
               border-color 0.15s var(--neo-transition),
@@ -1537,7 +1653,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
 .neo-list-count {
   display: inline-flex; align-items: baseline; gap: 4px;
   font-family: var(--neo-mono);
-  font-size: 11px; font-weight: 600;
+  font-size: calc(11px * var(--neo-fs-mult, 1)); font-weight: 600;
   letter-spacing: 0.3px;
   color: var(--neo-text-3);
   padding: 4px 10px;
@@ -1546,7 +1662,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   border: 1px solid var(--neo-border);
 }
 .neo-list-count strong {
-  font-size: 13px; color: var(--neo-text);
+  font-size: calc(13px * var(--neo-fs-mult, 1)); color: var(--neo-text);
 }
 
 /* Sort + filter toolbar */
@@ -1561,7 +1677,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
 /* Inline label before a chip group ("Status", "Impact", "Category") */
 .neo-chip-label {
   font-family: var(--neo-mono);
-  font-size: 10px; font-weight: 700;
+  font-size: calc(10px * var(--neo-fs-mult, 1)); font-weight: 700;
   text-transform: uppercase; letter-spacing: 1.2px;
   color: var(--neo-text-3);
   margin: 0 2px 0 4px;
@@ -1646,7 +1762,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
 }
 .neo-incident-body { flex: 1; min-width: 0; }
 .neo-incident-title {
-  font-size: 13px; font-weight: 600; letter-spacing: -0.2px;
+  font-size: calc(13px * var(--neo-fs-mult, 1)); font-weight: 600; letter-spacing: -0.2px;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   margin-bottom: 3px;
 }
@@ -1661,7 +1777,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
 .neo-dur-warn { background: var(--neo-warning-bg); color: var(--neo-warning); }
 .neo-dur-ok { color: var(--neo-success); }
 .neo-incident-arrow {
-  font-size: 18px; color: var(--neo-text-3); font-weight: 300;
+  font-size: calc(18px * var(--neo-fs-mult, 1)); color: var(--neo-text-3); font-weight: 300;
   transition: transform 0.2s;
 }
 .neo-incident:hover .neo-incident-arrow { transform: translateX(2px); color: var(--neo-accent); }
@@ -1709,7 +1825,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   border-radius: var(--neo-radius-sm);
   overflow: hidden;
   font-family: var(--neo-mono);
-  font-size: 12px;
+  font-size: calc(12px * var(--neo-fs-mult, 1));
   letter-spacing: -0.1px;
 }
 
@@ -1722,7 +1838,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   border-bottom: 1px solid var(--neo-border);
   color: var(--neo-text-3);
   text-transform: none;
-  font-size: 11px; font-weight: 600;
+  font-size: calc(11px * var(--neo-fs-mult, 1)); font-weight: 600;
   letter-spacing: 0.2px;
   position: sticky; top: 0; z-index: 2;
 }
@@ -1785,7 +1901,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
 .neo-pt-status-pill {
   display: inline-flex; align-items: center; gap: 4px;
   padding: 2px 8px; border-radius: 4px;
-  font-size: 11px; font-weight: 600; letter-spacing: 0.2px;
+  font-size: calc(11px * var(--neo-fs-mult, 1)); font-weight: 600; letter-spacing: 0.2px;
 }
 .neo-pt-status-active {
   color: var(--neo-critical);
@@ -1806,7 +1922,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
 .neo-pt-cat-icon {
   width: 16px; height: 16px;
   display: inline-flex; align-items: center; justify-content: center;
-  font-size: 13px;
+  font-size: calc(13px * var(--neo-fs-mult, 1));
 }
 .neo-pt-cat-label { color: var(--neo-text); }
 
@@ -1817,7 +1933,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   background: rgba(99,102,241,0.10);
   border: 1px solid rgba(99,102,241,0.25);
   border-radius: 4px;
-  font-size: 11px; color: var(--neo-text);
+  font-size: calc(11px * var(--neo-fs-mult, 1)); color: var(--neo-text);
   max-width: 100%; min-width: 0;
 }
 .neo-pt-entity-icon { font-size: 11px; color: var(--neo-accent); flex-shrink: 0; }
@@ -1846,7 +1962,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   background: rgba(255,255,255,0.05);
   border: 1px solid rgba(255,255,255,0.10);
   border-radius: 4px;
-  font-size: 11px; color: var(--neo-text-2);
+  font-size: calc(11px * var(--neo-fs-mult, 1)); color: var(--neo-text-2);
 }
 .neo-pt-impact-icon { font-size: 11px; }
 .neo-pt-impact-services .neo-pt-impact-icon { color: #6ee7b7; }
@@ -1941,7 +2057,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   padding: 2px 8px;
   border-radius: 4px;
   font-family: var(--neo-mono);
-  font-size: 11px; font-weight: 600; letter-spacing: 0.2px;
+  font-size: calc(11px * var(--neo-fs-mult, 1)); font-weight: 600; letter-spacing: 0.2px;
 }
 .neo-pcard-status-active {
   color: var(--neo-critical);
@@ -1969,7 +2085,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   padding: 2px 8px;
   border-radius: 4px;
   font-family: var(--neo-mono);
-  font-size: 10px; font-weight: 700;
+  font-size: calc(10px * var(--neo-fs-mult, 1)); font-weight: 700;
   text-transform: uppercase; letter-spacing: 0.6px;
   border: 1px solid currentColor; /* overridden inline */
 }
@@ -1977,7 +2093,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
 /* Title — 2 lines max with ellipsis */
 .neo-pcard-title {
   margin: 4px 0 0;
-  font-size: 13px; font-weight: 600;
+  font-size: calc(13px * var(--neo-fs-mult, 1)); font-weight: 600;
   color: var(--neo-text);
   letter-spacing: -0.2px;
   line-height: 1.3;
@@ -1990,7 +2106,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
 /* ID — mono, muted */
 .neo-pcard-id {
   font-family: var(--neo-mono);
-  font-size: 11px; font-weight: 600;
+  font-size: calc(11px * var(--neo-fs-mult, 1)); font-weight: 600;
   color: var(--neo-text-3);
   letter-spacing: -0.1px;
 }
@@ -2000,7 +2116,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   display: flex; align-items: center; gap: 6px;
   margin-top: 4px;
   font-family: var(--neo-mono);
-  font-size: 11px;
+  font-size: calc(11px * var(--neo-fs-mult, 1));
   color: var(--neo-text-2);
   overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
 }
@@ -2067,7 +2183,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   border-radius: var(--neo-radius-sm);
   overflow: hidden;
   font-family: var(--neo-mono);
-  font-size: 12px;
+  font-size: calc(12px * var(--neo-fs-mult, 1));
   letter-spacing: -0.1px;
 }
 
@@ -2082,7 +2198,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   border-bottom: 1px solid var(--neo-border);
   position: sticky; top: 0; z-index: 2;
   color: var(--neo-text-3);
-  font-size: 11px; font-weight: 600;
+  font-size: calc(11px * var(--neo-fs-mult, 1)); font-weight: 600;
   letter-spacing: 0.2px;
 }
 
@@ -2109,7 +2225,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
 .neo-th-sort-active           { color: var(--neo-accent); }
 .neo-th-sort-active .neo-th-label { color: var(--neo-accent); }
 .neo-th-arrow {
-  font-size: 12px; line-height: 1;
+  font-size: calc(12px * var(--neo-fs-mult, 1)); line-height: 1;
   color: var(--neo-accent);
   text-shadow: 0 0 6px color-mix(in srgb, var(--neo-accent) 50%, transparent);
 }
@@ -2133,20 +2249,24 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
 /* Highlighted rows (top-tier / pinned). The colour wash is now
    a hint only — the edge bar carries the highlight, the row body
    stays neutral so the data reads cleanly. */
+/* Highlighted row body — wash + edge glow strength flip with the
+   user's intensity setting. Defaults match the previous static
+   values (`2.5 %` wash, `30 % / 15 %` edge glow). See the
+   `--intensity-*` vars at the top of this file. */
 .neo-tcard-highlighted {
-  background: color-mix(in srgb, var(--neo-row-accent) 2.5%, transparent);
+  background: color-mix(in srgb, var(--neo-row-accent) var(--intensity-row-wash), transparent);
 }
 .neo-tcard-highlighted .neo-tedge {
   width: 3px;
   box-shadow:
-    0 0 5px color-mix(in srgb, var(--neo-row-accent) 30%, transparent),
-    0 0 10px color-mix(in srgb, var(--neo-row-accent) 15%, transparent);
+    0 0 5px color-mix(in srgb, var(--neo-row-accent) var(--intensity-row-edge), transparent),
+    0 0 10px color-mix(in srgb, var(--neo-row-accent) var(--intensity-row-edge-2), transparent);
 }
 .neo-tcard-highlighted .neo-trow {
-  background: color-mix(in srgb, var(--neo-row-accent) 1.5%, transparent);
+  background: color-mix(in srgb, var(--neo-row-accent) calc(var(--intensity-row-wash) * 0.6), transparent);
 }
 .neo-tcard-highlighted:hover .neo-trow {
-  background: color-mix(in srgb, var(--neo-row-accent) 6%, var(--neo-surface-hover));
+  background: color-mix(in srgb, var(--neo-row-accent) calc(var(--intensity-row-wash) * 2.4), var(--neo-surface-hover));
 }
 .neo-ttable > .neo-tcard:nth-of-type(1)  { animation-delay: 0ms;  }
 .neo-ttable > .neo-tcard:nth-of-type(2)  { animation-delay: 18ms; }
@@ -2167,6 +2287,12 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   cursor: pointer;
   color: var(--neo-text);
   transition: background 0.15s var(--neo-transition);
+  /* Row text inherits from this rule's font-size — touching it
+     once scales every cell (ID, name, status pill, chips, etc)
+     in lockstep with the user's Display panel pick. Base of
+     13 px matches the previous hardcoded `.neo-tcell-name`
+     value, so Normal preserves the original feel. */
+  font-size: calc(13px * var(--neo-fs-mult, 1));
 }
 .neo-trow:hover { background: var(--neo-surface-hover); }
 .neo-trow:focus-visible {
@@ -2218,19 +2344,25 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   display: inline-flex; align-items: center; gap: 5px;
   padding: 2px 8px;
   border-radius: 4px;
-  font-size: 11px; font-weight: 700;
+  font-size: calc(11px * var(--neo-fs-mult, 1)); font-weight: 700;
   letter-spacing: 0.3px;
 }
+/* Active status pill — intensity-aware. Background tint, glow
+   strength, and label weight all flip with `[data-intensity=...]`
+   (see `--intensity-pill-*` at top of this file). */
 .neo-tstatus-active {
   color: var(--neo-critical);
-  background: rgba(255,77,106,0.14);
-  border: 1px solid rgba(255,77,106,0.45);
+  background: color-mix(in srgb, var(--neo-critical) var(--intensity-pill-bg), transparent);
+  border: 1px solid color-mix(in srgb, var(--neo-critical) 60%, transparent);
+  font-weight: var(--intensity-pill-weight);
+  box-shadow: 0 0 var(--intensity-pill-glow) color-mix(in srgb, var(--neo-critical) 55%, transparent);
 }
 .neo-tstatus-active .neo-tstatus-glyph { font-size: 9px; }
 .neo-tstatus-closed {
   color: var(--neo-text-2);
   background: rgba(255,255,255,0.06);
   border: 1px solid rgba(255,255,255,0.12);
+  font-weight: var(--intensity-pill-weight);
 }
 
 /* Generic entity / root-cause / impact chip */
@@ -2240,7 +2372,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   background: rgba(99,102,241,0.10);
   border: 1px solid rgba(99,102,241,0.30);
   border-radius: 4px;
-  font-size: 11px; color: var(--neo-text);
+  font-size: calc(11px * var(--neo-fs-mult, 1)); color: var(--neo-text);
   max-width: 100%; min-width: 0;
 }
 .neo-tchip-icon { color: var(--neo-accent); font-size: 11px; flex-shrink: 0; }
@@ -2251,7 +2383,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
 .neo-tchip-more {
   flex-shrink: 0;
   color: var(--neo-text-3);
-  font-size: 10px; font-weight: 700;
+  font-size: calc(10px * var(--neo-fs-mult, 1)); font-weight: 700;
   padding: 0 5px;
   margin-left: 2px;
   border-left: 1px solid rgba(99,102,241,0.30);
@@ -2482,7 +2614,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
 }
 .neo-row-related-label {
   font-family: var(--neo-mono);
-  font-size: 10px; font-weight: 700;
+  font-size: calc(10px * var(--neo-fs-mult, 1)); font-weight: 700;
   letter-spacing: 1.2px; text-transform: uppercase;
   color: var(--neo-text-3);
 }
@@ -2509,7 +2641,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   border-color: color-mix(in srgb, var(--rel-accent) 35%, transparent);
   border-radius: 999px;
   font-family: var(--neo-mono);
-  font-size: 11px;
+  font-size: calc(11px * var(--neo-fs-mult, 1));
   color: var(--neo-text);
   cursor: pointer;
   text-align: left;
@@ -2561,7 +2693,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
 }
 .neo-row-comments-label {
   font-family: var(--neo-mono);
-  font-size: 10px; font-weight: 700;
+  font-size: calc(10px * var(--neo-fs-mult, 1)); font-weight: 700;
   letter-spacing: 1.2px; text-transform: uppercase;
   color: var(--neo-text-3);
 }
@@ -2601,7 +2733,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
 }
 .neo-comments-title {
   display: inline-flex; align-items: baseline; gap: 8px;
-  font-size: 13px; font-weight: 700;
+  font-size: calc(13px * var(--neo-fs-mult, 1)); font-weight: 700;
   letter-spacing: 0.2px;
   color: var(--neo-text);
 }
@@ -2748,7 +2880,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   border: 1px solid rgba(99,102,241,0.45);
   color: rgba(220,230,255,0.95);
   font-family: var(--neo-mono);
-  font-size: 10.5px; font-weight: 700;
+  font-size: calc(10.5px * var(--neo-fs-mult, 1)); font-weight: 700;
   letter-spacing: 0.5px;
   user-select: none;
 }
@@ -2767,7 +2899,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   flex-wrap: wrap;
 }
 .neo-comments-item-author {
-  font-size: 13px; font-weight: 600;
+  font-size: calc(13px * var(--neo-fs-mult, 1)); font-weight: 600;
   letter-spacing: 0;
   color: var(--neo-text);
   line-height: 1.2;
@@ -2775,14 +2907,14 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
 }
 [data-theme="light"] .neo-comments-item-author { color: rgba(15,23,42,0.95); }
 .neo-comments-item-time {
-  font-size: 11.5px; font-weight: 500;
+  font-size: calc(11.5px * var(--neo-fs-mult, 1)); font-weight: 500;
   color: rgba(148,163,184,0.85);
   line-height: 1.3;
 }
 [data-theme="light"] .neo-comments-item-time { color: rgba(71,85,105,0.85); }
 .neo-comments-item-body {
   margin-top: 4px;
-  font-size: 13px;
+  font-size: calc(13px * var(--neo-fs-mult, 1));
   line-height: 1.5;
   color: var(--neo-text);
   white-space: pre-wrap; word-wrap: break-word;
@@ -2803,7 +2935,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
 }
 .neo-row-entities-label {
   font-family: var(--neo-mono);
-  font-size: 10px; font-weight: 700;
+  font-size: calc(10px * var(--neo-fs-mult, 1)); font-weight: 700;
   letter-spacing: 1.2px;
   text-transform: uppercase;
   color: var(--neo-text-3);
@@ -2818,7 +2950,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   border: 1px solid rgba(99,102,241,0.25);
   border-radius: 4px;
   font-family: var(--neo-mono);
-  font-size: 11px;
+  font-size: calc(11px * var(--neo-fs-mult, 1));
   color: var(--neo-text);
   letter-spacing: -0.1px;
   max-width: 100%;
@@ -2826,7 +2958,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
 }
 .neo-row-entity-chip-icon {
   color: var(--neo-accent);
-  font-size: 11px;
+  font-size: calc(11px * var(--neo-fs-mult, 1));
 }
 .neo-row-entity-more {
   display: inline-flex; align-items: center;
@@ -2834,7 +2966,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   border: 1px dashed var(--neo-border);
   border-radius: 4px;
   font-family: var(--neo-mono);
-  font-size: 10px; font-weight: 600;
+  font-size: calc(10px * var(--neo-fs-mult, 1)); font-weight: 600;
   color: var(--neo-text-3);
   letter-spacing: 0.3px;
 }
@@ -2933,7 +3065,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
 .neo-row-actions-compact .neo-row-act,
 .neo-row-actions-compact .neo-row-act-share > * {
   padding: 4px 8px;
-  font-size: 10.5px;
+  font-size: calc(10.5px * var(--neo-fs-mult, 1));
   min-height: 28px;
 }
 /* Sort segment goes on its own row by becoming a flex-basis
@@ -2950,10 +3082,10 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
 }
 .neo-row-actions-compact .neo-row-act-sort .neo-segctrl-btn {
   padding: 2px 7px;
-  font-size: 10px;
+  font-size: calc(10px * var(--neo-fs-mult, 1));
 }
 .neo-row-actions-compact .ptl-activity-sort-label {
-  font-size: 9.5px;
+  font-size: calc(9.5px * var(--neo-fs-mult, 1));
 }
 /* Activity-feed Sort toggle living inside the actions row. Stays
    on the far right with a slim divider before the segctrl so the
@@ -2972,7 +3104,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   height: 26px;
 }
 .neo-row-act-sort .neo-segctrl-btn {
-  font-size: 11px;
+  font-size: calc(11px * var(--neo-fs-mult, 1));
   padding: 0 10px;
 }
 /* Row-level action chips — uniform neutral styling per Strato's
@@ -2992,7 +3124,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   border-radius: var(--neo-radius-sm);
   color: var(--neo-text-2);
   font-family: var(--neo-mono);
-  font-size: 11px; font-weight: 600;
+  font-size: calc(11px * var(--neo-fs-mult, 1)); font-weight: 600;
   letter-spacing: 0.3px;
   cursor: pointer;
   transition: background 0.15s var(--neo-transition),
@@ -3012,7 +3144,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
 .neo-row-act-icon {
   display: inline-flex; align-items: center; justify-content: center;
   width: 14px; height: 14px;
-  font-size: 13px; line-height: 1;
+  font-size: calc(13px * var(--neo-fs-mult, 1)); line-height: 1;
   opacity: 0.85;
 }
 .neo-row-act:hover .neo-row-act-icon { opacity: 1; }
@@ -3068,7 +3200,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   display: inline-flex; align-items: center; gap: 6px;
   min-width: 78px;
   font-family: var(--neo-mono);
-  font-size: 10px; font-weight: 800;
+  font-size: calc(10px * var(--neo-fs-mult, 1)); font-weight: 800;
   letter-spacing: 1.4px;
 }
 .neo-row-status-dot {
@@ -3080,7 +3212,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
 .neo-row-title {
   flex: 0 1 auto;
   min-width: 0;
-  font-size: 14px; font-weight: 600;
+  font-size: calc(14px * var(--neo-fs-mult, 1)); font-weight: 600;
   color: var(--neo-text);
   letter-spacing: -0.2px;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
@@ -3092,7 +3224,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   min-width: 0;
   display: inline-flex; align-items: center; gap: 8px;
   font-family: var(--neo-mono);
-  font-size: 11px; color: var(--neo-text-3);
+  font-size: calc(11px * var(--neo-fs-mult, 1)); color: var(--neo-text-3);
   letter-spacing: -0.05px;
   white-space: nowrap;
   overflow: hidden; text-overflow: ellipsis;
@@ -3116,7 +3248,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   padding: 3px 9px;
   border-radius: 4px;
   font-family: var(--neo-mono);
-  font-size: 10px; font-weight: 800;
+  font-size: calc(10px * var(--neo-fs-mult, 1)); font-weight: 800;
   letter-spacing: 1px;
   text-transform: uppercase;
   border: 1px solid currentColor;
@@ -3127,7 +3259,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
 .neo-row-arrow {
   flex: 0 0 auto;
   color: var(--neo-text-3);
-  font-size: 18px; font-weight: 300; line-height: 1;
+  font-size: calc(18px * var(--neo-fs-mult, 1)); font-weight: 300; line-height: 1;
   transition: transform 0.2s var(--neo-transition), color 0.2s var(--neo-transition);
 }
 .neo-row:hover .neo-row-arrow {
@@ -3166,7 +3298,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   letter-spacing: -1px; color: var(--neo-text);
 }
 .neo-stat-lbl {
-  font-size: 12px; color: var(--neo-text-3); font-weight: 600;
+  font-size: calc(12px * var(--neo-fs-mult, 1)); color: var(--neo-text-3); font-weight: 600;
   text-transform: uppercase; letter-spacing: 0.8px;
 }
 
@@ -3184,6 +3316,54 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
 }
 [data-theme="light"] .neo-tabbar {
   background: rgba(248,250,252,0.92);
+}
+/* Mobile / tablet: flip the tabbar to the TOP of the viewport.
+   On a phone or small tablet, reaching for a bottom bar competes
+   with the system gesture area (iOS home indicator, Android nav
+   bar) and the floating Display panel chip at top-right. Putting
+   it at the top mirrors most native apps + frees the bottom of
+   the viewport for content + system gestures.
+   Breakpoint 720 px matches the rest of the mobile-responsive
+   rules in this file. */
+@media (max-width: 720px) {
+  .neo-tabbar {
+    bottom: auto;
+    top: 0;
+    border-top: none;
+    border-bottom: 1px solid var(--neo-border);
+    padding: max(8px, env(safe-area-inset-top)) 0 8px;
+  }
+  /* `.neo-page` has `padding-bottom: 64px` to clear the bottom
+     tabbar — on mobile we move that clearance to the top. The
+     relocated tabbar is taller than 64 px on viewports with
+     a notch / status bar (env(safe-area-inset-top) adds 24-44 px
+     on iOS), so we account for that explicitly. */
+  .neo-page {
+    padding-top: calc(72px + env(safe-area-inset-top, 0px));
+    padding-bottom: 0;
+  }
+  /* The page header is `position: sticky; top: 0` — on desktop
+     that's correct (it grabs the viewport top). On mobile the
+     tabbar now occupies that exact spot at a higher z-index, so
+     the sticky page header was rendering UNDER the tabbar and
+     its content (refresh button, "refreshed Ns ago" label,
+     timeframe selector) was getting clipped. Offset the sticky
+     anchor so the header parks itself BELOW the tabbar. */
+  .neo-header {
+    top: calc(56px + env(safe-area-inset-top, 0px));
+  }
+  /* Same correction for any other sticky filter strip / sticky
+     section title inside the page — they were all anchored to
+     `top: 0` and would otherwise overlap with the tabbar too. */
+  .neo-sticky-filter {
+    top: calc(56px + env(safe-area-inset-top, 0px));
+  }
+  /* Display panel flyout mobile override LIVES BELOW the base
+     `.neo-display-panel-inline .neo-display-panel-body` rule
+     (see further down in this file) — the base rule comes after
+     this media query in source order and would otherwise win
+     the cascade. Defining the override late ensures the mobile
+     right-anchor sticks. */
 }
 .neo-tab {
   display: flex; flex-direction: column; align-items: center; gap: 3px;
@@ -3208,8 +3388,20 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
 }
 .neo-tab-active { color: var(--neo-accent); }
 .neo-tab-active::after { width: 20px; display: none; }
+/* Drop the browser's default focus ring on tabs — the accent
+   text colour on the active tab already signals "you are here"
+   and the default ring read as a clipped rectangle covering the
+   content row immediately below the relocated mobile tabbar.
+   Keyboard navigators still get a clearly visible ring via
+   `:focus-visible`, which only triggers for non-mouse focus. */
+.neo-tab:focus { outline: none; }
+.neo-tab:focus-visible {
+  outline: 2px solid var(--neo-accent);
+  outline-offset: -3px;
+  border-radius: 6px;
+}
 .neo-tab-icon {
-  font-size: 18px; line-height: 1;
+  font-size: calc(18px * var(--neo-fs-mult, 1)); line-height: 1;
   position: relative;   /* anchor for .neo-tab-badge */
   display: inline-flex; align-items: center; justify-content: center;
 }
@@ -3249,7 +3441,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   border-radius: 6px;
   background: var(--dt-colors-background-critical-default, #ef4444);
   color: var(--dt-colors-text-critical-on-color, #ffffff);
-  font-size: 10px;
+  font-size: calc(10px * var(--neo-fs-mult, 1));
   font-weight: 700;
   line-height: 18px;
   letter-spacing: 0.2px;
@@ -3289,7 +3481,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
 .sr-detail-hero { padding: 20px 16px; border-bottom: 1px solid var(--neo-border); }
 .sr-detail-status {
   display: inline-flex; align-items: center; gap: 6px;
-  font-size: 12px; font-weight: 600; padding: 4px 10px;
+  font-size: calc(12px * var(--neo-fs-mult, 1)); font-weight: 600; padding: 4px 10px;
   border-radius: 20px; margin-bottom: 10px;
   font-family: var(--neo-mono); text-transform: uppercase; letter-spacing: 0.5px;
 }
@@ -3299,7 +3491,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
 .sr-detail-meta { font-size: 12px; color: var(--neo-text-2); font-family: var(--neo-mono); }
 .sr-detail-section { margin: 16px 12px; }
 .sr-detail-section-heading {
-  font-size: 12px; font-weight: 600; color: var(--neo-text-3);
+  font-size: calc(12px * var(--neo-fs-mult, 1)); font-weight: 600; color: var(--neo-text-3);
   text-transform: uppercase; letter-spacing: 0.8px;
   margin-bottom: 8px; padding: 0 4px;
   display: flex; align-items: center; gap: 6px;
@@ -3322,7 +3514,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
 .sr-entity-chip {
   display: flex; align-items: center; gap: 8px;
   padding: 10px 14px; border-bottom: 1px solid var(--neo-border);
-  font-size: 12px; font-family: var(--neo-mono);
+  font-size: calc(12px * var(--neo-fs-mult, 1)); font-family: var(--neo-mono);
   color: var(--neo-text-2); letter-spacing: -0.3px;
 }
 .sr-entity-chip:last-child { border-bottom: none; }
@@ -3334,7 +3526,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   gap: 4px; padding: 14px 8px;
   background: var(--neo-surface); border: 1px solid var(--neo-border);
   border-radius: var(--neo-radius); cursor: pointer;
-  font-size: 12px; font-weight: 600; color: var(--neo-text-3);
+  font-size: calc(12px * var(--neo-fs-mult, 1)); font-weight: 600; color: var(--neo-text-3);
   transition: all 0.25s var(--neo-transition);
   text-transform: uppercase; letter-spacing: 0.3px;
 }
@@ -3386,19 +3578,19 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
 .sr-summary-grid > .sr-sumcard:nth-child(6) { animation-delay: 150ms; }
 
 .sr-sumcard-label {
-  font-size: 10px; font-weight: 700;
+  font-size: calc(10px * var(--neo-fs-mult, 1)); font-weight: 700;
   text-transform: uppercase; letter-spacing: 1px;
   color: var(--neo-text-3);
   font-family: var(--neo-mono);
 }
 .sr-sumcard-value {
-  font-size: 18px; font-weight: 700;
+  font-size: calc(18px * var(--neo-fs-mult, 1)); font-weight: 700;
   color: var(--neo-text);
   letter-spacing: -0.4px;
   line-height: 1.15;
 }
 .sr-sumcard-foot {
-  font-size: 11px;
+  font-size: calc(11px * var(--neo-fs-mult, 1));
   color: var(--neo-text-3);
   font-family: var(--neo-mono);
   letter-spacing: -0.1px;
@@ -3408,10 +3600,10 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
 }
 .sr-sumcard-cat {
   display: flex; align-items: center; gap: 8px;
-  font-size: 16px;
+  font-size: calc(16px * var(--neo-fs-mult, 1));
 }
 .sr-sumcard-glyph {
-  font-size: 18px; line-height: 1;
+  font-size: calc(18px * var(--neo-fs-mult, 1)); line-height: 1;
 }
 .sr-sumcard-critical { border-left-color: var(--sr-critical, var(--neo-critical)); }
 .sr-sumcard-critical .sr-sumcard-value { color: var(--neo-critical); }
@@ -3430,13 +3622,13 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   border-radius: var(--neo-radius-sm);
 }
 .sr-rootcause-icon {
-  font-size: 14px;
+  font-size: calc(14px * var(--neo-fs-mult, 1));
   color: var(--neo-success);
   text-shadow: 0 0 8px rgba(34,211,160,0.55);
 }
 .sr-rootcause-id {
   font-family: var(--neo-mono);
-  font-size: 12px; font-weight: 600;
+  font-size: calc(12px * var(--neo-fs-mult, 1)); font-weight: 600;
   color: var(--neo-text);
   letter-spacing: -0.1px;
   word-break: break-all;
@@ -3455,7 +3647,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   border: 1px solid rgba(99,102,241,0.25);
   border-bottom: 1px solid rgba(99,102,241,0.25); /* override base */
   border-radius: 4px;
-  font-size: 11px; font-family: var(--neo-mono);
+  font-size: calc(11px * var(--neo-fs-mult, 1)); font-family: var(--neo-mono);
   color: var(--neo-text);
   letter-spacing: -0.1px;
 }
@@ -3482,7 +3674,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   border-bottom: 1px solid rgba(255,255,255,0.04);
   cursor: pointer;
   font-family: var(--neo-mono);
-  font-size: 12px;
+  font-size: calc(12px * var(--neo-fs-mult, 1));
   transition: background 0.15s var(--neo-transition);
 }
 .sr-related-row:last-child { border-bottom: none; }
@@ -3501,7 +3693,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
 }
 .sr-related-status {
   justify-self: end;
-  font-size: 11px; font-weight: 600;
+  font-size: calc(11px * var(--neo-fs-mult, 1)); font-weight: 600;
   padding: 2px 8px; border-radius: 4px;
   letter-spacing: 0.2px;
 }
@@ -3526,7 +3718,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   margin: 16px 16px 12px;
 }
 .neo-section-title {
-  font-size: 12px; font-weight: 600; color: var(--neo-text-3);
+  font-size: calc(12px * var(--neo-fs-mult, 1)); font-weight: 600; color: var(--neo-text-3);
   text-transform: uppercase; letter-spacing: 0.8px;
   margin-bottom: 8px;
   display: flex; align-items: center; gap: 6px;
@@ -3541,11 +3733,11 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   margin: 0 16px 12px;
 }
 .neo-chart-title {
-  font-size: 12px; font-weight: 600; color: var(--neo-text-3);
+  font-size: calc(12px * var(--neo-fs-mult, 1)); font-weight: 600; color: var(--neo-text-3);
   text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 4px;
 }
 .neo-chart-subtitle {
-  font-size: 12px; color: var(--neo-text-3); margin-bottom: 12px;
+  font-size: calc(12px * var(--neo-fs-mult, 1)); color: var(--neo-text-3); margin-bottom: 12px;
   font-family: var(--neo-mono); letter-spacing: -0.2px;
 }
 .neo-kpi-grid {
@@ -3563,7 +3755,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   letter-spacing: -1.5px; line-height: 1; margin-bottom: 4px;
 }
 .neo-kpi-label {
-  font-size: 12px; color: var(--neo-text-3); font-weight: 600;
+  font-size: calc(12px * var(--neo-fs-mult, 1)); color: var(--neo-text-3); font-weight: 600;
   text-transform: uppercase; letter-spacing: 0.8px;
 }
 .neo-segment-control {
@@ -3592,14 +3784,14 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
 .neo-analytics-section-title {
   display: flex; align-items: baseline; gap: 10px;
   font-family: var(--neo-mono);
-  font-size: 13px; font-weight: 700;
+  font-size: calc(13px * var(--neo-fs-mult, 1)); font-weight: 700;
   letter-spacing: 0.6px; text-transform: uppercase;
   color: rgba(226,232,240,0.92);
   margin-bottom: 10px;
 }
 [data-theme="light"] .neo-analytics-section-title { color: rgba(15,23,42,0.92); }
 .neo-analytics-section-sub {
-  font-size: 10px; font-weight: 600;
+  font-size: calc(10px * var(--neo-fs-mult, 1)); font-weight: 600;
   letter-spacing: 0.3px; text-transform: none;
   color: rgba(148,163,184,0.85);
 }
@@ -3638,23 +3830,24 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   display: flex; flex-direction: column;
   min-height: 132px;
   padding: 14px 16px 0;
-  background:
-    /* faint scanlines */
-    repeating-linear-gradient(
-      0deg,
-      rgba(255,255,255,0) 0px,
-      rgba(255,255,255,0) 3px,
-      rgba(255,255,255,0.02) 3px,
-      rgba(255,255,255,0.02) 4px
-    ),
-    /* accent wash near the bottom — colour bleed from the trace */
-    linear-gradient(
-      180deg,
-      rgba(15,23,42,0.55) 0%,
-      rgba(15,23,42,0.45) 55%,
-      color-mix(in srgb, var(--neo-kpi-accent) 8%, rgba(15,23,42,0.30)) 100%
-    );
+  /* Transparent body — matches the "clean" feel of the Incidents
+     constellation page where the canvas paints pure `--neo-bg`
+     and elements sit directly on top. The previous filled slate-
+     blue gradient + scanline pattern created the "film" the user
+     reported (looked like a translucent overlay on the page).
+     Identity now comes from the border + the subtle accent-color
+     glow at the bottom edge, set via `box-shadow` instead of
+     a background gradient. */
+  background: transparent;
+  /* Frame restored per user request — they wanted the card
+     boundary to stay visible. The "film" they reported earlier
+     came from the filled gradient + scanline backgrounds, NOT
+     the border itself. Keeping the rectangular outline + a
+     thicker accent rule at the bottom for the metric identity.
+     `background: transparent` ensures no slate-blue tint over
+     the page bg. */
   border: 1px solid rgba(180,210,255,0.14);
+  border-bottom: 2px solid color-mix(in srgb, var(--neo-kpi-accent) 55%, transparent);
   border-radius: var(--neo-radius-sm);
   overflow: hidden;
   cursor: pointer;
@@ -3663,20 +3856,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   font-family: var(--neo-mono);
 }
 [data-theme="light"] .neo-kpi-card {
-  background:
-    repeating-linear-gradient(
-      0deg,
-      rgba(0,0,0,0) 0px,
-      rgba(0,0,0,0) 3px,
-      rgba(0,0,0,0.015) 3px,
-      rgba(0,0,0,0.015) 4px
-    ),
-    linear-gradient(
-      180deg,
-      rgba(255,255,255,0.95) 0%,
-      rgba(255,255,255,0.85) 60%,
-      color-mix(in srgb, var(--neo-kpi-accent) 7%, rgba(255,255,255,0.85)) 100%
-    );
+  background: transparent;
   border-color: rgba(60,90,160,0.16);
 }
 /* Corner brackets removed per user feedback — the L-shapes hugging
@@ -3686,9 +3866,10 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
    git history (commit message references "remover detalhes das
    quinas") if the look ever needs to come back. */
 .neo-kpi-card:hover {
+  /* Hover restores the box border highlight + slight lift. */
   border-color: rgba(180,210,255,0.30);
   transform: translateY(-1px);
-  box-shadow: 0 10px 24px rgba(0,0,0,0.32);
+  box-shadow: 0 8px 18px -8px rgba(0,0,0,0.45);
 }
 .neo-kpi-card-static { cursor: default; }
 .neo-kpi-card-static:hover {
@@ -3716,7 +3897,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   position: absolute;
   right: 14px;
   bottom: 8px;
-  font-size: 14px;
+  font-size: calc(14px * var(--neo-fs-mult, 1));
   color: color-mix(in srgb, var(--neo-kpi-accent) 60%, transparent);
   pointer-events: none;
   transition: color 140ms ease, transform 140ms ease;
@@ -3737,7 +3918,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
 .neo-kpi-card-label {
   position: relative;
   display: flex; align-items: center; gap: 8px;
-  font-size: 10px; font-weight: 700;
+  font-size: calc(10px * var(--neo-fs-mult, 1)); font-weight: 700;
   letter-spacing: 1.4px; text-transform: uppercase;
   color: rgba(180,210,255,0.85);
   margin-bottom: 8px;
@@ -3762,13 +3943,13 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   margin-bottom: 6px;
 }
 .neo-kpi-card-value {
-  font-size: 38px; font-weight: 700;
+  font-size: calc(38px * var(--neo-fs-mult, 1)); font-weight: 700;
   letter-spacing: -1.5px; line-height: 1;
   font-variant-numeric: tabular-nums;
   text-shadow: 0 0 14px color-mix(in srgb, var(--neo-kpi-accent) 35%, transparent);
 }
 .neo-kpi-card-delta {
-  font-size: 11px; font-weight: 700;
+  font-size: calc(11px * var(--neo-fs-mult, 1)); font-weight: 700;
   letter-spacing: 0.3px;
   white-space: nowrap;
   padding: 2px 6px;
@@ -3821,7 +4002,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   border: 1px solid var(--neo-border);
   border-radius: var(--dt-borders-radius-container-default, 8px);
   padding: 8px 20px;
-  font-size: 13px;
+  font-size: calc(13px * var(--neo-fs-mult, 1));
   font-weight: 600;
   letter-spacing: 0.2px;
   cursor: pointer;
@@ -3842,7 +4023,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   cursor: progress;
 }
 .neo-load-more-hint {
-  font-size: 11.5px;
+  font-size: calc(11.5px * var(--neo-fs-mult, 1));
   color: var(--neo-text-2);
   letter-spacing: 0.2px;
 }
@@ -3915,7 +4096,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   font-weight: 700;
   letter-spacing: 0.3px;
   text-transform: uppercase;
-  font-size: 11px;
+  font-size: calc(11px * var(--neo-fs-mult, 1));
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .neo-priority-sev {
@@ -3923,7 +4104,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   border-radius: 10px;
   background: rgba(180,210,255,0.10);
   border: 1px solid rgba(180,210,255,0.25);
-  font-size: 10px; font-weight: 700;
+  font-size: calc(10px * var(--neo-fs-mult, 1)); font-weight: 700;
   text-transform: uppercase; letter-spacing: 0.4px;
   text-align: center;
 }
@@ -3942,11 +4123,11 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   font-weight: 800;
   color: rgba(255,77,106,0.95);
   text-align: right;
-  font-size: 13px;
+  font-size: calc(13px * var(--neo-fs-mult, 1));
 }
 .neo-priority-cta {
   color: rgba(180,210,255,0.55);
-  font-size: 14px;
+  font-size: calc(14px * var(--neo-fs-mult, 1));
   text-align: right;
   transition: transform 0.15s, color 0.15s;
 }
@@ -4082,7 +4263,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
     flex: 1 1 calc(50% - 4px);
     min-width: 0;
     padding: 6px 8px;
-    font-size: 11px;
+    font-size: calc(11px * var(--neo-fs-mult, 1));
   }
 
   /* Filter chips & data-mode buttons need bigger tap targets (≥ 36px) */
@@ -4185,7 +4366,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
 }
 .neo-qpanel-title {
   font-family: var(--neo-sans);
-  font-size: 16px; font-weight: 600; color: var(--neo-text);
+  font-size: calc(16px * var(--neo-fs-mult, 1)); font-weight: 600; color: var(--neo-text);
   letter-spacing: -0.2px;
 }
 .neo-qpanel-subtitle {
@@ -4261,7 +4442,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   font-weight: 500;
 }
 .neo-qpanel-item-name {
-  font-size: 14px; color: var(--neo-text);
+  font-size: calc(14px * var(--neo-fs-mult, 1)); color: var(--neo-text);
   font-weight: 500; line-height: 1.4;
   letter-spacing: -0.1px;
   display: -webkit-box; -webkit-line-clamp: 2;
@@ -4401,7 +4582,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   padding: 14px 18px 12px;
 }
 .neo-enlarged-quadrant-icon {
-  font-size: 18px;
+  font-size: calc(18px * var(--neo-fs-mult, 1));
   line-height: 1;
   flex: 0 0 auto;
   align-self: center;
@@ -4413,7 +4594,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
 .neo-enlarged-quadrant-title {
   margin: 0;
   font-family: var(--neo-mono);
-  font-size: 14px;
+  font-size: calc(14px * var(--neo-fs-mult, 1));
   font-weight: 500;
   letter-spacing: 0.5px;
   text-transform: uppercase;
@@ -4424,14 +4605,14 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
    than the name). */
 .neo-enlarged-quadrant-bignum {
   font-family: var(--neo-mono);
-  font-size: 18px;
+  font-size: calc(18px * var(--neo-fs-mult, 1));
   font-weight: 700;
   color: var(--neo-text);
   flex: 0 0 auto;
 }
 .neo-enlarged-quadrant-suffix {
   font-family: var(--neo-mono);
-  font-size: 13px;
+  font-size: calc(13px * var(--neo-fs-mult, 1));
   font-weight: 500;
   color: var(--neo-text-2);
   letter-spacing: 0.2px;
@@ -4444,7 +4625,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
 .neo-enlarged-quadrant-sep {
   color: var(--neo-text-3);
   font-family: var(--neo-mono);
-  font-size: 13px;
+  font-size: calc(13px * var(--neo-fs-mult, 1));
   flex: 0 0 auto;
 }
 .neo-enlarged-quadrant-close {
@@ -4459,7 +4640,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   border: 1px solid var(--neo-border);
   border-radius: 6px;
   cursor: pointer;
-  font-size: 13px;
+  font-size: calc(13px * var(--neo-fs-mult, 1));
   line-height: 1;
   padding: 0;
   align-self: center;
@@ -4541,7 +4722,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   align-self: center;
   color: var(--neo-text-2);
   font-family: var(--neo-mono);
-  font-size: 13px;
+  font-size: calc(13px * var(--neo-fs-mult, 1));
 }
 
 /* Floating ZOOM hint — appears next to the cursor when the user is
@@ -4556,7 +4737,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   border-radius: 4px;
   color: var(--neo-text);
   font-family: var(--neo-mono);
-  font-size: 10px; font-weight: 600;
+  font-size: calc(10px * var(--neo-fs-mult, 1)); font-weight: 600;
   letter-spacing: 0.4px;
   text-transform: uppercase;
   pointer-events: none;
@@ -4568,7 +4749,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   display: inline-flex; align-items: center; justify-content: center;
   width: 14px; height: 14px;
   color: var(--neo-accent);
-  font-size: 12px; line-height: 1;
+  font-size: calc(12px * var(--neo-fs-mult, 1)); line-height: 1;
   text-shadow: 0 0 6px rgba(99,102,241,0.55);
 }
 .neo-zoom-hint-text { color: var(--neo-text-2); }
@@ -4636,7 +4817,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
 }
 .neo-analytics-subsection-title {
   font-family: var(--neo-mono);
-  font-size: 11px; font-weight: 700;
+  font-size: calc(11px * var(--neo-fs-mult, 1)); font-weight: 700;
   letter-spacing: 0.5px; text-transform: uppercase;
   color: rgba(180,210,255,0.85);
   margin-bottom: 10px;
@@ -4710,13 +4891,13 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
 }
 .neo-pain-rank,
 .neo-rootcause-rank {
-  font-size: 10.5px; font-weight: 700;
+  font-size: calc(10.5px * var(--neo-fs-mult, 1)); font-weight: 700;
   color: rgba(180,210,255,0.75);
   letter-spacing: 0.4px;
 }
 .neo-pain-icon,
 .neo-rootcause-icon {
-  font-size: 12px;
+  font-size: calc(12px * var(--neo-fs-mult, 1));
   color: var(--row-accent);
 }
 .neo-pain-name,
@@ -4731,13 +4912,13 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
 }
 .neo-pain-name-type,
 .neo-rootcause-name-type {
-  font-size: 10.5px; font-weight: 600;
+  font-size: calc(10.5px * var(--neo-fs-mult, 1)); font-weight: 600;
   color: rgba(180,210,255,0.7);
   text-transform: uppercase; letter-spacing: 0.4px;
 }
 .neo-pain-name-uid,
 .neo-rootcause-name-uid {
-  font-size: 10.5px; font-weight: 500;
+  font-size: calc(10.5px * var(--neo-fs-mult, 1)); font-weight: 500;
   color: rgba(148,163,184,0.8);
 }
 .neo-pain-name-sep,
@@ -4769,7 +4950,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
 }
 .neo-pain-active,
 .neo-rootcause-active {
-  font-size: 10.5px; font-weight: 600;
+  font-size: calc(10.5px * var(--neo-fs-mult, 1)); font-weight: 600;
   color: #ff4d6a;
   padding: 1px 6px;
   border-radius: 3px;
@@ -4828,7 +5009,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
 }
 [data-theme="light"] .neo-mttrcat-value { color: rgba(15,23,42,0.95); }
 .neo-mttrcat-count {
-  font-size: 10.5px;
+  font-size: calc(10.5px * var(--neo-fs-mult, 1));
   color: rgba(148,163,184,0.7);
   text-align: right;
 }
@@ -4887,7 +5068,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
 }
 .neo-aging-legend-count {
   font-weight: 700;
-  font-size: 13px;
+  font-size: calc(13px * var(--neo-fs-mult, 1));
   color: rgba(180,210,255,0.95);
 }
 [data-theme="light"] .neo-aging-legend-count { color: rgba(60,90,160,0.95); }
@@ -4918,12 +5099,12 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   background: rgba(180,210,255,0.06);
 }
 .neo-topsegs-rank {
-  font-size: 10.5px; font-weight: 700;
+  font-size: calc(10.5px * var(--neo-fs-mult, 1)); font-weight: 700;
   color: rgba(180,210,255,0.75);
   letter-spacing: 0.4px;
 }
 .neo-topsegs-icon {
-  font-size: 13px;
+  font-size: calc(13px * var(--neo-fs-mult, 1));
   color: #b4d2ff;
 }
 .neo-topsegs-name {
@@ -4936,7 +5117,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   text-align: right;
 }
 .neo-topsegs-active {
-  font-size: 10.5px; font-weight: 600;
+  font-size: calc(10.5px * var(--neo-fs-mult, 1)); font-weight: 600;
   color: #ff4d6a;
   padding: 1px 6px;
   border-radius: 3px;
@@ -4961,7 +5142,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
 .neo-topsegs-bar-seg:last-child  { border-top-right-radius: 3px; border-bottom-right-radius: 3px; }
 .neo-topsegs-row:hover .neo-topsegs-bar-seg { filter: brightness(1.15); }
 .neo-topsegs-mix {
-  font-size: 10.5px; font-weight: 600;
+  font-size: calc(10.5px * var(--neo-fs-mult, 1)); font-weight: 600;
   letter-spacing: 0.2px;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   min-width: 0;
@@ -5025,21 +5206,22 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   flex-direction: column;
   gap: 4px;
   padding: 14px 16px;
-  background:
-    repeating-linear-gradient(
-      0deg,
-      rgba(255,255,255,0) 0px,
-      rgba(255,255,255,0) 3px,
-      rgba(255,255,255,0.02) 3px,
-      rgba(255,255,255,0.02) 4px
-    ),
-    linear-gradient(
-      180deg,
-      rgba(15,23,42,0.55) 0%,
-      rgba(15,23,42,0.45) 55%,
-      color-mix(in srgb, var(--neo-kpi-accent) 8%, rgba(15,23,42,0.30)) 100%
-    );
+  /* Transparent body — mirrors the AT A GLANCE card change above
+     so both KPI strips read as "content floating on the page" the
+     same way the Incidents list rows do, instead of as filled
+     slate-blue cards that the user perceived as a film/veil over
+     the page. Border + a subtle inset accent glow at the bottom
+     edge preserve identity without an opaque fill. */
+  background: transparent;
+  /* Frame restored per user request — they wanted the card
+     boundary to stay visible. The "film" they reported earlier
+     came from the filled gradient + scanline backgrounds, NOT
+     the border itself. Keeping the rectangular outline + a
+     thicker accent rule at the bottom for the metric identity.
+     `background: transparent` ensures no slate-blue tint over
+     the page bg. */
   border: 1px solid rgba(180,210,255,0.14);
+  border-bottom: 2px solid color-mix(in srgb, var(--neo-kpi-accent) 55%, transparent);
   border-radius: var(--neo-radius-sm);
   cursor: pointer;
   text-align: left;
@@ -5050,36 +5232,29 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   transition: border-color 0.18s, transform 0.18s, box-shadow 0.18s;
 }
 [data-theme="light"] .neo-team-kpi {
-  background:
-    repeating-linear-gradient(
-      0deg,
-      rgba(0,0,0,0) 0px,
-      rgba(0,0,0,0) 3px,
-      rgba(0,0,0,0.015) 3px,
-      rgba(0,0,0,0.015) 4px
-    ),
-    linear-gradient(
-      180deg,
-      rgba(255,255,255,0.95) 0%,
-      rgba(255,255,255,0.85) 60%,
-      color-mix(in srgb, var(--neo-kpi-accent) 7%, rgba(255,255,255,0.85)) 100%
-    );
+  background: transparent;
   border-color: rgba(60,90,160,0.16);
 }
 /* Corner brackets dropped to match the AT A GLANCE strip — both
    surfaces stay in lockstep visually. See the equivalent comment
    above `.neo-kpi-card`. */
 .neo-team-kpi:hover {
-  border-color: rgba(180,210,255,0.30);
+  /* Same as `.neo-kpi-card:hover` — no box border anymore; the
+     lift + soft underline shadow signals interactivity. */
   transform: translateY(-1px);
-  box-shadow: 0 10px 24px rgba(0,0,0,0.32);
+  box-shadow: 0 8px 18px -8px rgba(0,0,0,0.45);
 }
 /* Active = same accent palette but with a stronger ring so the
    "this is the highlighted line on the chart below" relationship
    stays obvious. Falls through to --neo-kpi-accent so each metric
    keeps its signature colour even when activated. */
 .neo-team-kpi-active {
+  /* Active state: full border picks up the accent + a soft glow
+     ring. Bottom edge thickens slightly so the chart-line
+     relation stays obvious. */
   border-color: var(--neo-kpi-accent);
+  border-bottom-color: var(--neo-kpi-accent);
+  border-bottom-width: 3px;
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--neo-kpi-accent) 22%, transparent);
 }
 .neo-team-kpi-label {
@@ -5135,7 +5310,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   border: 1px solid rgba(180,210,255,0.30);
   color: rgba(180,210,255,0.85);
   font-family: var(--neo-mono);
-  font-size: 9px;
+  font-size: calc(9px * var(--neo-fs-mult, 1));
   font-weight: 800;
   cursor: help;
   user-select: none;
@@ -5196,7 +5371,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
 
 .neo-team-kpi-info-title {
   font-family: var(--neo-mono);
-  font-size: 11.5px;
+  font-size: calc(11.5px * var(--neo-fs-mult, 1));
   font-weight: 700;
   letter-spacing: 0.4px;
   text-transform: uppercase;
@@ -5204,7 +5379,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
 .neo-team-kpi-info-formula {
   display: block;
   font-family: var(--neo-mono);
-  font-size: 11.5px;
+  font-size: calc(11.5px * var(--neo-fs-mult, 1));
   background: rgba(99,102,241,0.12);
   border-radius: 6px;
   padding: 6px 10px;
@@ -5222,7 +5397,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
 }
 .neo-team-kpi-info-section em {
   font-family: var(--neo-mono);
-  font-size: 10px;
+  font-size: calc(10px * var(--neo-fs-mult, 1));
   font-weight: 700;
   letter-spacing: 0.6px;
   text-transform: uppercase;
@@ -5329,7 +5504,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
 .neo-analytics-empty-inline {
   padding: 24px 16px;
   text-align: center;
-  font-size: 12px;
+  font-size: calc(12px * var(--neo-fs-mult, 1));
   color: rgba(148,163,184,0.78);
 }
 .neo-mtta-kpi {
@@ -5343,7 +5518,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
 }
 .neo-mtta-kpi-label {
   font-family: var(--neo-mono);
-  font-size: 10.5px;
+  font-size: calc(10.5px * var(--neo-fs-mult, 1));
   font-weight: 700;
   letter-spacing: 0.6px;
   text-transform: uppercase;
@@ -5351,14 +5526,14 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
 }
 .neo-mtta-kpi-value {
   font-family: var(--neo-mono);
-  font-size: 18px;
+  font-size: calc(18px * var(--neo-fs-mult, 1));
   font-weight: 700;
   color: rgba(226,232,240,0.98);
   letter-spacing: 0.2px;
 }
 .neo-mtta-kpi-sub {
   font-family: var(--neo-mono);
-  font-size: 10.5px;
+  font-size: calc(10.5px * var(--neo-fs-mult, 1));
   color: rgba(148,163,184,0.78);
 }
 [data-theme="light"] .neo-mtta-kpi {
@@ -5372,9 +5547,14 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
 /* MTTA evolution chart — single time-series line + p50-p95 band + per-bucket count bars. */
 .neo-mtta-chart-wrap {
   position: relative;
-  background: rgba(15,23,42,0.30);
-  border: 1px solid rgba(180,210,255,0.12);
-  border-radius: 12px;
+  /* Trend evolution chart wrapper. Previously had
+     `background: rgba(15,23,42,0.30)` + a full border — that
+     slate-blue tint was the "film" the user reported above the
+     chart. The chart's lines + labels carry enough visual
+     identity on their own; the container can be invisible. */
+  background: transparent;
+  border: none;
+  border-radius: 0;
   padding: 10px 12px;
   overflow: hidden;
   display: flex;
@@ -5382,8 +5562,8 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   gap: 6px;
 }
 [data-theme="light"] .neo-mtta-chart-wrap {
-  background: rgba(255,255,255,0.55);
-  border-color: rgba(60,90,160,0.16);
+  background: transparent;
+  border-color: transparent;
 }
 .neo-mtta-chart {
   width: 100%; height: auto; display: block;
@@ -5404,7 +5584,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
    surrounding 12px UI rather than looking oversized. */
 .neo-mtta-tick {
   font-family: var(--neo-mono);
-  font-size: 7px;
+  font-size: calc(7px * var(--neo-fs-mult, 1));
   fill: var(--neo-text-2);
   text-anchor: middle;
 }
@@ -5499,14 +5679,14 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
 }
 .neo-mtta-zoom-hint {
   font-family: var(--neo-mono);
-  font-size: 11px;
+  font-size: calc(11px * var(--neo-fs-mult, 1));
   letter-spacing: 0.3px;
   color: var(--neo-text-3);
   font-style: italic;
 }
 .neo-mtta-zoom-reset {
   font-family: var(--neo-mono);
-  font-size: 11px;
+  font-size: calc(11px * var(--neo-fs-mult, 1));
   font-weight: 600;
   letter-spacing: 0.3px;
   color: var(--neo-accent);
@@ -5536,7 +5716,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
 }
 .neo-mtta-zoom-preset {
   font-family: var(--neo-mono);
-  font-size: 10.5px;
+  font-size: calc(10.5px * var(--neo-fs-mult, 1));
   font-weight: 700;
   letter-spacing: 0.3px;
   color: var(--neo-text-2);
@@ -5637,14 +5817,14 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
 }
 .neo-mtta-tooltip-date {
   font-family: var(--neo-mono);
-  font-size: 11px;
+  font-size: calc(11px * var(--neo-fs-mult, 1));
   font-weight: var(--neo-fw-bold);
   letter-spacing: 0.2px;
   color: var(--neo-text);
 }
 .neo-mtta-tooltip-bucketcount {
   font-family: var(--neo-mono);
-  font-size: 10px;
+  font-size: calc(10px * var(--neo-fs-mult, 1));
   color: var(--neo-text-2);
   margin-top: 1px;
 }
@@ -5687,14 +5867,14 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
    pointer-events gymnastics that interfered with brush-to-zoom. */
 .neo-mtta-tooltip-row-label {
   font-family: var(--neo-mono);
-  font-size: 10px;
+  font-size: calc(10px * var(--neo-fs-mult, 1));
   font-weight: var(--neo-fw-bold);
   letter-spacing: 0.5px;
   text-transform: uppercase;
 }
 .neo-mtta-tooltip-row-value {
   font-family: var(--neo-mono);
-  font-size: 11px;
+  font-size: calc(11px * var(--neo-fs-mult, 1));
   font-weight: var(--neo-fw-bold);
   letter-spacing: 0.2px;
   color: var(--neo-text);
@@ -5708,7 +5888,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
 }
 .neo-mtta-tooltip-row-n {
   font-family: var(--neo-mono);
-  font-size: 10px;
+  font-size: calc(10px * var(--neo-fs-mult, 1));
   color: var(--neo-text-2);
   letter-spacing: 0.2px;
   text-align: right;
@@ -5729,7 +5909,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   padding-top: 5px;
   border-top: 1px dashed var(--neo-border);
   font-family: var(--neo-mono);
-  font-size: 9.5px;
+  font-size: calc(9.5px * var(--neo-fs-mult, 1));
   font-weight: 600;
   letter-spacing: 0.2px;
   color: var(--neo-accent);
@@ -5756,11 +5936,11 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   border: 1px solid var(--neo-border);
   border-radius: var(--neo-radius-sm);
   font-family: var(--neo-mono);
-  font-size: 11px;
+  font-size: calc(11px * var(--neo-fs-mult, 1));
   color: var(--neo-text-2);
 }
 .neo-mtta-density-label {
-  font-size: 10px;
+  font-size: calc(10px * var(--neo-fs-mult, 1));
   font-weight: 700;
   letter-spacing: 0.5px;
   text-transform: uppercase;
@@ -5809,7 +5989,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
    ═══════════════════════════════════════════════════════════════════ */
 .ptl-title {
   font-family: var(--neo-mono);
-  font-size: 13px;
+  font-size: calc(13px * var(--neo-fs-mult, 1));
   font-weight: 700;
   letter-spacing: 0.4px;
   color: rgba(226,232,240,0.95);
@@ -5820,7 +6000,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
 
 .ptl-id-input {
   font-family: var(--neo-mono);
-  font-size: 12px;
+  font-size: calc(12px * var(--neo-fs-mult, 1));
   background: rgba(15,23,42,0.55);
   color: rgba(226,232,240,0.95);
   border: 1px solid rgba(180,210,255,0.22);
@@ -5845,7 +6025,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  font-size: 12px;
+  font-size: calc(12px * var(--neo-fs-mult, 1));
   color: rgba(226,232,240,0.78);
   min-width: 0;
 }
@@ -5864,7 +6044,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
 
 .ptl-status {
   font-family: var(--neo-mono);
-  font-size: 10px;
+  font-size: calc(10px * var(--neo-fs-mult, 1));
   font-weight: 700;
   letter-spacing: 0.5px;
   padding: 2px 7px;
@@ -5885,12 +6065,12 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   background: rgba(6,182,212,0.10);
   border: 1px solid rgba(6,182,212,0.35);
   font-family: var(--neo-mono);
-  font-size: 10.5px;
+  font-size: calc(10.5px * var(--neo-fs-mult, 1));
   letter-spacing: 0.4px;
   white-space: nowrap;
 }
 .ptl-kpi-icon {
-  font-size: 11px;
+  font-size: calc(11px * var(--neo-fs-mult, 1));
   color: #67E8F9;
 }
 .ptl-kpi-label {
@@ -5912,7 +6092,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
 
 .ptl-input-error {
   font-family: var(--neo-mono);
-  font-size: 11px;
+  font-size: calc(11px * var(--neo-fs-mult, 1));
   color: #FCA5A5;
   letter-spacing: 0.3px;
 }
@@ -5953,7 +6133,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   outline: none;
   resize: vertical;
   font-family: var(--neo-sans, system-ui);
-  font-size: 13px;
+  font-size: calc(13px * var(--neo-fs-mult, 1));
   line-height: 1.55;
   color: rgba(226,232,240,0.95);
   min-height: 44px;
@@ -5970,13 +6150,13 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
 }
 .ptl-composer-hint {
   font-family: var(--neo-mono);
-  font-size: 10.5px;
+  font-size: calc(10.5px * var(--neo-fs-mult, 1));
   color: rgba(148,163,184,0.7);
   letter-spacing: 0.3px;
 }
 .ptl-composer-submit {
   font-family: var(--neo-mono);
-  font-size: 11px;
+  font-size: calc(11px * var(--neo-fs-mult, 1));
   font-weight: 700;
   letter-spacing: 0.5px;
   text-transform: uppercase;
@@ -5992,7 +6172,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
 .ptl-composer-submit:disabled { opacity: 0.4; cursor: not-allowed; }
 .ptl-composer-error {
   font-family: var(--neo-mono);
-  font-size: 11px;
+  font-size: calc(11px * var(--neo-fs-mult, 1));
   color: #FCA5A5;
   padding: 6px 10px;
   background: rgba(229,72,77,0.08);
@@ -6011,7 +6191,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   padding: 10px 14px;
   border-radius: 10px;
   font-family: var(--neo-mono);
-  font-size: 11.5px;
+  font-size: calc(11.5px * var(--neo-fs-mult, 1));
   letter-spacing: 0.2px;
 }
 .ptl-sim-notice {
@@ -6033,7 +6213,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
 .ptl-focus-notice button {
   margin-left: auto;
   font-family: var(--neo-mono);
-  font-size: 11px;
+  font-size: calc(11px * var(--neo-fs-mult, 1));
   font-weight: 700;
   letter-spacing: 0.3px;
   padding: 4px 10px;
@@ -6078,7 +6258,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
 .ptl-controls-count {
   margin-left: auto;
   font-family: var(--neo-mono);
-  font-size: 11px;
+  font-size: calc(11px * var(--neo-fs-mult, 1));
   color: rgba(148,163,184,0.85);
 }
 [data-theme="light"] .ptl-controls-count { color: rgba(71,85,105,0.95); }
@@ -6100,7 +6280,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   border: 1px solid rgba(180,210,255,0.32);
   color: rgba(216,222,255,0.95);
   font-family: var(--neo-mono);
-  font-size: 10.5px;
+  font-size: calc(10.5px * var(--neo-fs-mult, 1));
   font-weight: var(--neo-fw-bold);
   text-transform: uppercase;
   letter-spacing: 0.3px;
@@ -6160,7 +6340,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   /* colour comes inline from the lane definition */
 }
 .evt-swimlane-legend-count {
-  font-size: 10px;
+  font-size: calc(10px * var(--neo-fs-mult, 1));
   font-weight: var(--neo-fw-bold);
   padding: 1px 6px;
   border-radius: 999px;
@@ -6316,7 +6496,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   padding: 0 5px;
   border-radius: 4px;
   font-family: var(--neo-mono);
-  font-size: 10px;
+  font-size: calc(10px * var(--neo-fs-mult, 1));
   font-weight: var(--neo-fw-bold);
   letter-spacing: 0.3px;
   cursor: pointer;
@@ -6390,7 +6570,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   background: rgba(255,139,62,0.10);
   border: 1px solid rgba(255,139,62,0.45);
   font-family: var(--neo-mono);
-  font-size: 11px;
+  font-size: calc(11px * var(--neo-fs-mult, 1));
   letter-spacing: 0.4px;
   white-space: nowrap;
 }
@@ -6451,7 +6631,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
 }
 .ptl-card-displayid {
   font-family: var(--neo-mono);
-  font-size: 12px;
+  font-size: calc(12px * var(--neo-fs-mult, 1));
   font-weight: 700;
   letter-spacing: 0.3px;
   color: rgba(180,210,255,0.92);
@@ -6459,7 +6639,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
 }
 [data-theme="light"] .ptl-card-displayid { color: rgba(60,90,160,0.95); }
 .ptl-card-name {
-  font-size: 13px;
+  font-size: calc(13px * var(--neo-fs-mult, 1));
   color: rgba(226,232,240,0.92);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   min-width: 0;
@@ -6474,7 +6654,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
 }
 .ptl-card-category {
   font-family: var(--neo-mono);
-  font-size: 10.5px;
+  font-size: calc(10.5px * var(--neo-fs-mult, 1));
   letter-spacing: 0.4px;
   color: rgba(148,163,184,0.85);
   text-transform: uppercase;
@@ -6484,7 +6664,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   display: inline-flex;
   gap: 8px;
   font-family: var(--neo-mono);
-  font-size: 11px;
+  font-size: calc(11px * var(--neo-fs-mult, 1));
   color: rgba(148,163,184,0.85);
 }
 .ptl-card-counts > span { display: inline-flex; align-items: center; gap: 3px; }
@@ -6494,7 +6674,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   align-items: center;
   gap: 5px;
   font-family: var(--neo-mono);
-  font-size: 10.5px;
+  font-size: calc(10.5px * var(--neo-fs-mult, 1));
   font-weight: 700;
   letter-spacing: 0.4px;
   text-transform: uppercase;
@@ -6513,7 +6693,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
 [data-theme="light"] .ptl-card-open { color: rgba(60,90,160,0.95); border-color: rgba(60,90,160,0.30); }
 .ptl-card-toggle {
   color: rgba(148,163,184,0.85);
-  font-size: 11px;
+  font-size: calc(11px * var(--neo-fs-mult, 1));
   width: 14px; text-align: center;
 }
 
@@ -6610,7 +6790,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
      tenants. */
   padding: 1px 6px;
   gap: 4px;
-  font-size: 10.5px;
+  font-size: calc(10.5px * var(--neo-fs-mult, 1));
 }
 .neo-tcell-metrics {
   overflow: hidden;
@@ -6618,7 +6798,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
 }
 .neo-tcell-metrics-head {
   font-family: var(--neo-mono);
-  font-size: 10.5px;
+  font-size: calc(10.5px * var(--neo-fs-mult, 1));
   font-weight: 700;
   letter-spacing: 0.5px;
   text-transform: uppercase;
@@ -6651,7 +6831,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
 }
 .neo-metric-filter-label {
   font-family: var(--neo-mono);
-  font-size: 10.5px;
+  font-size: calc(10.5px * var(--neo-fs-mult, 1));
   font-weight: 700;
   letter-spacing: 0.5px;
   text-transform: uppercase;
@@ -6668,7 +6848,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   border: 1px solid var(--neo-border);
   border-radius: 999px;
   font-family: var(--neo-mono);
-  font-size: 10.5px;
+  font-size: calc(10.5px * var(--neo-fs-mult, 1));
   font-weight: 700;
   letter-spacing: 0.4px;
   color: var(--neo-text-2);
@@ -6715,7 +6895,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   height: 26px;
   padding: 0 10px;
   font-family: var(--neo-mono);
-  font-size: 11px;
+  font-size: calc(11px * var(--neo-fs-mult, 1));
   font-weight: 700;
   letter-spacing: 0.4px;
   border: 1px solid var(--neo-border);
@@ -6740,7 +6920,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   background: color-mix(in srgb, var(--metric-accent, var(--neo-accent)) 16%, var(--neo-surface));
 }
 .neo-metric-filter-chip-add {
-  font-size: 13px;
+  font-size: calc(13px * var(--neo-fs-mult, 1));
   font-weight: 700;
   margin-left: -2px;
   color: var(--metric-accent, var(--neo-accent));
@@ -6780,7 +6960,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
    "what" while the label reads as the "which". */
 .neo-metric-filter-chip-value {
   font-family: var(--neo-mono);
-  font-size: 10.5px;
+  font-size: calc(10.5px * var(--neo-fs-mult, 1));
   font-weight: 700;
   letter-spacing: 0.2px;
   padding: 1px 6px;
@@ -6802,7 +6982,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   height: 18px;
   margin-left: 2px;
   border-radius: 50%;
-  font-size: 11px;
+  font-size: calc(11px * var(--neo-fs-mult, 1));
   font-weight: 700;
   line-height: 1;
   color: color-mix(in srgb, var(--metric-accent, var(--neo-accent)) 80%, var(--neo-text));
@@ -6922,7 +7102,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
 }
 .neo-metric-filter-popover-title {
   font-family: var(--neo-mono);
-  font-size: 12px;
+  font-size: calc(12px * var(--neo-fs-mult, 1));
   font-weight: 700;
   letter-spacing: 0.6px;
   text-transform: uppercase;
@@ -6930,7 +7110,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
 }
 .neo-metric-filter-popover-off {
   font-family: var(--neo-mono);
-  font-size: 11px;
+  font-size: calc(11px * var(--neo-fs-mult, 1));
   font-weight: 600;
   letter-spacing: 0.3px;
   color: var(--neo-text-2);
@@ -6953,7 +7133,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
 }
 .neo-metric-filter-popover-section-title {
   font-family: var(--neo-mono);
-  font-size: 10px;
+  font-size: calc(10px * var(--neo-fs-mult, 1));
   font-weight: 700;
   letter-spacing: 0.5px;
   text-transform: uppercase;
@@ -6971,7 +7151,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
 }
 .neo-metric-filter-popover-preset {
   font-family: var(--neo-mono);
-  font-size: 11px;
+  font-size: calc(11px * var(--neo-fs-mult, 1));
   font-weight: 600;
   letter-spacing: 0.3px;
   color: var(--neo-text);
@@ -7020,7 +7200,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
 }
 .neo-metric-filter-popover-range-field > span {
   font-family: var(--neo-mono);
-  font-size: 10px;
+  font-size: calc(10px * var(--neo-fs-mult, 1));
   font-weight: 700;
   letter-spacing: 0.4px;
   text-transform: uppercase;
@@ -7035,7 +7215,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   border-radius: var(--neo-radius-sm);
   color: var(--neo-text);
   font-family: var(--neo-mono);
-  font-size: 12px;
+  font-size: calc(12px * var(--neo-fs-mult, 1));
   letter-spacing: 0.2px;
   outline: none;
   transition: border-color 120ms ease, background 120ms ease;
@@ -7046,13 +7226,13 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
 }
 .neo-metric-filter-popover-range-sep {
   font-family: var(--neo-mono);
-  font-size: 11px;
+  font-size: calc(11px * var(--neo-fs-mult, 1));
   color: var(--neo-text-3);
   padding-bottom: 6px;
 }
 .neo-metric-filter-popover-range-help {
   font-family: var(--neo-mono);
-  font-size: 10.5px;
+  font-size: calc(10.5px * var(--neo-fs-mult, 1));
   color: var(--neo-text-3);
   margin-top: 6px;
   line-height: 1.4;
@@ -7061,11 +7241,11 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   background: rgba(148,163,184,0.10);
   padding: 0 4px;
   border-radius: 3px;
-  font-size: 10px;
+  font-size: calc(10px * var(--neo-fs-mult, 1));
 }
 .neo-metric-filter-popover-error {
   font-family: var(--neo-mono);
-  font-size: 10.5px;
+  font-size: calc(10.5px * var(--neo-fs-mult, 1));
   color: #F87171;
   margin-top: 6px;
 }
@@ -7078,7 +7258,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   border-radius: var(--neo-radius-sm);
   color: var(--metric-accent, var(--neo-accent));
   font-family: var(--neo-mono);
-  font-size: 11px;
+  font-size: calc(11px * var(--neo-fs-mult, 1));
   font-weight: 700;
   letter-spacing: 0.4px;
   text-transform: uppercase;
@@ -7107,7 +7287,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   border-radius: var(--neo-radius-sm);
   color: var(--neo-text);
   font-family: var(--neo-mono);
-  font-size: 13px;
+  font-size: calc(13px * var(--neo-fs-mult, 1));
   letter-spacing: 0.2px;
   outline: none;
   transition: border-color 120ms ease, background 120ms ease;
@@ -7124,7 +7304,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   border-radius: var(--neo-radius-sm);
   color: var(--metric-accent, var(--neo-accent));
   font-family: var(--neo-mono);
-  font-size: 11px;
+  font-size: calc(11px * var(--neo-fs-mult, 1));
   font-weight: 700;
   letter-spacing: 0.3px;
   text-transform: uppercase;
@@ -7147,7 +7327,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   column-gap: 10px;
   row-gap: 4px;
   font-family: var(--neo-mono);
-  font-size: 10.5px;
+  font-size: calc(10.5px * var(--neo-fs-mult, 1));
   line-height: 1.5;
 }
 .neo-metric-filter-popover-syntax dt {
@@ -7158,7 +7338,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   font-weight: 700;
   letter-spacing: 0.4px;
   text-transform: uppercase;
-  font-size: 9.5px;
+  font-size: calc(9.5px * var(--neo-fs-mult, 1));
   align-self: center;
 }
 .neo-metric-filter-popover-syntax dd {
@@ -7175,7 +7355,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   border-radius: 3px;
   padding: 1px 5px;
   font-family: var(--neo-mono);
-  font-size: 10px;
+  font-size: calc(10px * var(--neo-fs-mult, 1));
   /* Use the popover's `--metric-accent` override (neutralized to
      `--neo-text-2`) so the kbd glyphs in UNITS / syntax legend
      match the muted body type. The chip on the strip is still
@@ -7196,7 +7376,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
    the kbd chips for visual weight. */
 .neo-metric-filter-popover-syntax-note {
   font-family: var(--neo-mono);
-  font-size: 9.5px;
+  font-size: calc(9.5px * var(--neo-fs-mult, 1));
   font-style: italic;
   /* `--neo-text-3` was illegible on the translucent panel — the
      "(bare number = minutes)" hint disappeared. Brought up to
@@ -7220,7 +7400,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   border-radius: var(--neo-radius-sm);
   color: var(--neo-text-2);
   font-family: var(--neo-mono);
-  font-size: 11px;
+  font-size: calc(11px * var(--neo-fs-mult, 1));
   font-weight: 600;
   letter-spacing: 0.3px;
   cursor: pointer;
@@ -7297,7 +7477,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
 }
 .neo-mobile-card-id {
   font-family: var(--neo-mono);
-  font-size: 11px;
+  font-size: calc(11px * var(--neo-fs-mult, 1));
   font-weight: 700;
   letter-spacing: 0.3px;
   color: var(--neo-text-2);
@@ -7306,7 +7486,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   display: inline-flex;
   align-items: center;
   font-family: var(--neo-mono);
-  font-size: 10px;
+  font-size: calc(10px * var(--neo-fs-mult, 1));
   font-weight: 700;
   letter-spacing: 0.4px;
   text-transform: uppercase;
@@ -7332,7 +7512,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
 .neo-mobile-card-age {
   margin-left: auto;
   font-family: var(--neo-mono);
-  font-size: 11px;
+  font-size: calc(11px * var(--neo-fs-mult, 1));
   color: var(--neo-text-3);
   font-variant-numeric: tabular-nums;
 }
@@ -7341,7 +7521,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
-  font-size: 14px;
+  font-size: calc(14px * var(--neo-fs-mult, 1));
   font-weight: 600;
   letter-spacing: 0.1px;
   color: var(--neo-text);
@@ -7352,7 +7532,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   align-items: baseline;
   gap: 6px;
   font-family: var(--neo-mono);
-  font-size: 11px;
+  font-size: calc(11px * var(--neo-fs-mult, 1));
   color: var(--neo-text-2);
 }
 .neo-mobile-card-cat {
@@ -7412,7 +7592,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
 }
 .neo-mobile-card-entity-pill {
   font-family: var(--neo-mono);
-  font-size: 11px;
+  font-size: calc(11px * var(--neo-fs-mult, 1));
   color: var(--neo-text);
   background: var(--neo-surface-2);
   border: 1px solid var(--neo-border);
@@ -7432,11 +7612,11 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   align-items: baseline;
   gap: 6px;
   margin-top: 4px;
-  font-size: 11.5px;
+  font-size: calc(11.5px * var(--neo-fs-mult, 1));
 }
 .neo-mobile-card-rc-label {
   font-family: var(--neo-mono);
-  font-size: 10px;
+  font-size: calc(10px * var(--neo-fs-mult, 1));
   font-weight: 700;
   letter-spacing: 0.3px;
   color: var(--neo-text-3);
@@ -7482,7 +7662,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
 }
 .neo-metric-filter-mode-opt {
   font-family: var(--neo-mono);
-  font-size: 10.5px;
+  font-size: calc(10.5px * var(--neo-fs-mult, 1));
   font-weight: 700;
   letter-spacing: 0.4px;
   text-transform: uppercase;
@@ -7551,14 +7731,14 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
 }
 .ptl-mtta-title {
   font-family: var(--neo-mono);
-  font-size: 12px;
+  font-size: calc(12px * var(--neo-fs-mult, 1));
   font-weight: 700;
   letter-spacing: 0.5px;
   text-transform: uppercase;
   color: rgba(226,232,240,0.95);
 }
 .ptl-mtta-sub {
-  font-size: 11.5px;
+  font-size: calc(11.5px * var(--neo-fs-mult, 1));
   color: rgba(148,163,184,0.85);
   flex: 1 1 auto;
   min-width: 0;
@@ -7588,7 +7768,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   border: 1px solid rgba(180,210,255,0.16);
   border-radius: 999px;
   font-family: var(--neo-mono);
-  font-size: 11px;
+  font-size: calc(11px * var(--neo-fs-mult, 1));
   font-weight: 600;
   color: rgba(148,163,184,0.85);
   cursor: pointer;
@@ -7604,7 +7784,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   border-color: rgba(180,210,255,0.45);
 }
 .ptl-chip-count {
-  font-size: 10px;
+  font-size: calc(10px * var(--neo-fs-mult, 1));
   font-weight: 700;
   padding: 1px 6px;
   border-radius: 999px;
@@ -7640,7 +7820,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   gap: 10px;
   margin: 0;
   font-family: var(--neo-mono);
-  font-size: 11px;
+  font-size: calc(11px * var(--neo-fs-mult, 1));
   font-weight: 700;
   letter-spacing: 0.6px;
   text-transform: uppercase;
@@ -7654,7 +7834,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
 }
 .ptl-day-label { white-space: nowrap; }
 .ptl-day-count {
-  font-size: 10px;
+  font-size: calc(10px * var(--neo-fs-mult, 1));
   padding: 1px 7px;
   background: rgba(180,210,255,0.08);
   border-radius: 999px;
@@ -7754,11 +7934,11 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   align-items: center;
   flex-wrap: wrap;
   gap: 8px;
-  font-size: 12px;
+  font-size: calc(12px * var(--neo-fs-mult, 1));
 }
 .ptl-cell-time {
   font-family: var(--neo-mono);
-  font-size: 11px;
+  font-size: calc(11px * var(--neo-fs-mult, 1));
   color: rgba(148,163,184,0.85);
   letter-spacing: 0.3px;
   min-width: 42px;
@@ -7772,14 +7952,14 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   border: 1px solid;
   border-radius: 999px;
   font-family: var(--neo-mono);
-  font-size: 10.5px;
+  font-size: calc(10.5px * var(--neo-fs-mult, 1));
   font-weight: 700;
   letter-spacing: 0.4px;
   text-transform: uppercase;
 }
 .ptl-cell-tag-icon { font-size: 11px; }
 .ptl-cell-source {
-  font-size: 12px;
+  font-size: calc(12px * var(--neo-fs-mult, 1));
   font-weight: 600;
   color: rgba(226,232,240,0.92);
   overflow: hidden;
@@ -7788,14 +7968,14 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   max-width: 320px;
 }
 .ptl-cell-actor {
-  font-size: 12px;
+  font-size: calc(12px * var(--neo-fs-mult, 1));
   color: rgba(148,163,184,0.85);
 }
 [data-theme="light"] .ptl-cell-source { color: rgba(15,23,42,0.92); }
 [data-theme="light"] .ptl-cell-actor  { color: rgba(71,85,105,0.85); }
 
 .ptl-cell-content {
-  font-size: 13px;
+  font-size: calc(13px * var(--neo-fs-mult, 1));
   line-height: 1.55;
   color: rgba(226,232,240,0.92);
   word-break: break-word;
@@ -7819,7 +7999,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
 }
 .md-code {
   font-family: var(--neo-mono);
-  font-size: 12px;
+  font-size: calc(12px * var(--neo-fs-mult, 1));
   padding: 1px 6px;
   border-radius: 4px;
   background: rgba(99,102,241,0.12);
@@ -7840,7 +8020,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
 
 .ptl-cell-meta {
   font-family: var(--neo-mono);
-  font-size: 11px;
+  font-size: calc(11px * var(--neo-fs-mult, 1));
   color: rgba(148,163,184,0.78);
   letter-spacing: 0.2px;
 }
@@ -7863,14 +8043,14 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
 }
 .ptl-empty-title {
   font-family: var(--neo-mono);
-  font-size: 12px;
+  font-size: calc(12px * var(--neo-fs-mult, 1));
   font-weight: 700;
   letter-spacing: 0.5px;
   text-transform: uppercase;
   color: rgba(226,232,240,0.85);
 }
 .ptl-empty-body {
-  font-size: 12px;
+  font-size: calc(12px * var(--neo-fs-mult, 1));
   color: rgba(148,163,184,0.85);
   max-width: 480px;
   margin: 0 auto;
@@ -7912,12 +8092,12 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   background: rgba(229,72,77,0.20);
   color: #FCA5A5;
   font-family: var(--neo-mono);
-  font-size: 11px;
+  font-size: calc(11px * var(--neo-fs-mult, 1));
   font-weight: 800;
 }
 .ptl-banner-label {
   font-family: var(--neo-mono);
-  font-size: 11px;
+  font-size: calc(11px * var(--neo-fs-mult, 1));
   font-weight: 700;
   letter-spacing: 0.5px;
   text-transform: uppercase;
@@ -7925,13 +8105,13 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
 }
 .ptl-banner-message {
   font-family: var(--neo-mono);
-  font-size: 11.5px;
+  font-size: calc(11.5px * var(--neo-fs-mult, 1));
   line-height: 1.5;
   color: rgba(226,232,240,0.85);
   word-break: break-word;
 }
 .ptl-banner-hint {
-  font-size: 12px;
+  font-size: calc(12px * var(--neo-fs-mult, 1));
   color: rgba(180,210,255,0.85);
   background: rgba(99,102,241,0.10);
   border-radius: 6px;
@@ -7960,7 +8140,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   border: 1px solid var(--neo-border);
   border-radius: 4px;
   font-family: var(--neo-mono);
-  font-size: 10px;
+  font-size: calc(10px * var(--neo-fs-mult, 1));
   font-weight: 600;
   letter-spacing: 0.2px;
   color: var(--neo-text);
@@ -7968,4 +8148,169 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   pointer-events: none;
   box-shadow: 0 4px 12px rgba(0,0,0,0.32);
   z-index: 10;
+}
+
+/* ─── Display settings panel ──────────────────────────────────
+   Floating chip + popover in the bottom-LEFT corner (opposite
+   the DEMO scenario panel at bottom-right). Reachable from any
+   page so the user can dial intensity / font size during
+   navigation without going to a settings screen.
+   Visual style mirrors the DEMO panel: theme-aware translucent
+   surface, mono labels, frosted-glass blur, brand-accent active
+   state. Two sections (Intensity, Font size) with 3-button
+   toggles each.
+─────────────────────────────────────────────────────────────── */
+.neo-display-panel {
+  position: fixed;
+  /* Anchored to the TOP-RIGHT of the viewport so the trigger is
+     persistently visible at the very top of the app — the user
+     reported the previous bottom-left position felt tucked away.
+     The expanded panel body grows DOWNWARD from the chip (natural
+     flex flow), which matches the standard "top-right settings
+     menu" pattern Dynatrace's own shell uses. */
+  top: 12px;
+  right: 12px;
+  z-index: 9998;
+  background: var(--neo-surface-2);
+  border: 1px solid var(--neo-border);
+  border-radius: 10px;
+  color: var(--neo-text);
+  font-family: "SF Mono", "JetBrains Mono", monospace;
+  font-size: calc(11px * var(--neo-fs-mult, 1));
+  font-weight: 600;
+  backdrop-filter: blur(8px) saturate(140%);
+  -webkit-backdrop-filter: blur(8px) saturate(140%);
+  box-shadow: 0 10px 30px rgba(0,0,0,0.32);
+  user-select: none;
+}
+.neo-display-panel[data-collapsed="false"] {
+  /* Slightly stronger shadow when open so the popover lifts off
+     the page clearly. */
+  box-shadow: 0 14px 40px rgba(0,0,0,0.42);
+}
+
+/* Inline variant — used when the panel is rendered inside a
+   page header next to other controls (SegmentSelector etc).
+   Drops `position: fixed` so the chip sits inline; the
+   expanded body becomes an absolute-positioned flyout that
+   anchors to the chip's bottom-right corner. */
+.neo-display-panel-inline {
+  position: relative;
+  top: auto !important;
+  right: auto !important;
+  bottom: auto !important;
+  left: auto !important;
+}
+.neo-display-panel-inline .neo-display-panel-body {
+  position: absolute;
+  top: 100%;
+  /* Anchor to the LEFT edge of the chip so the popover grows
+     rightward into the page. Previously anchored `right: 0`
+     which extended the body leftward off the viewport when the
+     chip sat near the left edge of the header (next to the
+     SegmentSelector). */
+  left: 0;
+  margin-top: 4px;
+  /* Clamp width so the popover never overflows the viewport on
+     narrow pages — picks the lesser of its natural width and
+     `100vw - 32px`. */
+  max-width: calc(100vw - 32px);
+  background: var(--neo-bg);
+  border: 1px solid var(--neo-border);
+  border-radius: 10px;
+  box-shadow: 0 14px 40px rgba(0,0,0,0.42);
+  /* Match the floating variant's body padding. */
+  padding: 8px 12px 12px;
+}
+/* Mobile override — flip the flyout's anchor from the chip's
+   LEFT edge to its RIGHT edge. On small viewports the chip sits
+   near the right side of the header row, so growing leftward
+   from the chip's right edge keeps the body fully on-screen.
+   This rule MUST appear after the base `.neo-display-panel-
+   inline .neo-display-panel-body` rule above for the cascade
+   to flip — equal specificity means later wins. */
+@media (max-width: 720px) {
+  .neo-display-panel-inline .neo-display-panel-body {
+    left: auto;
+    right: 0;
+  }
+}
+
+.neo-display-panel-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--neo-text-2);
+  font: inherit;
+  letter-spacing: 0.06em;
+  width: 100%;
+}
+.neo-display-panel-glyph {
+  color: var(--neo-accent);
+  font-weight: 700;
+  /* Pull the cap-height of "Aa" up so it sits centered with the
+     "Display" label next to it. */
+  line-height: 1;
+}
+.neo-display-panel-caret {
+  margin-left: auto;
+  opacity: 0.6;
+}
+
+.neo-display-panel-body {
+  padding: 4px 12px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 240px;
+  border-top: 1px solid var(--neo-border);
+  margin-top: 4px;
+}
+
+.neo-display-panel-section { display: flex; flex-direction: column; gap: 6px; }
+.neo-display-panel-section-title {
+  font-size: calc(10px * var(--neo-fs-mult, 1));
+  font-weight: 700;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  color: var(--neo-text-2);
+}
+.neo-display-panel-section-hint {
+  font-size: calc(9.5px * var(--neo-fs-mult, 1));
+  font-weight: 500;
+  color: var(--neo-text-3);
+  letter-spacing: 0.02em;
+  /* The hint sits between the title and the buttons — slight
+     bottom margin to breathe vs the button row. */
+  margin-bottom: 2px;
+}
+.neo-display-panel-buttons {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+}
+.neo-display-panel-btn {
+  font: inherit;
+  padding: 5px 8px;
+  background: var(--neo-surface);
+  border: 1px solid var(--neo-border);
+  border-radius: 4px;
+  color: var(--neo-text);
+  cursor: pointer;
+  text-align: center;
+  transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+.neo-display-panel-btn:hover {
+  border-color: var(--neo-border-active);
+  background: var(--neo-surface-hover);
+}
+.neo-display-panel-btn-active {
+  background: color-mix(in srgb, var(--neo-accent) 18%, var(--neo-surface));
+  border-color: var(--neo-accent);
+  color: var(--neo-accent);
+  font-weight: 700;
 }

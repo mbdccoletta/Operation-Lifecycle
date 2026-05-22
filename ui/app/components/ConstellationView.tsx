@@ -15,6 +15,17 @@ import {
 } from "../utils/grouping";
 import { getCategoryLabel } from "../utils/formatters";
 import { scoreOf, TOP_TIER_THRESHOLD } from "../utils/scoring";
+import { useIntensity } from "../contexts/IntensityContext";
+
+/** Multiplier the canvas text uses when the user picks a non-default
+ *  font scale via the Display panel. Canvas-rendered text doesn't
+ *  inherit CSS variables, so we mirror the same percentages defined
+ *  in theme.css here. */
+const CANVAS_FS_MULT: Record<string, number> = {
+  small:  0.92,
+  normal: 1,
+  large:  1.16,
+};
 
 export type ConstellationDataMode = "rising" | "open_time" | "criticality" | "total";
 
@@ -118,6 +129,13 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
   disableMagnifierLens = false,
   dotScale = 1,
 }) => {
+  // Read the user's font-scale pick so the canvas-rendered text
+  // (TOTAL / ACTIVE / RESOLVED circles, per-category counts at
+  // the bottom, swim labels, etc.) responds to the Display panel.
+  // Closed over by the `draw` callback; redraw fires on the next
+  // RAF tick after the value changes.
+  const { fontScale } = useIntensity();
+
   // Layout + per-grouping lookup tables, derived from the props once
   // per render. All the old CATEGORY_COLORS / QUADRANT_BOUNDS /
   // CAT_CENTERS_ACTIVE reads below now go through these.
@@ -695,6 +713,12 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
     if (!c) return;
     const ctx = c.getContext("2d")!;
     const { w, h } = size;
+    // Canvas text doesn't inherit CSS variables — read the user's
+    // font-scale pick from the Intensity context and multiply
+    // every literal px size below. `fsMult` is closed over by all
+    // `ctx.font = \`... ${N * fsMult}px ...\`` template literals,
+    // so a single context read scales every text in this draw.
+    const fsMult = CANVAS_FS_MULT[fontScale] ?? 1;
     const dpr = window.devicePixelRatio || 1;
     c.width = w * dpr;
     c.height = h * dpr;
@@ -848,7 +872,7 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
     }
 
     // Quadrant labels + trend indicators
-    ctx.font = `500 12px "Roboto Mono", "Roboto Mono", "SF Mono", monospace`;
+    ctx.font = `500 ${(12 * fsMult).toFixed(2)}px "Roboto Mono", "Roboto Mono", "SF Mono", monospace`;
     ctx.textAlign = "left";
     ctx.textBaseline = "top";
 
@@ -1043,7 +1067,7 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
           const upRgb = "255,77,106";
           const arrowBob = -(Math.sin(ta * 2.0) * 1.5 + 0.5);
           ctx.save();
-          ctx.font = `500 12px "Roboto Mono", "SF Mono", monospace`;
+          ctx.font = `500 ${(12 * fsMult).toFixed(2)}px "Roboto Mono", "SF Mono", monospace`;
           ctx.textBaseline = "top";
           ctx.textAlign = "right";
           const upW = ctx.measureText("UP").width;
@@ -1067,7 +1091,7 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
           const flashBlur    = 4 + breath * 6 + twinkleBurst * 8;
 
           ctx.save();
-          ctx.font = `500 12px "Roboto Mono", "SF Mono", monospace`;
+          ctx.font = `500 ${(12 * fsMult).toFixed(2)}px "Roboto Mono", "SF Mono", monospace`;
           ctx.textAlign = "right";
           ctx.textBaseline = "top";
           ctx.shadowColor = `rgba(${rgb},${0.40 + breath * 0.45 + twinkleBurst * 0.35})`;
@@ -1080,7 +1104,7 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
           // appear only during the twinkle burst, then vanish.
           if (twinkleBurst > 0.05) {
             ctx.save();
-            ctx.font = `500 12px "Roboto Mono", "SF Mono", monospace`;
+            ctx.font = `500 ${(12 * fsMult).toFixed(2)}px "Roboto Mono", "SF Mono", monospace`;
             const topW   = ctx.measureText("★ TOP").width;
             const starX  = baseX - topW + 4;     // approx center of "★"
             const starY  = baseY + 7;            // vertical mid
@@ -1129,7 +1153,7 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
         const baseY = z.y + 6 + (sharesWithLeader ? 14 : 0);
 
         ctx.save();
-        ctx.font = `500 12px "Roboto Mono", "SF Mono", monospace`;
+        ctx.font = `500 ${(12 * fsMult).toFixed(2)}px "Roboto Mono", "SF Mono", monospace`;
         ctx.textBaseline = "top";
 
         // Measure "DOWN" so we can position the bobbing arrow to its left
@@ -1165,7 +1189,7 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
       // quadrant's label strip, draw a glow + underline so the user
       // discovers that the name is a click target.
       const isLabelHover = hoveredLabel === cat;
-      ctx.font = `500 12px "Roboto Mono", "Roboto Mono", "SF Mono", monospace`;
+      ctx.font = `500 ${(12 * fsMult).toFixed(2)}px "Roboto Mono", "Roboto Mono", "SF Mono", monospace`;
       ctx.fillStyle = color;
       ctx.globalAlpha = dk ? 0.95 : 0.95;
       if (isLabelHover) {
@@ -1192,7 +1216,7 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
 
       // Count number (bigger, white)
       const activeCount = problems.filter((p) => resolveGrouping(p) === cat && p["event.status"] === "ACTIVE").length;
-      ctx.font = `600 14px "Roboto Mono", "SF Mono", monospace`;
+      ctx.font = `600 ${(14 * fsMult).toFixed(2)}px "Roboto Mono", "SF Mono", monospace`;
       ctx.fillStyle = dk ? "#ffffff" : "#0f172a";
       ctx.textBaseline = "alphabetic"; // align big number with cap-height of small text above
       ctx.fillText(`${activeCount}`, cx, y + 11);
@@ -1201,7 +1225,7 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
       ctx.textBaseline = "top";
 
       // "active" suffix
-      ctx.font = `500 12px "Roboto Mono", "SF Mono", monospace`;
+      ctx.font = `500 ${(12 * fsMult).toFixed(2)}px "Roboto Mono", "SF Mono", monospace`;
       ctx.fillStyle = dk ? "rgba(226,232,240,0.55)" : "rgba(30,41,59,0.55)";
       ctx.fillText("active", cx, y + 1);
       cx += ctx.measureText("active").width + 10;
@@ -1210,7 +1234,7 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
       const trend = catTrends[cat];
       if (trend) {
         const diff = trend.recent - trend.older;
-        ctx.font = `500 12px "Roboto Mono", "SF Mono", monospace`;
+        ctx.font = `500 ${(12 * fsMult).toFixed(2)}px "Roboto Mono", "SF Mono", monospace`;
         let tText: string;
         if (diff > 0) {
           tText = `▲ +${diff} /1h`;
@@ -1253,7 +1277,7 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
     const resolvedY = activeAreaH + 8;
 
     // Section header — bigger, with a subtle "▼" hint and thin accent line
-    ctx.font = `600 16px "Roboto Mono", "Roboto Mono", "SF Mono", monospace`;
+    ctx.font = `600 ${(16 * fsMult).toFixed(2)}px "Roboto Mono", "Roboto Mono", "SF Mono", monospace`;
     ctx.textAlign = "left";
     ctx.textBaseline = "top";
     ctx.fillStyle = dk ? "rgba(52,211,153,0.95)" : "rgba(40,160,100,0.95)";
@@ -1289,7 +1313,7 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
       const labelText = labelById[cat] || cat;
 
       // ── Row 1: dot + CATEGORY label (bigger, uppercase letter-spacing)
-      ctx.font = `600 13px "Roboto Mono", "SF Mono", monospace`;
+      ctx.font = `600 ${(13 * fsMult).toFixed(2)}px "Roboto Mono", "SF Mono", monospace`;
       const labelW    = ctx.measureText(labelText.toUpperCase()).width;
       const dotR      = 5;
       const gap       = 8;
@@ -1335,7 +1359,7 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
 
       // ── Row 3: hero number — big bold count, centered, with subtle glow
       const heroY = accentY + 10;
-      ctx.font = `600 32px "Roboto Mono", "SF Mono", monospace`;
+      ctx.font = `600 ${(32 * fsMult).toFixed(2)}px "Roboto Mono", "SF Mono", monospace`;
       ctx.textAlign    = "center";
       ctx.textBaseline = "top";
       if (!isEmpty) {
@@ -1360,7 +1384,7 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
           delta < 0 ? (dk ? "255,77,106" : "220,50,50")   :
                       (dk ? "148,163,184" : "100,116,139");
 
-        ctx.font = `500 12px "Roboto Mono", "SF Mono", monospace`;
+        ctx.font = `500 ${(12 * fsMult).toFixed(2)}px "Roboto Mono", "SF Mono", monospace`;
         const deltaText = `${arrow} ${sign} /1h`;
         const dW = ctx.measureText(deltaText).width;
         // background pill
@@ -1377,7 +1401,7 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
         ctx.fillText(deltaText, cx, deltaY + pillH / 2 - 3);
 
         // ── Row 5: reference — "1h ago: N"
-        ctx.font = `400 12px "Roboto Mono", "SF Mono", monospace`;
+        ctx.font = `400 ${(12 * fsMult).toFixed(2)}px "Roboto Mono", "SF Mono", monospace`;
         ctx.textBaseline = "top";
         ctx.fillStyle = dk ? "rgba(148,163,184,0.55)" : "rgba(100,116,139,0.6)";
         ctx.fillText(`1h ago: ${countPrev}`, cx, deltaY + 22);
@@ -1765,7 +1789,7 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
 
         // Count text — sized to fit comfortably inside the bubble.
         ctx.save();
-        const fontSize = Math.max(10, Math.min(16, r * 0.85));
+        const fontSize = Math.max(10, Math.min(16, r * 0.85)) * fsMult;
         ctx.font = `700 ${fontSize}px "Roboto Mono", "SF Mono", monospace`;
         ctx.fillStyle = "#ffffff";
         ctx.textAlign = "center";
@@ -1796,7 +1820,7 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
           // ★ glyph just above the bubble — same colour as the
           // bubble, pulses with the same breath.
           ctx.save();
-          ctx.font = `700 11px "Roboto Mono", "SF Mono", monospace`;
+          ctx.font = `700 ${(11 * fsMult).toFixed(2)}px "Roboto Mono", "SF Mono", monospace`;
           ctx.textAlign    = "center";
           ctx.textBaseline = "bottom";
           ctx.shadowColor  = c.color;
@@ -2070,11 +2094,11 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
 
     // All three circles drawn without halo (no light emanating from any).
     // TOTAL: rising rate is BAD (more new incidents) → red ▲ / green ▼
-    drawSatellite(ctx, satLeftX,   satY, satR, satTotal,    "TOTAL",    "#94a3b8", "148,163,184", dk, totalTrend,    false, true);
+    drawSatellite(ctx, satLeftX,   satY, satR, satTotal,    "TOTAL",    "#94a3b8", "148,163,184", dk, totalTrend,    false, true, fsMult);
     // ACTIVE: red ring — represents active/critical problems.
-    drawSatellite(ctx, satCenterX, satY, satR, totalActive, "ACTIVE",   "#ff4d6a", "255,77,106",  dk, totalDelta,    false, true);
+    drawSatellite(ctx, satCenterX, satY, satR, totalActive, "ACTIVE",   "#ff4d6a", "255,77,106",  dk, totalDelta,    false, true, fsMult);
     // RESOLVED: rising rate is GOOD (resolving faster) → green ▲ / red ▼
-    drawSatellite(ctx, satRightX,  satY, satR, satResolved, "RESOLVED", "#22d3a0", "34,211,160",  dk, resolvedTrend, true,  true);
+    drawSatellite(ctx, satRightX,  satY, satR, satResolved, "RESOLVED", "#22d3a0", "34,211,160",  dk, resolvedTrend, true,  true, fsMult);
     } // ← end of if (showHub)
 
     // ── Rising-segment trail (Segments page only) ─────────────────
@@ -2151,7 +2175,11 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
   }, [size, dk, selectedId, problems, dataMode, stars, expandedQuadrant, hoveredLabel,
       groupings, resolveGrouping, layout, layoutBounds, slotById, colorOf, labelById, detectQuadrantAt, detectLabelAt, showHub,
       cellAggregations, isCellAggregated, expandedCellCategory, isMobileOrTablet,
-      highlightedCategoriesPerCell, drilledSubsets]);
+      highlightedCategoriesPerCell, drilledSubsets,
+      // `fontScale` drives `fsMult` inside the draw fn — re-bind so
+      // a change in the Display panel triggers a fresh closure on
+      // the very next render.
+      fontScale]);
 
   // Animation loop. Two changes vs the naïve "60 FPS + restart on
   // every draw-deps change" version:
@@ -2612,6 +2640,10 @@ function drawSatellite(
   color: string, rgb: string, dk: boolean,
   trendDelta: number, risingIsGood: boolean,
   noHalo: boolean = false,
+  /** Canvas font multiplier — mirrors the user's font-scale pick
+   *  from the Display panel so the TOTAL / ACTIVE / RESOLVED
+   *  numbers + labels scale alongside the rest of the app. */
+  fsMult: number = 1,
 ) {
   // Soft halo (skipped when noHalo=true)
   if (!noHalo) {
@@ -2654,20 +2686,20 @@ function drawSatellite(
   ctx.stroke();
 
   // Label
-  ctx.font = `500 12px "Roboto Mono", "Roboto Mono", "SF Mono", monospace`;
+  ctx.font = `500 ${(12 * fsMult).toFixed(2)}px "Roboto Mono", "Roboto Mono", "SF Mono", monospace`;
   ctx.textAlign    = "center";
   ctx.textBaseline = "middle";
   ctx.fillStyle    = dk ? "rgba(148,163,184,0.85)" : "rgba(100,116,139,0.95)";
   ctx.fillText(label, cx, cy - r * 0.48);
 
   // Number
-  const numSize = Math.round(r * 0.72);
+  const numSize = Math.round(r * 0.72) * fsMult;
   ctx.font = `900 ${numSize}px "Roboto Mono", "Roboto Mono", "SF Mono", monospace`;
   ctx.fillStyle = dk ? "#ffffff" : "#0f172a";
   ctx.fillText(`${count}`, cx, cy + 2);
 
   // Trend indicator below the number
-  ctx.font = `500 12px "Roboto Mono", "SF Mono", monospace`;
+  ctx.font = `500 ${(12 * fsMult).toFixed(2)}px "Roboto Mono", "SF Mono", monospace`;
   if (trendDelta === 0) {
     ctx.fillStyle = dk ? "rgba(148,163,184,0.55)" : "rgba(100,116,139,0.6)";
     ctx.fillText("— neutral", cx, cy + r * 0.55);
