@@ -421,6 +421,7 @@ export const TrendAnalysis = () => {
             deltaSuffix={KPI_CATALOG.active.deltaSuffix}
             deltaInverse={KPI_CATALOG.active.deltaInverse}
             tooltip={KPI_CATALOG.active.tooltip}
+            range={windowRange}
             onDrillDown={() => navigate("/?view=list&status=ACTIVE")}
             drilldownLabel="Click to see the active problems"
           />
@@ -433,6 +434,7 @@ export const TrendAnalysis = () => {
             deltaSuffix={KPI_CATALOG.mttr.deltaSuffix}
             deltaInverse={KPI_CATALOG.mttr.deltaInverse}
             tooltip={KPI_CATALOG.mttr.tooltip}
+            range={windowRange}
             /* MTTR was computed from CLOSED problems in the window —
                drill into that exact cohort so users can see WHICH
                problems produced the average. */
@@ -448,6 +450,7 @@ export const TrendAnalysis = () => {
             deltaSuffix={KPI_CATALOG.resRate.deltaSuffix}
             deltaInverse={KPI_CATALOG.resRate.deltaInverse}
             tooltip={KPI_CATALOG.resRate.tooltip}
+            range={windowRange}
             /* Resolution rate = closed/opened — same cohort as MTTR
                for the click target. */
             onDrillDown={() => navigate("/?view=list&status=CLOSED")}
@@ -462,6 +465,7 @@ export const TrendAnalysis = () => {
             deltaSuffix={KPI_CATALOG.stuck.deltaSuffix}
             deltaInverse={KPI_CATALOG.stuck.deltaInverse}
             tooltip={KPI_CATALOG.stuck.tooltip}
+            range={windowRange}
             /* Stuck = ACTIVE problems older than the threshold —
                the dedicated `stuck` URL param combines both
                conditions in Overview's filter predicate. */
@@ -614,9 +618,13 @@ interface KpiCardProps {
   /** Optional CTA label appended to the title hint when drilldown
    *  is wired — e.g. "Click to see active problems". */
   drilldownLabel?: string;
+  /** Window the sparkline series spans (ms timestamps). Threaded
+   *  through to the Sparkline so its hover tooltip can label each
+   *  bucket with its timestamp. */
+  range?: { from: number; to: number };
 }
 
-const KpiCard: React.FC<KpiCardProps> = ({ label, value, color, series, delta, deltaSuffix, deltaInverse, tooltip, onDrillDown, drilldownLabel }) => {
+const KpiCard: React.FC<KpiCardProps> = ({ label, value, color, series, delta, deltaSuffix, deltaInverse, tooltip, onDrillDown, drilldownLabel, range }) => {
   const sign = delta > 0 ? "▲" : delta < 0 ? "▼" : "•";
   const goodChange = deltaInverse ? delta < 0 : delta > 0;
   const badChange  = deltaInverse ? delta > 0 : delta < 0;
@@ -628,6 +636,16 @@ const KpiCard: React.FC<KpiCardProps> = ({ label, value, color, series, delta, d
   const combinedTitle = onDrillDown && drilldownLabel
     ? (tooltip ? `${tooltip}\n\n${drilldownLabel}` : drilldownLabel)
     : tooltip;
+
+  // While the cursor sits over the sparkline, suppress the host
+  // card's native `title=` tooltip — otherwise the browser's slow
+  // native bubble pops up after ~1.5 s and covers the inline
+  // sparkline value tooltip. Restored on mouseleave so the card-
+  // level description still appears when hovering elsewhere on
+  // the card (label / value / delta chip).
+  const [sparkHovered, setSparkHovered] = React.useState(false);
+  const effectiveTitle = sparkHovered ? undefined : combinedTitle;
+
   // Choose element by whether drilldown is wired so the read-only
   // branch stays semantically a `<div>` (skipped by tab focus +
   // screen readers) and the interactive branch is a proper
@@ -645,8 +663,22 @@ const KpiCard: React.FC<KpiCardProps> = ({ label, value, color, series, delta, d
           {sign} {deltaText}{deltaSuffix}
         </span>
       </div>
-      <div className="neo-kpi-card-spark">
-        <Sparkline values={series} color={color} height={48} width={200} />
+      <div
+        className="neo-kpi-card-spark"
+        onMouseEnter={() => setSparkHovered(true)}
+        onMouseLeave={() => setSparkHovered(false)}
+      >
+        {/* `valueSuffix={deltaSuffix}` re-uses the card's existing
+            unit hint (h / % / "") so the tooltip prints e.g.
+            "0.3h · May 21, 14:00" without an extra prop wiring. */}
+        <Sparkline
+          values={series}
+          color={color}
+          height={48}
+          width={200}
+          range={range}
+          valueSuffix={deltaSuffix}
+        />
       </div>
       {onDrillDown && (
         <span className="neo-kpi-card-cta" aria-hidden="true">→</span>
@@ -658,7 +690,7 @@ const KpiCard: React.FC<KpiCardProps> = ({ label, value, color, series, delta, d
       <button
         type="button"
         className="neo-kpi-card neo-kpi-card-interactive"
-        title={combinedTitle}
+        title={effectiveTitle}
         style={{ ["--neo-kpi-accent" as string]: color }}
         onClick={onDrillDown}
       >
@@ -669,7 +701,7 @@ const KpiCard: React.FC<KpiCardProps> = ({ label, value, color, series, delta, d
   return (
     <div
       className="neo-kpi-card neo-kpi-card-static"
-      title={tooltip}
+      title={sparkHovered ? undefined : tooltip}
       style={{ ["--neo-kpi-accent" as string]: color }}
     >
       {inner}

@@ -3782,11 +3782,29 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
    `margin-top: auto` so cards with different heights still align. */
 .neo-kpi-card-spark {
   margin: auto -16px 0;
-  overflow: hidden;
+  /* Previously `overflow: hidden` — that clipped the Sparkline's
+     hover tooltip (positioned at `bottom: 100% + 4px` to float
+     above the curve). Switched to `visible` so the tooltip can
+     escape the wrapper bounds. The sparkline itself is already
+     sized to fit the wrapper exactly, so there's nothing else
+     that needs clipping here. */
+  overflow: visible;
   opacity: 0.85;
   filter: drop-shadow(0 0 6px color-mix(in srgb, var(--neo-kpi-accent) 40%, transparent));
+  /* Anchor for the inline Sparkline tooltip — it positions
+     itself relative to this wrapper via the inner relative div,
+     but giving the wrapper its own positioning context makes the
+     stack order explicit. */
+  position: relative;
 }
 .neo-kpi-card-spark svg { width: 100%; height: 52px; display: block; }
+/* While the user is hovering data points inside the sparkline,
+   the host card's native browser tooltip (`title=` on the
+   <button>/<div>) used to fire after ~1.5 s and cover the
+   custom value tooltip. The component now toggles a marker on
+   the wrapper while hovering; this rule simply documents the
+   intent — actual suppression is done in TrendAnalysis by
+   clearing the title prop on mouseenter of `.neo-kpi-card-spark`. */
 
 /* ─── Priority queue ─────────────────────────────────────────── */
 /* Load-more footer rendered at the bottom of paginated lists. Uses
@@ -7922,3 +7940,32 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
 }
 [data-theme="light"] .ptl-banner-message { color: rgba(15,23,42,0.85); }
 [data-theme="light"] .ptl-banner-hint { color: rgba(60,90,160,0.95); background: rgba(99,102,241,0.06); }
+
+/* ─── Sparkline hover tooltip ──────────────────────────────────
+   Floats above the line at the hovered bucket. Theme-aware via
+   the standard surface/text tokens so it reads cleanly under
+   both dark and light. Positioned via inline `left: X%` set by
+   the React component; `transform: translateX(-50%)` recenters
+   it on the bucket, and `bottom: 100%` lifts it above the SVG
+   so it never covers the curve.
+   ─────────────────────────────────────────────────────────── */
+.neo-sparkline-tip {
+  position: absolute;
+  bottom: calc(100% + 4px);
+  transform: translateX(-50%);
+  padding: 3px 7px;
+  background: var(--dt-colors-background-surface-emphasized,
+                var(--dt-colors-background-surface-default,
+                  rgba(15,23,42,0.94)));
+  border: 1px solid var(--neo-border);
+  border-radius: 4px;
+  font-family: var(--neo-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+  color: var(--neo-text);
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.32);
+  z-index: 10;
+}
