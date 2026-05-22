@@ -6818,12 +6818,38 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
      so the chips already break to a new line; we just keep the
      popover comfortable when the wrap doesn't trigger. */
   max-width: min(320px, calc(100vw - 32px));
-  background: var(--dt-colors-background-surface-default, rgba(8,12,22,0.98));
+  /* Frosted-glass surface — uses the Strato canonical "surface
+     emphasized" token as a near-solid base (theme-aware: a dark
+     panel in dark mode, near-white in light) with a strong
+     backdrop blur for the glass effect. The previous
+     `--neo-surface-2` alone was too translucent — the dark page
+     bled through and washed out the chip text inside. */
+  background: var(--dt-colors-background-surface-emphasized,
+                var(--dt-colors-background-surface-default,
+                  rgba(15,23,42,0.94)));
+  backdrop-filter: blur(14px) saturate(160%);
+  -webkit-backdrop-filter: blur(14px) saturate(160%);
   border: 1px solid var(--neo-border);
   border-radius: var(--neo-radius-md);
   padding: 12px;
-  box-shadow: var(--dt-box-shadows-surface-floating-rest, 0 16px 40px rgba(0,0,0,0.55));
+  box-shadow: var(--dt-box-shadows-surface-floating-rest, 0 16px 40px rgba(0,0,0,0.32));
   font-family: var(--neo-sans, var(--neo-mono));
+  color: var(--neo-text);
+  /* Neutralize the metric accent INSIDE the popover. The chip that
+     triggered the popover stays in its metric colour (cyan for
+     MTTF, orange for MTTR, etc.) so the user knows which filter is
+     open — but the popover body itself reads as a generic, calm
+     panel instead of glowing in the metric's hue. The accent
+     cascade falls through to neutral text/border tokens for the
+     title, preset chips, range inputs, and any descendant that
+     consumes `--metric-accent`. */
+  --metric-accent: var(--neo-text-2);
+}
+/* Title was using `--metric-accent` directly (set inline by the
+   React header) which won the cascade over the override above.
+   Pin the title to neutral text here so the metric colour stays
+   confined to the chip on the filter strip. */
+.neo-metric-filter-popover .neo-metric-filter-popover-title {
   color: var(--neo-text);
 }
 /* Right-anchor flip for chips near the viewport edge is now handled
@@ -6913,7 +6939,11 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   font-weight: 700;
   letter-spacing: 0.5px;
   text-transform: uppercase;
-  color: var(--neo-text-3);
+  /* Was `--neo-text-3` (slate-disabled) which read as barely-there
+     grey on the translucent popover background — labels disappear
+     against the chip strip. Bumped to `--neo-text-2` (slate-subdued)
+     for legible-but-quiet hierarchy. */
+  color: var(--neo-text-2);
   margin-bottom: 8px;
 }
 .neo-metric-filter-popover-presets {
@@ -6926,23 +6956,37 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.3px;
-  color: var(--neo-text-2);
-  background: var(--neo-surface);
-  border: 1px solid var(--neo-border);
+  color: var(--neo-text);
+  /* Chip bg one step darker (in dark) / lighter (in light) than
+     the popover surface so the chip visibly sits on top of the
+     panel instead of sinking into it. Border bumped to
+     `--neo-border-active` for a stronger edge that the user can
+     actually trace, which doubles as the "I'm tappable" cue. */
+  background: var(--neo-surface-2);
+  border: 1px solid var(--neo-border-active);
   border-radius: var(--neo-radius-sm);
   padding: 5px 6px;
   cursor: pointer;
   white-space: nowrap;
-  transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+  transition: background 120ms ease, border-color 120ms ease, color 120ms ease, transform 120ms ease;
 }
 .neo-metric-filter-popover-preset:hover {
   background: var(--neo-surface-hover);
   color: var(--neo-text);
+  border-color: var(--neo-text-2);
+  transform: translateY(-1px);
 }
+/* Selected chip — now that the metric accent is neutralized in
+   the popover (see `--metric-accent` override on
+   `.neo-metric-filter-popover`), the previous mix produced a
+   chip that was visually identical to the hover state. Use a
+   stronger surface-hover bg and a thicker border to make the
+   selection state obvious without color. */
 .neo-metric-filter-popover-preset-selected {
-  background: color-mix(in srgb, var(--metric-accent, var(--neo-accent)) 18%, var(--neo-surface));
-  border-color: var(--metric-accent, var(--neo-accent));
-  color: var(--metric-accent, var(--neo-accent));
+  background: var(--neo-surface-hover);
+  border-color: var(--neo-text-2);
+  color: var(--neo-text);
+  font-weight: 700;
 }
 .neo-metric-filter-popover-range {
   display: flex;
@@ -7089,7 +7133,10 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   line-height: 1.5;
 }
 .neo-metric-filter-popover-syntax dt {
-  color: var(--neo-text-3);
+  /* Was `--neo-text-3` (disabled-grey) — too low contrast on the
+     translucent popover background. Bumped to `--neo-text-2` for
+     consistency with the section titles above. */
+  color: var(--neo-text-2);
   font-weight: 700;
   letter-spacing: 0.4px;
   text-transform: uppercase;
@@ -7111,7 +7158,11 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   padding: 1px 5px;
   font-family: var(--neo-mono);
   font-size: 10px;
-  color: var(--metric-accent, var(--neo-accent));
+  /* Use the popover's `--metric-accent` override (neutralized to
+     `--neo-text-2`) so the kbd glyphs in UNITS / syntax legend
+     match the muted body type. The chip on the strip is still
+     coloured; only the popover interior stays neutral. */
+  color: var(--neo-text);
   line-height: 1.35;
   /* Subtle "pressable key" shadow — the typical visual cue for
      <kbd> in modern docs (MDN, GitHub, Stripe). */
@@ -7120,7 +7171,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
 [data-theme="light"] .neo-metric-filter-popover-syntax kbd {
   background: rgba(15,23,42,0.04);
   border-color: rgba(15,23,42,0.15);
-  color: var(--metric-accent, var(--neo-accent));
+  color: var(--neo-text);
 }
 /* Inline note next to the units row — clarifies the lenient
    parsing rule ("bare number = minutes") without competing with
@@ -7129,7 +7180,11 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   font-family: var(--neo-mono);
   font-size: 9.5px;
   font-style: italic;
-  color: var(--neo-text-3);
+  /* `--neo-text-3` was illegible on the translucent panel — the
+     "(bare number = minutes)" hint disappeared. Brought up to
+     `--neo-text-2` (same as section titles) so the note is
+     readable while still subordinate to the kbd chips. */
+  color: var(--neo-text-2);
   margin-left: 4px;
   align-self: center;
 }
