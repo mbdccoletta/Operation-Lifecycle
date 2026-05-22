@@ -75,12 +75,18 @@ export function useActiveProblemsCount(): ActiveProblemsCount {
     // 60 s cache window — the badge doesn't need second-by-second
     // freshness; a one-minute drift matches what the Dynatrace
     // platform itself shows on its own menu badge.
-    staleTime: 60_000,
+    /* DPS Tier 3 bump — was 60_000. Badge updates 2× per minute
+       is more than the user can notice during triage; lowered
+       to 1× per 2 min. Paired with `refetchInterval` below. */
+    staleTime: 120_000,
     // Auto-refresh in the background so the badge updates even
     // when the user is parked on a single page for a long time.
     // useDql already cancels in-flight queries when the tab loses
     // focus, so this doesn't burn budget on hidden tabs.
-    refetchInterval: 60_000,
+    /* DPS Tier 3 bump — was 60_000. 50% fewer global polls for
+       the badge across the whole app. A 2-min staleness matches
+       the cadence the native Davis Problems menu badge uses. */
+    refetchInterval: 120_000,
   });
 
   const count = data?.records?.[0]?.count ?? 0;

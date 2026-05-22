@@ -54,7 +54,11 @@ export function useCategoryCounts(filters: CategoryCountsFilters = {}): Category
 
   const params = useMemo(() => ({
     query,
-    maxResultRecords: 100, // 6 categories × small safety margin
+    /* DPS Tier 3 — was 100. Davis emits 6 canonical category
+       values; even with future additions, 10 is a comfortable
+       cap and avoids any chance of the SDK reserving payload
+       for rows that can't exist. */
+    maxResultRecords: 10,
     requestTimeoutMilliseconds: 15_000,
     filterSegments: segmentList as FilterSegment[],
     dtClientContext: "problems-hub:category-counts",
@@ -62,7 +66,10 @@ export function useCategoryCounts(filters: CategoryCountsFilters = {}): Category
   }), [query, segmentIds]);
 
   const { data, isLoading, error } = useDql<Row>(params, {
-    staleTime: 90_000,
+    /* DPS Tier 3 bump — was 90_000. Paired with `useProblems`
+       so the chip badges and the list refetch at the same
+       cadence (2 min). Keeps headline counts coherent. */
+    staleTime: 120_000,
   });
 
   const counts = useMemo(() => {

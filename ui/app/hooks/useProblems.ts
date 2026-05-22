@@ -70,7 +70,11 @@ export interface UseProblemsOptions {
 }
 
 const HARD_CEILING = 10_000;
-const DEFAULT_INITIAL = 500;
+/* DPS Tier 3 bump — was 500. Most triage users scan the top
+   20-50 problems before deciding. Loading 500 up front
+   doubled the first-paint scan cost vs 250; users who roll
+   past 250 hit the "Load more" affordance to ramp up. */
+const DEFAULT_INITIAL = 250;
 
 export function useProblems(
   filters: ProblemFilters = {},
@@ -148,7 +152,10 @@ export function useProblems(
     // reuses the same response instead of re-querying. Manual /
     // auto-refresh always bypasses the cache via `forceRefetch`
     // anyway, so this only saves redundant background queries.
-    staleTime: 90_000,
+    /* DPS Tier 3 bump — was 90_000. 2 min staleness matches the
+       native Davis Problems list cadence; user-perceived
+       freshness unchanged, ~25% fewer refetches. */
+    staleTime: 120_000,
   });
 
   const problems = data?.records || [];

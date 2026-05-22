@@ -42,6 +42,7 @@ import { useTriggerRefresh } from "../contexts/RefreshSignalContext";
 // IntensityContext is consumed by the global DisplaySettingsPanel
 // (rendered in App.tsx); Overview no longer reads it directly.
 import { useCategoryCounts } from "../hooks/useCategoryCounts";
+import { useStatusCategoryCounts } from "../hooks/useStatusCategoryCounts";
 import { parseStratoTimeframe, parseStratoTimeframeAsString } from "../utils/timeframe";
 import { getStatusLabel } from "../utils/formatters";
 import { usePageVisible, useDebouncedValue, useDelayedLoading } from "../hooks/useUiUtils";
@@ -788,6 +789,47 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
   useEffect(() => {
     setCategoryCounts(activeCountsByCategory);
   }, [activeCountsByCategory, setCategoryCounts]);
+
+  // Authoritative counts for the constellation's central rings + per-
+  // category panels. A single DQL `summarize by {status, category}`
+  // returns ≤12 rows — far cheaper than relying on the trimmed
+  // `useProblems` payload (which DPS Tier 3 caps at 250 records).
+  //
+  // Without this hook, the central ACTIVE ring under-counted when the
+  // window held more problems than the page-level limit — verified
+  // against tenant bwm98081 HAR (native: 5 active / 889 total, ours
+  // pre-fix: 1 active / 250 total, despite chip badges correctly
+  // showing 5 active because they share THIS data path).
+  const {
+    counts: statusCategoryCounts,
+    totals: statusCategoryTotals,
+    loading: statusCategoryLoading,
+  } = useStatusCategoryCounts(timeframeFilter);
+
+  // Constellation prop — `undefined` while loading so ConstellationView
+  // falls back to list-derived counts (avoids first-paint flicker
+  // showing zero). Also skipped while a SYNTHETIC debug scenario is
+  // active — those swap `problems` for client-side synthetic data
+  // that the count query can't see (it queries the real tenant),
+  // so list-derived math is the only honest answer for them.
+  //
+  // `scenario` is a string union — its sentinel for "no scenario"
+  // is the literal string "real" (a truthy value). The previous
+  // gate `if (scenario)` rejected the override IN NORMAL USE
+  // (every page-load) because "real" is truthy — leaving the rings
+  // locked to list-derived math and reproducing the exact bug
+  // this hook was meant to fix.
+  const constellationCountOverrides = useMemo(() => {
+    if (statusCategoryLoading) return undefined;
+    if (scenario !== "real") return undefined;
+    return {
+      total: statusCategoryTotals.total,
+      active: statusCategoryTotals.active,
+      resolved: statusCategoryTotals.closed,
+      activeByCategory: statusCategoryCounts.ACTIVE,
+      resolvedByCategory: statusCategoryCounts.CLOSED,
+    };
+  }, [statusCategoryLoading, scenario, statusCategoryTotals, statusCategoryCounts]);
 
   // ── Grouping resolution (category vs segment mode) ────────────────
   // In "category" mode the 6 Davis categories are the quadrants and
@@ -2023,6 +2065,7 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
             groupings={groupings}
             resolveGrouping={resolveGrouping}
             showHub={groupBy === "category"}
+            countOverrides={constellationCountOverrides}
           />
         </div>
       ) : (

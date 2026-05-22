@@ -153,7 +153,10 @@ export function useTeamMetrics(
   }), [segmentList]);
 
   const query = useDql<AnnotationCommentRecord>(params, {
-    staleTime: 300_000,
+    /* DPS Tier 3 bump — was 300_000 (5 min). Team KPIs
+       aggregate over hours/days of data; 10 min cache cuts
+       repeat-visit cost in half without affecting accuracy. */
+    staleTime: 600_000,
     enabled: !simulated,
   });
 

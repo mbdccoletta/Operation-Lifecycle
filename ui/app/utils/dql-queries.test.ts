@@ -7,6 +7,7 @@ import { describe, it, expect } from "vitest";
 import {
   buildFilteredQuery,
   buildCategoryCountsQuery,
+  buildStatusCategoryCountsQuery,
   buildTrendQuery,
 } from "./dql-queries";
 
@@ -197,6 +198,49 @@ describe("buildCategoryCountsQuery", () => {
     const q = buildCategoryCountsQuery({ status: "CLOSED", timeframe: "7d" });
     expect(q).toContain("isNull(dt.davis.is_duplicate)");
     expect(q).toContain("not(dt.davis.is_duplicate)");
+  });
+});
+
+describe("buildStatusCategoryCountsQuery", () => {
+  it("aggregates by BOTH status and category", () => {
+    const q = buildStatusCategoryCountsQuery({ timeframe: "7d" });
+    expect(q).toContain("summarize count = count(), by: { event.status, event.category }");
+  });
+
+  it("dedups BEFORE summarize", () => {
+    const q = buildStatusCategoryCountsQuery({ timeframe: "7d" });
+    const dedupIdx = q.indexOf("| dedup display_id");
+    const sumIdx   = q.indexOf("| summarize");
+    expect(dedupIdx).toBeGreaterThan(-1);
+    expect(sumIdx).toBeGreaterThan(dedupIdx);
+  });
+
+  it("ALWAYS emits a bounded `from:` clause (defense-in-depth)", () => {
+    expect(buildStatusCategoryCountsQuery({})).toMatch(/fetch dt\.davis\.problems, from: /);
+    expect(buildStatusCategoryCountsQuery({ timeframe: "bogus" as never })).toMatch(/fetch dt\.davis\.problems, from: /);
+    expect(buildStatusCategoryCountsQuery({ from: "bad", to: "also-bad" })).toMatch(/fetch dt\.davis\.problems, from: /);
+  });
+
+  it("applies the NULL-TOLERANT `is_duplicate` filter (native parity)", () => {
+    const q = buildStatusCategoryCountsQuery({ timeframe: "7d" });
+    expect(q).toContain("isNull(dt.davis.is_duplicate)");
+    expect(q).toContain("not(dt.davis.is_duplicate)");
+  });
+
+  it("does NOT apply a status filter — needs both ACTIVE and CLOSED in one response", () => {
+    // The whole reason this builder exists is to return COUNTS for
+    // BOTH statuses in a single coherent payload, so the rings
+    // (TOTAL / ACTIVE / RESOLVED) can never disagree across
+    // staggered query landings. If this assertion fails the rings
+    // will go back to under-counting the trimmed list.
+    const q = buildStatusCategoryCountsQuery({ timeframe: "7d" });
+    expect(q).not.toMatch(/event\.status\s*==/);
+  });
+
+  it("rejects garbage timeframe via fallback (no injection)", () => {
+    const q = buildStatusCategoryCountsQuery({ timeframe: "); DROP" as never });
+    expect(q).not.toContain("DROP");
+    expect(q).toMatch(/from: now\(\) - 72h/);
   });
 });
 

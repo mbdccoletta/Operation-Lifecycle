@@ -29,7 +29,10 @@ export function useProblemTrend(timeframe: string = "7d", status?: string) {
   const { data, isLoading, error, forceRefetch } = useDql(params, {
     // Trend buckets change slowly — 2 min cache saves a query
     // when the user toggles view modes on the same timeframe.
-    staleTime: 120_000,
+    /* DPS Tier 3 bump — was 120_000. Histogram bars aggregate
+       hours of data per bucket; 3 min staleness is invisible to
+       the user. ~33% fewer trend refetches. */
+    staleTime: 180_000,
   });
 
   // The SDK returns a `QueryResult`; the chart wants a timeseries

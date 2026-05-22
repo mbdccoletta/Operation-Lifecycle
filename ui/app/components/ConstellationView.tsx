@@ -84,6 +84,28 @@ interface ConstellationViewProps {
    *  inside the enlarged canvas without needing a magnifier lens
    *  to bring them up to scale. */
   dotScale?: number;
+  /** Authoritative TOTAL / ACTIVE / RESOLVED counts derived from a
+   *  dedicated count query (`useStatusCategoryCounts`) — covers the
+   *  ENTIRE tenant window even when the page-level `problems` prop is
+   *  trimmed to `DEFAULT_INITIAL` (the Tier 3 DPS knob).
+   *
+   *  When omitted (loading, or callers that don't use the hook) we
+   *  fall back to deriving counts from `problems` — same behaviour as
+   *  before this prop existed. Preserves the constellation in
+   *  scenarios like the enlarged-quadrant modal or debug scenarios
+   *  where the count query isn't meaningful. */
+  countOverrides?: {
+    total?: number;
+    active?: number;
+    resolved?: number;
+    /** Per-category `event.status == "ACTIVE"` counts. Key is the
+     *  Davis category id ("AVAILABILITY", "ERROR", …). Missing keys
+     *  fall back to the list-derived filter. */
+    activeByCategory?: Record<string, number>;
+    /** Per-category `event.status == "CLOSED"` counts. Same shape +
+     *  semantics as `activeByCategory`. */
+    resolvedByCategory?: Record<string, number>;
+  };
 }
 
 interface Star {
@@ -127,6 +149,7 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
   showHub = true,
   showResolvedZone = true,
   disableMagnifierLens = false,
+  countOverrides,
   dotScale = 1,
 }) => {
   // Read the user's font-scale pick so the canvas-rendered text
@@ -1215,7 +1238,15 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
       ctx.globalAlpha = 1;
 
       // Count number (bigger, white)
-      const activeCount = problems.filter((p) => resolveGrouping(p) === cat && p["event.status"] === "ACTIVE").length;
+      /* Prefer the count-query override per-category — see the same
+         rationale at the central hub. Missing keys (zero rows for that
+         category in the response) correctly resolve to 0. Falls back
+         to list-derived filter only when no override map is present
+         (loading / debug scenarios). */
+      const activeOverride = countOverrides?.activeByCategory;
+      const activeCount = activeOverride
+        ? (activeOverride[cat] ?? 0)
+        : problems.filter((p) => resolveGrouping(p) === cat && p["event.status"] === "ACTIVE").length;
       ctx.font = `600 ${(14 * fsMult).toFixed(2)}px "Roboto Mono", "SF Mono", monospace`;
       ctx.fillStyle = dk ? "#ffffff" : "#0f172a";
       ctx.textBaseline = "alphabetic"; // align big number with cap-height of small text above
@@ -1298,14 +1329,31 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
     // Show ALL groupings in the RESOLVED zone — even with zero count.
     resolvedCats.forEach((cat, idx) => {
       const catResolved = resolvedProbs.filter((p) => resolveGrouping(p) === cat);
-      const count       = catResolved.length;
+      /* Headline count prefers the count-query override so the
+         per-category RESOLVED hero number tracks the full window
+         (matches native Davis). Delta still derives from the loaded
+         list — it answers "how many resolved in the LAST HOUR", which
+         the loaded list covers fully because the list is sorted
+         `event.start desc` and an active problem closing in the last
+         hour will be in the most-recent slice. If a future refactor
+         needs delta over wider windows, it should move to its own
+         count query rather than expanding the list. */
+      const resolvedOverride = countOverrides?.resolvedByCategory;
+      const count       = resolvedOverride
+        ? (resolvedOverride[cat] ?? 0)
+        : catResolved.length;
       // Count 1h ago: how many were already resolved before the 1h cutoff
       const countPrev   = catResolved.filter((p) => {
         const endStr = p["event.end"];
         if (!endStr) return false;
         return new Date(endStr).getTime() <= cutoff1h;
       }).length;
-      const delta       = count - countPrev; // resolutions in the last hour
+      // Delta = resolutions in the last hour. Uses the list-derived
+      // count of CURRENTLY-resolved-in-window (`catResolved.length`)
+      // minus those that were already resolved 1h ago, NOT the override
+      // total. The override would inflate the delta with old resolutions
+      // that the list doesn't carry, breaking the "/1h" semantic.
+      const delta       = catResolved.length - countPrev;
       const isEmpty     = count === 0;
       const cx = colW * idx + colW * 0.5;
       const labelColor = colorOf(cat);
@@ -1920,7 +1968,11 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
     // for more grouping quadrants.
     if (showHub) {
     const activeProblems = problems.filter((p) => p["event.status"] === "ACTIVE");
-    const totalActive    = activeProblems.length;
+    /* Prefer the count-query override (covers the full window even
+       when `problems` is trimmed by DPS Tier 3's `DEFAULT_INITIAL = 250`).
+       Falls back to the list-derived length when the override isn't
+       available — initial paint, debug scenarios, etc. */
+    const totalActive    = countOverrides?.active ?? activeProblems.length;
 
     // Compute total trend: net change in ACTIVE problems over last 1h
     let recent = 0, older = 0;
@@ -2063,8 +2115,12 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
     });
 
     // ── Satellite hubs: TOTAL (left) | ACTIVE (center) | RESOLVED (right) ──
-    const satTotal    = problems.length;
-    const satResolved = problems.filter((p) => p["event.status"] === "CLOSED").length;
+    /* Same override path as `totalActive` above — see that comment for
+       the full rationale. TOTAL and RESOLVED both fell out of sync with
+       native Davis once the list was capped at 250; the count-query
+       override restores parity. */
+    const satTotal    = countOverrides?.total ?? problems.length;
+    const satResolved = countOverrides?.resolved ?? problems.filter((p) => p["event.status"] === "CLOSED").length;
 
     // Compute trends: rate now (last 1h) vs rate previously (1-2h ago)
     const oneHourAgo  = now - 3600000;
@@ -2179,7 +2235,14 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
       // `fontScale` drives `fsMult` inside the draw fn — re-bind so
       // a change in the Display panel triggers a fresh closure on
       // the very next render.
-      fontScale]);
+      fontScale,
+      // `countOverrides` feeds the central rings (TOTAL/ACTIVE/RESOLVED)
+      // AND the per-category Active Problems + RESOLVED panels. Without
+      // this dep the draw fn captures `undefined` on first paint and
+      // never picks up the count-query response — rings stay locked to
+      // the trimmed list math (e.g. ACTIVE=1 from list while the
+      // actual tenant has 5 active beyond the DEFAULT_INITIAL cap).
+      countOverrides]);
 
   // Animation loop. Two changes vs the naïve "60 FPS + restart on
   // every draw-deps change" version:
@@ -2692,11 +2755,28 @@ function drawSatellite(
   ctx.fillStyle    = dk ? "rgba(148,163,184,0.85)" : "rgba(100,116,139,0.95)";
   ctx.fillText(label, cx, cy - r * 0.48);
 
-  // Number
-  const numSize = Math.round(r * 0.72) * fsMult;
-  ctx.font = `900 ${numSize}px "Roboto Mono", "Roboto Mono", "SF Mono", monospace`;
+  // Number — fits to the circle's interior. With the count-query
+  // override active, this can be 5+ digits (e.g. 27548 on a 180d
+  // window). The natural size is `r * 0.72`; if the rendered text
+  // would overshoot the ring's safe horizontal area, shrink
+  // proportionally. `r * 1.55` leaves ~15% margin on each side
+  // and keeps the trend indicator below from getting crowded.
+  const naturalSize = Math.round(r * 0.72) * fsMult;
+  const maxTextWidth = r * 1.55;
+  const text = `${count}`;
+  ctx.font = `900 ${naturalSize}px "Roboto Mono", "Roboto Mono", "SF Mono", monospace`;
+  const measured = ctx.measureText(text).width;
+  let numSize = naturalSize;
+  if (measured > maxTextWidth) {
+    // Scale the font so the rendered width matches the budget.
+    // Clamp at 40% of natural to avoid illegible micro-text in
+    // pathological inputs (e.g. tens of millions); above that
+    // cap we just let it overflow rather than render unreadable.
+    numSize = Math.max(naturalSize * 0.4, naturalSize * (maxTextWidth / measured));
+    ctx.font = `900 ${numSize}px "Roboto Mono", "Roboto Mono", "SF Mono", monospace`;
+  }
   ctx.fillStyle = dk ? "#ffffff" : "#0f172a";
-  ctx.fillText(`${count}`, cx, cy + 2);
+  ctx.fillText(text, cx, cy + 2);
 
   // Trend indicator below the number
   ctx.font = `500 ${(12 * fsMult).toFixed(2)}px "Roboto Mono", "SF Mono", monospace`;

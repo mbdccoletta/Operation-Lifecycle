@@ -222,6 +222,54 @@ export function buildCategoryCountsQuery(filters: {
   return query;
 }
 
+/** Combined per-(status × category) aggregation. Returns one row
+ *  per unique (event.status, event.category) pair in the window —
+ *  bounded by 2 statuses × 6 Davis categories = ≤12 rows.
+ *
+ *  Why a SEPARATE query from `buildCategoryCountsQuery`?
+ *
+ *  The Overview central rings (TOTAL / ACTIVE / RESOLVED) and the
+ *  per-category "Active Problems" + "RESOLVED" panels in the
+ *  ConstellationView USED to derive their numbers from the trimmed
+ *  problems list (`useProblems`). With `DEFAULT_INITIAL = 250`
+ *  this broke parity with native: on a tenant with 889 problems in
+ *  the window, the rings showed `1 active / 250 total / 249 resolved`
+ *  while the chip badges (sourced from `buildCategoryCountsQuery`)
+ *  correctly showed `5 active`. The 4 missing ACTIVE problems were
+ *  beyond the first 250 (sort `event.start desc` favours new closed
+ *  problems over long-running active ones).
+ *
+ *  This builder closes that gap with ONE small query that feeds
+ *  ALL ring + panel counts. Payload is ≤ 12 rows × ~50 bytes —
+ *  cheaper than running `buildCategoryCountsQuery` twice (once for
+ *  ACTIVE, once for CLOSED) and stays coherent in a single response
+ *  so totals can never disagree across statuses.
+ *
+ *  Mirrors the same window + `is_duplicate` + dedup contract as
+ *  `buildCategoryCountsQuery` — see that builder for the rationale. */
+export function buildStatusCategoryCountsQuery(filters: {
+  timeframe?: string;
+  from?: string;
+  to?: string;
+}): string {
+  let query: string;
+  if (filters.from && filters.to && isIsoTimestamp(filters.from) && isIsoTimestamp(filters.to)) {
+    query = `fetch dt.davis.problems, from: "${filters.from}", to: "${filters.to}"`;
+  } else if (filters.timeframe && TIMEFRAME_RE.test(filters.timeframe)) {
+    query = `fetch dt.davis.problems, from: now() - ${filters.timeframe}`;
+  } else {
+    query = `fetch dt.davis.problems, from: now() - 72h`;
+  }
+  // Same null-tolerant `is_duplicate` filter the other builders use.
+  query += `\n| filter (isNull(dt.davis.is_duplicate) or not(dt.davis.is_duplicate))`;
+  // Dedup BEFORE summarize so each unique problem contributes once.
+  query += `\n| sort event.start desc`;
+  query += `\n| dedup display_id`;
+  // Two-dimensional summarize: counts grouped by (status, category).
+  query += `\n| summarize count = count(), by: { event.status, event.category }`;
+  return query;
+}
+
 export function buildTrendQuery(timeframe: string, status?: string): string {
   // Validate the timeframe against the same whitelist used elsewhere
   // to keep injection surface flat — anything unrecognised falls
