@@ -1467,6 +1467,81 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   color: var(--neo-text);
 }
 
+/* Mobile headline rings — compact horizontal strip that surfaces the
+   same TOTAL / ACTIVE / RESOLVED numbers the desktop constellation
+   draws inside its three central canvas circles. On mobile the canvas
+   is hidden, so these would otherwise be inaccessible without
+   switching back to desktop. Tapping ACTIVE / RESOLVED applies the
+   status filter. */
+.neo-mobile-rings {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 8px;
+  padding: 8px 12px 12px;
+}
+.neo-mobile-ring {
+  appearance: none;
+  -webkit-appearance: none;
+  background: transparent;
+  border: 1px solid var(--neo-border);
+  border-radius: var(--neo-radius);
+  padding: 10px 6px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  cursor: pointer;
+  text-align: center;
+  /* `button` element resets — keep typography from inheriting native UA. */
+  font: inherit;
+  color: inherit;
+  /* Slight inset accent bar at the bottom mirrors the AT A GLANCE card
+     visual the desktop uses everywhere else (consistent app language). */
+  border-bottom-width: 2px;
+  transition: border-color 120ms ease, background 120ms ease, transform 80ms ease;
+}
+.neo-mobile-ring:active { transform: scale(0.98); }
+/* Color-coding aligns 1:1 with the three central canvas circles
+   (slate / red / green) so the visual contract matches what desktop
+   users learned from the constellation. */
+.neo-mobile-ring-total { border-bottom-color: rgba(148,163,184,0.55); }
+.neo-mobile-ring-active { border-bottom-color: rgba(255,77,106,0.65); }
+.neo-mobile-ring-resolved { border-bottom-color: rgba(34,211,160,0.65); }
+/* When ACTIVE / RESOLVED is the selected status filter, fill the
+   accent so the user gets the same "selected" affordance the status
+   chip in FILTERS provides. */
+.neo-mobile-ring.is-active {
+  background: rgba(255,77,106,0.08);
+  border-color: rgba(255,77,106,0.55);
+}
+.neo-mobile-ring-resolved.is-active {
+  background: rgba(34,211,160,0.08);
+  border-color: rgba(34,211,160,0.55);
+}
+.neo-mobile-ring-label {
+  font: 600 11px var(--neo-mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--neo-text-3);
+}
+.neo-mobile-ring-total .neo-mobile-ring-label { color: rgba(148,163,184,0.85); }
+.neo-mobile-ring-active .neo-mobile-ring-label { color: rgba(255,77,106,0.9); }
+.neo-mobile-ring-resolved .neo-mobile-ring-label { color: rgba(34,211,160,0.9); }
+.neo-mobile-ring-value {
+  font: 800 24px var(--neo-mono);
+  letter-spacing: -0.5px;
+  color: var(--neo-text);
+  line-height: 1.05;
+  /* Long numbers (e.g. 27548) shrink to fit instead of overflowing. */
+  font-variant-numeric: tabular-nums;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
 /* List actions row — search + icon buttons + sort + count */
 .neo-list-actions {
   display: flex; align-items: center; gap: 8px;

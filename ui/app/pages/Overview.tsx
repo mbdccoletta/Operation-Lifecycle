@@ -2070,6 +2070,52 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
         </div>
       ) : (
         <div className="neo-list-section">
+          {/* Mobile headline strip — surfaces the same three counts
+              the desktop's central rings show (TOTAL / ACTIVE /
+              RESOLVED). On mobile the constellation is hidden
+              (viewMode forced to "list" in useEffect above) so
+              these would otherwise be invisible.
+              Numbers come from the count-query override when ready,
+              with a list-derived fallback so the strip doesn't
+              flash zeros on first paint. Tapping ACTIVE / RESOLVED
+              applies the status filter so users can drill the list
+              the same way they'd click the desktop ring. */}
+          {isMobileOrTablet && (
+            <div className="neo-mobile-rings" role="group" aria-label="Headline counts">
+              <div className="neo-mobile-ring neo-mobile-ring-total">
+                <span className="neo-mobile-ring-label">TOTAL</span>
+                <span className="neo-mobile-ring-value">
+                  {constellationCountOverrides?.total ?? problems.length}
+                </span>
+              </div>
+              <button
+                type="button"
+                className={`neo-mobile-ring neo-mobile-ring-active${statusFilter === "ACTIVE" ? " is-active" : ""}`}
+                onClick={() => setStatusFilter(statusFilter === "ACTIVE" ? null : "ACTIVE")}
+                aria-pressed={statusFilter === "ACTIVE"}
+                title="Filter list to Active problems"
+              >
+                <span className="neo-mobile-ring-label">ACTIVE</span>
+                <span className="neo-mobile-ring-value">
+                  {constellationCountOverrides?.active
+                    ?? problems.filter((p) => p["event.status"] === "ACTIVE").length}
+                </span>
+              </button>
+              <button
+                type="button"
+                className={`neo-mobile-ring neo-mobile-ring-resolved${statusFilter === "CLOSED" ? " is-active" : ""}`}
+                onClick={() => setStatusFilter(statusFilter === "CLOSED" ? null : "CLOSED")}
+                aria-pressed={statusFilter === "CLOSED"}
+                title="Filter list to Resolved problems"
+              >
+                <span className="neo-mobile-ring-label">RESOLVED</span>
+                <span className="neo-mobile-ring-value">
+                  {constellationCountOverrides?.resolved
+                    ?? problems.filter((p) => p["event.status"] === "CLOSED").length}
+                </span>
+              </button>
+            </div>
+          )}
           {/* Pinned-filter banners — extracted in audit Step 3 into a
               dedicated `<PinnedBanners>` component (one renderer per
               filter variant: pinned problem, affected entity, root
