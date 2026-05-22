@@ -4,6 +4,7 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import { useScenario, Scenario } from "../utils/debugScenario";
+import { useDevice } from "../hooks/useDevice";
 import { PerfBenchmarkPanel } from "./PerfBenchmarkPanel";
 
 interface OptionEntry { id: Scenario; label: string; hint: string; }
@@ -64,6 +65,14 @@ const SECTIONS: OptionSection[] = [
 
 export const DebugScenarioPanel: React.FC = () => {
   const [scenario, setScenario] = useScenario();
+  // Mobile / tablet (≤960px) puts the tabbar at the TOP and the
+  // mobile rings strip immediately below — together they reserve
+  // the upper edge of the viewport. The DEMO panel's bottom-right
+  // anchor is then hard to reach (often hidden behind iOS Safari's
+  // bottom safe-area bar) so on those viewports we anchor it to
+  // the TOP-right instead, just under the tabbar. Desktop stays
+  // bottom-right where it has always lived.
+  const { isMobileOrTablet } = useDevice();
   // Collapsed by default — the panel was eating ~30 % of the screen
   // on every page load. Users open it explicitly when they need to
   // override data; keeping it minimised by default keeps the actual
@@ -96,10 +105,16 @@ export const DebugScenarioPanel: React.FC = () => {
       ref={panelRef}
       style={{
         position: "fixed",
-        // Anchored to the bottom-right corner of the viewport so it
-        // sits in the natural "footer" zone for tooling controls.
-        bottom: 16,
+        // Desktop: bottom-right (natural footer zone for tooling).
+        // Mobile/tablet: TOP-right, just under the tabbar — the
+        // bottom is reserved for the iOS safe-area + the tabbar's
+        // potential bottom variant, and the mobile rings strip
+        // occupies the top of the content area. Anchoring to top-
+        // right keeps the trigger reachable with one thumb without
+        // overlapping the headline rings.
+        bottom: isMobileOrTablet ? "auto" : 16,
         right: 16,
+        top: isMobileOrTablet ? "calc(56px + env(safe-area-inset-top, 0px))" : "auto",
         zIndex: 9999,
         // Theme tokens — `--neo-surface-2`, `--neo-border` and
         // `--neo-text` auto-flip when `[data-theme="light"]` is set
