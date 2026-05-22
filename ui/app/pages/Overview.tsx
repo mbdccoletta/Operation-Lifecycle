@@ -229,38 +229,69 @@ interface OverviewProps {
   groupBy?: OverviewGroupBy;
 }
 
-/** Small chip rendered inside each mobile headline card, mirroring the
- *  desktop ring's `▲ +N /1h` (or `▼ -N` / `— neutral`) sub-label.
+/** Trend chip rendered inside each mobile headline card.
  *
- *  `risingIsGood` flips the colour semantic: TOTAL and ACTIVE rising is
- *  BAD (more incidents → red ▲), while RESOLVED rising is GOOD (faster
- *  recovery → green ▲). Matches `drawSatellite`'s logic 1:1.
+ *  Two modes, picked by `mode`:
  *
- *  The component is a plain styled element — animations live in CSS
- *  (`.neo-mobile-ring-trend` uses a `key`-driven re-mount + keyframes
- *  to draw attention when the value flips direction). */
-function MobileRingTrend({ delta, risingIsGood }: { delta: number; risingIsGood: boolean }) {
-  if (delta === 0) {
+ *    • `"rate"` (TOTAL, RESOLVED) — both are CUMULATIVE counters
+ *      whose underlying number can only go up. `value` is the count
+ *      for the last hour (always ≥ 0); chip renders as `+N /1h` (no
+ *      ▼ arrow ever — that would visually suggest the counter went
+ *      down, which it can't). The arrow bob still plays so the chip
+ *      reads as "active". Colour follows `risingIsBad` — red for
+ *      TOTAL (new incidents = bad), green for RESOLVED (closures =
+ *      good).
+ *
+ *    • `"delta"` (ACTIVE only) — this IS the one ring whose number
+ *      genuinely moves both directions. Chip shows ▲/▼ with sign,
+ *      colour flips on direction (ACTIVE rising = red, falling =
+ *      green).
+ *
+ *  Both modes degrade to `— quiet` when the value is exactly 0 so
+ *  the strip never shows a meaningless `+0 /1h` chip. */
+function MobileRingTrend({
+  mode,
+  value,
+  risingIsBad = true,
+}: {
+  mode: "rate" | "delta";
+  value: number;
+  /** Only consulted in `delta` mode. */
+  risingIsBad?: boolean;
+}) {
+  if (value === 0) {
     return (
       <span className="neo-mobile-ring-trend neo-mobile-ring-trend-neutral">
-        — neutral
+        — quiet
       </span>
     );
   }
-  const isUp = delta > 0;
-  const isGood = isUp ? risingIsGood : !risingIsGood;
+  if (mode === "rate") {
+    // Always-up chip. `risingIsBad` here just decides the colour —
+    // never the arrow direction.
+    const cls = risingIsBad ? "neo-mobile-ring-trend-bad" : "neo-mobile-ring-trend-good";
+    return (
+      <span
+        key={`rate-${value}`}
+        className={`neo-mobile-ring-trend ${cls} neo-mobile-ring-trend-up`}
+      >
+        <span className="neo-mobile-ring-trend-arrow" aria-hidden="true">▲</span>
+        +{value} /1h
+      </span>
+    );
+  }
+  // delta mode
+  const isUp   = value > 0;
+  const isGood = isUp ? !risingIsBad : risingIsBad;
   const cls = isGood ? "neo-mobile-ring-trend-good" : "neo-mobile-ring-trend-bad";
   const dirCls = isUp ? "neo-mobile-ring-trend-up" : "neo-mobile-ring-trend-down";
-  const arrow = isUp ? "▲" : "▼";
-  // `key` rerolls the CSS animation when the delta sign flips, so the
-  // chip pulses to draw attention to a direction change.
   return (
     <span
-      key={`${isUp}-${delta}`}
+      key={`delta-${isUp}-${value}`}
       className={`neo-mobile-ring-trend ${cls} ${dirCls}`}
     >
-      <span className="neo-mobile-ring-trend-arrow" aria-hidden="true">{arrow}</span>
-      {isUp ? "+" : ""}{delta} /1h
+      <span className="neo-mobile-ring-trend-arrow" aria-hidden="true">{isUp ? "▲" : "▼"}</span>
+      {isUp ? "+" : ""}{value} /1h
     </span>
   );
 }
@@ -867,48 +898,55 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
     };
   }, [statusCategoryLoading, scenario, statusCategoryTotals, statusCategoryCounts]);
 
-  // Hour-over-hour trend deltas for the mobile headline strip (and
-  // any other consumer that wants the same /1h figures the desktop
-  // rings show below their numbers).
+  // Hour-over-hour trend figures for the mobile headline strip.
   //
-  // Derived from the loaded `rawProblems` list — not from the count
-  // query — because the trend is a RECENT RATE (events in last 1h vs
-  // events 1–2h ago) and the list (sorted `event.start desc`,
-  // ramping from 250 records up) always covers that window even on
-  // tenants with thousands of historical problems. Computing this
-  // server-side would mean a third DQL per page-load for a
-  // diff-of-two-counts that's already trivially derivable here.
+  // Two semantics, deliberately different:
+  //
+  //   • TOTAL / RESOLVED → RATE in the last hour. Both are cumulative
+  //     counters (a problem started yesterday stays counted in TOTAL;
+  //     a closed problem stays counted in RESOLVED). They CANNOT
+  //     decrease, so a ▼ arrow on either is visually misleading even
+  //     when the recent-vs-previous DELTA happens to be negative
+  //     (which just means "the rate slowed down"). User feedback was
+  //     emphatic on this — show `+N /1h` (count this hour) or
+  //     `— quiet` (zero), nothing else.
+  //
+  //   • ACTIVE → DELTA. This is the only ring whose underlying number
+  //     genuinely moves both directions (new problems open, existing
+  //     problems close). Same `recent − older` math the desktop ring
+  //     uses, so the mobile and desktop trend chips agree.
+  //
+  // Derived from the loaded `rawProblems` list. The list (sorted
+  // `event.start desc`, ramping from 250 records up) always covers
+  // the last 2h window even on tenants with thousands of historical
+  // problems — no extra DQL needed.
   const mobileRingTrends = useMemo(() => {
     const now = Date.now();
-    const oneHourAgo  = now - 3_600_000;
-    const twoHoursAgo = now - 7_200_000;
-    let totalRecent = 0, totalPrevious = 0;
+    const oneHourAgo = now - 3_600_000;
+    let totalRate    = 0;
     let activeRecent = 0, activeOlder = 0;
-    let resolvedRecent = 0, resolvedPrevious = 0;
+    let resolvedRate = 0;
     for (const p of rawProblems) {
       const startTs = new Date(p["event.start"]).getTime();
       const endTs   = p["event.end"] ? new Date(p["event.end"]).getTime() : null;
-      // TOTAL: counts NEW problems started in the last hour vs 1-2h ago
-      if (startTs >= oneHourAgo)       totalRecent++;
-      else if (startTs >= twoHoursAgo) totalPrevious++;
-      // ACTIVE: counts problems that ARE active now vs problems that
-      // WERE active 1h ago. "Was active at cutoff" = started before
-      // 1h ago AND (still active OR closed after the cutoff).
+      // TOTAL: how many NEW problems started in the last hour.
+      if (startTs >= oneHourAgo) totalRate++;
+      // ACTIVE: now vs 1h ago. "Was active at cutoff" = started
+      // before 1h ago AND (still active OR closed after the cutoff).
       const isActiveNow = p["event.status"] === "ACTIVE";
       const wasActiveAt1hAgo = startTs <= oneHourAgo
         && (isActiveNow || (endTs !== null && endTs > oneHourAgo));
       if (isActiveNow)      activeRecent++;
       if (wasActiveAt1hAgo) activeOlder++;
-      // RESOLVED: counts problems that closed in the last hour vs 1-2h ago.
-      if (p["event.status"] === "CLOSED" && endTs !== null) {
-        if (endTs >= oneHourAgo)       resolvedRecent++;
-        else if (endTs >= twoHoursAgo) resolvedPrevious++;
+      // RESOLVED: how many problems closed in the last hour.
+      if (p["event.status"] === "CLOSED" && endTs !== null && endTs >= oneHourAgo) {
+        resolvedRate++;
       }
     }
     return {
-      total: totalRecent - totalPrevious,
-      active: activeRecent - activeOlder,
-      resolved: resolvedRecent - resolvedPrevious,
+      totalRate,
+      activeDelta: activeRecent - activeOlder,
+      resolvedRate,
     };
   }, [rawProblems]);
 
@@ -2007,7 +2045,9 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
             <span className="neo-mobile-ring-value">
               {constellationCountOverrides?.total ?? problems.length}
             </span>
-            <MobileRingTrend delta={mobileRingTrends.total} risingIsGood={false} />
+            {/* TOTAL is cumulative — show last-hour ARRIVAL rate
+                (never decreases), red because new incidents are bad. */}
+            <MobileRingTrend mode="rate" value={mobileRingTrends.totalRate} risingIsBad />
           </div>
           <button
             type="button"
@@ -2021,7 +2061,8 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
               {constellationCountOverrides?.active
                 ?? problems.filter((p) => p["event.status"] === "ACTIVE").length}
             </span>
-            <MobileRingTrend delta={mobileRingTrends.active} risingIsGood={false} />
+            {/* ACTIVE genuinely moves both ways — bidirectional delta. */}
+            <MobileRingTrend mode="delta" value={mobileRingTrends.activeDelta} risingIsBad />
           </button>
           <button
             type="button"
@@ -2035,7 +2076,9 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
               {constellationCountOverrides?.resolved
                 ?? problems.filter((p) => p["event.status"] === "CLOSED").length}
             </span>
-            <MobileRingTrend delta={mobileRingTrends.resolved} risingIsGood />
+            {/* RESOLVED is cumulative — show last-hour CLOSURE rate
+                (never decreases), green because resolutions are good. */}
+            <MobileRingTrend mode="rate" value={mobileRingTrends.resolvedRate} risingIsBad={false} />
           </button>
         </div>
       )}
