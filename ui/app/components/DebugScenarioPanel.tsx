@@ -4,6 +4,7 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import { useScenario, Scenario } from "../utils/debugScenario";
+import { PerfBenchmarkPanel } from "./PerfBenchmarkPanel";
 
 interface OptionEntry { id: Scenario; label: string; hint: string; }
 interface OptionSection { title: string; subtitle?: string; options: OptionEntry[]; }
@@ -42,6 +43,21 @@ const SECTIONS: OptionSection[] = [
       { id: "mtta-mixed",     label: "Mixed",      hint: "50 problems · 90% ack · realistic log-normal spread" },
       { id: "mtta-degrading", label: "Degrading",  hint: "50 problems · MTTA grows over time · burnout curve" },
       { id: "mtta-spotty",    label: "Spotty",     hint: "40 problems · 40% ack · most problems unanswered" },
+    ],
+  },
+  {
+    // Performance lab — realistic enterprise distribution at increasing
+    // volume. Each scenario activates a synthetic problem set sized for
+    // a typical customer profile. Use these to preview app behaviour
+    // before shipping to a real big tenant. Pair with the Perf Overlay
+    // (Phase 2) for live FPS / memory / DQL latency readings.
+    title: "Perf lab",
+    subtitle: "realistic enterprise distribution · 99% closed · 1% active",
+    options: [
+      { id: "perf-1k",  label: "1k",  hint: "Baseline · medium tenant (~5k hosts)"                },
+      { id: "perf-10k", label: "10k", hint: "Medium enterprise (~20k hosts) · ~100 active"        },
+      { id: "perf-30k", label: "30k", hint: "Large enterprise (~50k hosts) · ~300 active"         },
+      { id: "perf-50k", label: "50k", hint: "XLarge enterprise (~80k hosts) · ~500 active · heavy"},
     ],
   },
 ];
@@ -192,6 +208,10 @@ export const DebugScenarioPanel: React.FC = () => {
               })}
             </div>
           ))}
+          {/* Perf Lab control surface — Run benchmark / Sweep / Export.
+              Renders only when a `perf-*` scenario is active so the
+              non-perf parts of the DEMO panel stay uncluttered. */}
+          {scenario.startsWith("perf-") && <PerfBenchmarkPanel />}
         </div>
       )}
     </div>
