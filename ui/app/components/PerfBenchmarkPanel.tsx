@@ -171,11 +171,30 @@ export const PerfBenchmarkPanel: React.FC = () => {
           className="neo-perf-bench-btn neo-perf-bench-btn-secondary"
           onClick={exportJson}
           disabled={running || results.length === 0}
-          title="Download results as JSON"
+          /* Label flips when disabled so the user understands WHY the
+             button is unclickable — the `cursor: not-allowed` alone
+             was opaque (the user reported "can't click" without
+             knowing they had to run a benchmark first). */
+          title={
+            running ? "Wait for benchmark to finish"
+            : results.length === 0 ? "Run a benchmark first to enable JSON export"
+            : "Download results as JSON"
+          }
         >
-          ⤓ JSON
+          {results.length === 0 ? "⤓ JSON (run first)" : "⤓ JSON"}
         </button>
       </div>
+
+      {/* Inline hint when there are no results yet — surfaces the
+          intent of the JSON button without requiring the user to
+          discover the tooltip on a disabled element. Disappears the
+          moment a benchmark lands. */}
+      {!running && results.length === 0 && (
+        <div className="neo-perf-bench-empty">
+          Click <strong>Run benchmark</strong> (single) or <strong>Run full sweep</strong> (all 4 sizes).
+          Results + the ⤓ JSON download will appear here when done.
+        </div>
+      )}
 
       {progress && progress.step && (
         <div className="neo-perf-bench-progress" role="status" aria-live="polite">

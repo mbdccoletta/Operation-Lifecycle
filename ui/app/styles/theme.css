@@ -8700,3 +8700,20 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
 }
 .neo-perf-bench-pass      { color: #22d3a0; font-weight: 800; }
 .neo-perf-bench-pass-fail { color: #ff4d6a; font-weight: 800; }
+
+/* Inline hint shown when no benchmark has been run yet — replaces
+   the confusing "JSON button is disabled and I don't know why"
+   experience. Disappears the moment results arrive. */
+.neo-perf-bench-empty {
+  font: 500 10px var(--neo-mono);
+  color: var(--neo-text-2);
+  background: rgba(148, 163, 184, 0.08);
+  border: 1px dashed var(--neo-border);
+  border-radius: 6px;
+  padding: 8px 10px;
+  line-height: 1.5;
+}
+.neo-perf-bench-empty strong {
+  color: #ff8b3e;
+  font-weight: 700;
+}
