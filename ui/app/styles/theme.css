@@ -3231,8 +3231,18 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
    automatically. */
 .neo-tab-badge {
   position: absolute;
-  top: -8px;
-  right: -12px;
+  /* When the badge was anchored to a 18 px icon, `right: -12px`
+     made it sit in the icon's top-right corner like a classic
+     notification chip. After the icon was removed (the lightning
+     EpicIcon read as decorative noise), the anchor became the
+     wider "Incidents" label and `right: -12px` started rendering
+     the badge's left edge INSIDE the text — covering the "S".
+     Switched to `left: 100% + 4 px` so the badge floats just
+     outside the label's right edge regardless of badge width
+     (a "7" and a "99+" both sit cleanly past the text). */
+  top: -10px;
+  left: 100%;
+  margin-left: 4px;
   min-width: 18px;
   height: 18px;
   padding: 0 5px;

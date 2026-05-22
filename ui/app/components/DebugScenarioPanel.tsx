@@ -2,7 +2,7 @@
 // the constellation view. Remove this component (and its import in App.tsx)
 // when the visualization tuning phase is over.
 
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useScenario, Scenario } from "../utils/debugScenario";
 
 interface OptionEntry { id: Scenario; label: string; hint: string; }
@@ -59,8 +59,30 @@ export const DebugScenarioPanel: React.FC = () => {
   // app the focus.
   const [collapsed, setCollapsed] = useState(true);
 
+  // Click-outside-to-collapse. The listener is only attached while
+  // the panel is OPEN — keeps the cost (one document listener) off
+  // the table during the 99% of session time when the panel is
+  // collapsed, and avoids a needless re-render storm on every
+  // mousedown in the app. Uses `mousedown` instead of `click` so
+  // the panel collapses BEFORE any subsequent click handler on the
+  // outside target runs, matching the standard popover dismissal
+  // pattern (Radix, Strato, headlessui all do this).
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (collapsed) return;
+    const onDown = (e: MouseEvent) => {
+      const target = e.target as Node | null;
+      if (panelRef.current && target && !panelRef.current.contains(target)) {
+        setCollapsed(true);
+      }
+    };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [collapsed]);
+
   return (
     <div
+      ref={panelRef}
       style={{
         position: "fixed",
         // Anchored to the bottom-right corner of the viewport so it
