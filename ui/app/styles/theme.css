@@ -177,7 +177,12 @@
   --intensity-pill-weight:  750;
 }
 [data-intensity="medium"] [data-theme] {
-  filter: saturate(1.18) contrast(1.05);
+  /* `saturate()` only — `contrast()` was crushing low-alpha
+     elements (dotted dividers in the RESOLVED zone, subtle
+     green wash on the canvas) toward pure black, making them
+     vanish. Saturate alone gives the "more vibrant" feel
+     without flattening dim translucent strokes. */
+  filter: saturate(1.18);
 }
 [data-intensity="bold"] {
   --neo-bg: #050505;
@@ -189,7 +194,11 @@
   --intensity-pill-weight:  800;
 }
 [data-intensity="bold"] [data-theme] {
-  filter: saturate(1.35) contrast(1.10);
+  /* See `[data-intensity="medium"]` above — same reason for
+     dropping `contrast()`. Saturate boosts vibrancy of solid
+     colours (chips, status pills, charts) while leaving low-
+     alpha canvas strokes visible. */
+  filter: saturate(1.35);
 }
 
 /* Light mode — Strato handles most of the colour flip via the tokens
