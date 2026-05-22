@@ -216,6 +216,24 @@ function computeLeaderCats(
  *  runtime cost. */
 const SHOW_SEGMENT_VIEW = false;
 
+/** Defensive ceiling on how many rows the list view will MOUNT. Real
+ *  customer sessions never breach this — `useProblems.HARD_CEILING`
+ *  already caps the source at 10 000 and the user has to click
+ *  "Load more" all the way up to get there. The cap is here as
+ *  belt-and-braces for unusual states: synthetic perf-* scenarios
+ *  (up to 50 k client-side), a future regression that lifts the
+ *  source cap, or a debug deeplink. Above this, the renderer slices
+ *  + shows a "showing N of M" banner advising the user to refine
+ *  filters. Without the slice the React reconciliation cost of 50k
+ *  rows blocks the main thread for ~20 s on every state change. */
+const MAX_RENDER_ROWS = 1_000;
+
+/** Defensive ceiling on when `useTeamMetrics` runs its 4 aggregation
+ *  passes. Above this, the hook short-circuits to empty KPIs (see
+ *  `useTeamMetrics.ts` `enabled` option). KPIs over 10 k+ problems
+ *  aren't actionable anyway — the user should filter first. */
+const TEAM_METRICS_CAP = 10_000;
+
 // TODO(strato): consider migrating this page to the Strato `Page` component
 // with named regions (Header / Sidebar / Main / Detail) — gives consistent
 // app structure as per design/patterns/app-structure.
@@ -841,7 +859,16 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
     () => getSimulatedMttaMap(scenario, rawProblems),
     [scenario, rawProblems],
   );
-  const teamMetrics = useTeamMetrics(problems, { simulatedFirstComments: simMttaMap });
+  // Defensive cap: skip the 4× O(N log N) aggregation when the list
+  // is large enough that the work would block the main thread (a
+  // benchmark on perf-50k showed 21 s freeze on dataMode toggle).
+  // Hook returns empty KPIs in that mode and the UI advises the user
+  // to filter (see the large-dataset banner below).
+  const teamMetricsEnabled = problems.length < TEAM_METRICS_CAP;
+  const teamMetrics = useTeamMetrics(problems, {
+    simulatedFirstComments: simMttaMap,
+    enabled: teamMetricsEnabled,
+  });
   const perProblem  = teamMetrics.perProblem;
 
   // Per-category counts for the shared chip strip — sourced from a
@@ -2249,6 +2276,24 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
         </div>
       ) : (
         <div className="neo-list-section">
+          {/* Large-dataset advisory — surfaces when the filtered set is
+              big enough that the list and KPIs degrade. Real customer
+              tenants stay below this cap because `useProblems.HARD_CEILING`
+              limits the source to 10k. Synthetic perf-* scenarios in the
+              DEMO panel can produce up to 50k client-side — that's the
+              path this banner protects. */}
+          {(filtered.length > MAX_RENDER_ROWS || !teamMetricsEnabled) && (
+            <div className="neo-large-dataset-banner" role="status">
+              <strong>Large dataset detected</strong>{" "}
+              ({filtered.length.toLocaleString()} problems matched).
+              {filtered.length > MAX_RENDER_ROWS && (
+                <> Showing the first {MAX_RENDER_ROWS.toLocaleString()} rows — refine the filter / search / timeframe to narrow.</>
+              )}
+              {!teamMetricsEnabled && (
+                <> Team-metrics KPIs are paused above {TEAM_METRICS_CAP.toLocaleString()} problems — they re-enable automatically once you filter down.</>
+              )}
+            </div>
+          )}
           {/* Pinned-filter banners — extracted in audit Step 3 into a
               dedicated `<PinnedBanners>` component (one renderer per
               filter variant: pinned problem, affected entity, root
@@ -2449,7 +2494,7 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
                 </span>
               </div>
 
-              {filtered.map((problem) => {
+              {filtered.slice(0, MAX_RENDER_ROWS).map((problem) => {
                 const isActive   = problem["event.status"] === "ACTIVE";
                 const catColor   = colorForGrouping(resolveGrouping(problem));
                 const sevLabel   = getSeverityLevel(problem);

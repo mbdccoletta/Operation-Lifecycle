@@ -8769,3 +8769,24 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   accent-color: #ff8b3e;
   cursor: pointer;
 }
+
+/* Large-dataset advisory banner — shown above the list when the
+   filtered set exceeds the render cap (MAX_RENDER_ROWS = 1000) or
+   the team-metrics cap (TEAM_METRICS_CAP = 10000). Real customer
+   tenants stay under both caps thanks to useProblems.HARD_CEILING.
+   This is the visible signal for synthetic perf-* scenarios or
+   edge-case states. Amber accent — informational, not error. */
+.neo-large-dataset-banner {
+  background: rgba(245, 158, 11, 0.08);
+  border: 1px solid rgba(245, 158, 11, 0.45);
+  border-radius: var(--neo-radius-sm);
+  padding: 10px 14px;
+  margin: 8px 16px 12px;
+  font: 500 12px var(--neo-mono);
+  color: var(--neo-text-2);
+  line-height: 1.5;
+}
+.neo-large-dataset-banner strong {
+  color: #f59e0b;
+  font-weight: 700;
+}

@@ -112,6 +112,13 @@ export interface UseTeamMetricsOptions {
    *  both numbers so the chart matches the user's mental model. */
   windowFromMs?: number;
   windowToMs?:   number;
+  /** When `false`, the hook short-circuits and returns an empty
+   *  result without firing the comments DQL or running the per-
+   *  metric aggregations. Used by callers to defend against
+   *  catastrophic input sizes (e.g. >10k problems) where the
+   *  aggregate work would block the main thread for seconds.
+   *  Default `true` preserves existing behaviour. */
+  enabled?: boolean;
 }
 
 // Pure helpers (`percentile`, `pickBucketMs`, `floorToBucket`,
@@ -125,8 +132,19 @@ export function useTeamMetrics(
   problems: Problem[],
   opts: UseTeamMetricsOptions = {},
 ): UseTeamMetricsResult {
-  const { simulatedFirstComments, windowFromMs, windowToMs } = opts;
+  const { simulatedFirstComments, windowFromMs, windowToMs, enabled = true } = opts;
   const simulated = !!simulatedFirstComments;
+
+  // When `enabled` is false, the hook short-circuits all expensive
+  // work (DQL, aggregations, per-problem joins). The caller still
+  // gets back a `UseTeamMetricsResult` with the same shape — just
+  // with empty series + null scalars — so callers don't need
+  // defensive `?.` chains. Used by Overview to bail out at
+  // catastrophic problem counts (>10k synthetic) where the 4× sort
+  // over the full list blocks the main thread for seconds.
+  // Pass through to `useDql` below so even the comments query is
+  // skipped when disabled — saves the DPS too.
+  const effectivelyEnabled = enabled;
 
   // Honour the user's active filter segments so the comments stream
   // is scoped to the SAME cohort as the problems list. Without
@@ -157,7 +175,7 @@ export function useTeamMetrics(
        aggregate over hours/days of data; 10 min cache cuts
        repeat-visit cost in half without affecting accuracy. */
     staleTime: 600_000,
-    enabled: !simulated,
+    enabled: !simulated && effectivelyEnabled,
   });
 
   // First-comment per problem id — drives the MTTA stream.
@@ -407,6 +425,25 @@ export function useTeamMetrics(
   const stableRefetch = useCallback(() => {
     if (!simulated) queryForceRefetch();
   }, [simulated, queryForceRefetch]);
+
+  // When the caller flipped `enabled: false` (defensive cap on
+  // catastrophic problem counts), return the empty-result shape so
+  // downstream UI sees null KPIs and renders the "metrics disabled"
+  // affordance instead of running aggregations over 50k items.
+  if (!effectivelyEnabled) {
+    return {
+      mtta:  { avgMs: null, medianMs: null, p95Ms: null, count: 0, series: [] },
+      mttr:  { avgMs: null, medianMs: null, p95Ms: null, count: 0, series: [] },
+      mtbf:  { avgMs: null, medianMs: null, p95Ms: null, count: 0, series: [] },
+      mttf:  { avgMs: null, medianMs: null, p95Ms: null, count: 0, series: [] },
+      problemCountSeries: [],
+      perProblem: new Map(),
+      totalProblems: problems.length,
+      loading: false,
+      error:   null,
+      refetch: stableRefetch,
+    };
+  }
 
   return {
     mtta,
