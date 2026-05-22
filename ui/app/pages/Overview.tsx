@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback, useEffect, useRef } from "react";
+import React, { useState, useMemo, useCallback, useEffect, useRef, useDeferredValue } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useProblems, Problem } from "../hooks/useProblems";
 import { useProblemTrend } from "../hooks/useProblemTrend";
@@ -45,7 +45,7 @@ import { useCategoryCounts } from "../hooks/useCategoryCounts";
 import { useStatusCategoryCounts } from "../hooks/useStatusCategoryCounts";
 import { parseStratoTimeframe, parseStratoTimeframeAsString } from "../utils/timeframe";
 import { getStatusLabel } from "../utils/formatters";
-import { usePageVisible, useDebouncedValue, useDelayedLoading } from "../hooks/useUiUtils";
+import { usePageVisible, useDelayedLoading } from "../hooks/useUiUtils";
 import { scoreOf, pickTopTier, TOP_TIER_THRESHOLD } from "../utils/scoring";
 import {
   useScenario,
@@ -428,9 +428,17 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
   // Selected-problem state removed — clicking a dot navigates directly
   // to /detail/{display_id} now (see onConstellationSelect below).
   const [search, setSearch] = useState("");
-  // Debounced view of the search input — the `filtered` memo reads
-  // this so re-filtering thousands of rows doesn't lag the keystroke.
-  const searchDebounced = useDebouncedValue(search, 150);
+  // React 18 concurrent feature: the input updates urgently (keystroke
+  // stays instant) while the filter pass against the problem list is
+  // marked as non-urgent — React will skip intermediate values during
+  // fast typing AND yield to higher-priority work (input echo, scroll,
+  // canvas RAF) when the filter is expensive. This is the same pattern
+  // the native Strato DataTable uses. Replaces the previous fixed 150 ms
+  // debounce, which paid a fixed delay even when the machine could
+  // afford to filter sooner.
+  // We KEEP the legacy variable name `searchDebounced` (it's read from
+  // ~3 places) so the change is local to this declaration.
+  const searchDebounced = useDeferredValue(search);
   const [sortMode, setSortMode] = useState<SortMode>("urgency");
   /** Column-header sort. When set, takes precedence over `sortMode`.
    *  Clicking a column header cycles: asc → desc → null (back to the

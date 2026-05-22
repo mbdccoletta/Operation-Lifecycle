@@ -2647,6 +2647,18 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   border-radius: var(--neo-radius-sm);
   cursor: pointer;
   text-align: left;
+  /* Tell the browser: this row's contents don't influence ANY ancestor's
+     layout (`contain: layout style paint`). Combined with the
+     virtualization wrapper (audit task #14), it lets the browser SKIP
+     layout + paint for rows that scroll off-screen even before the
+     virtualizer unmounts them — saves ~30-50% of scroll cost on long
+     lists. `contain-intrinsic-size` gives the browser a reasonable
+     placeholder height (~64 px matches the average row) so the page
+     scrollbar stays stable while rows are still hidden.
+     Native Strato DataTable applies the same property — pattern
+     borrowed verbatim. */
+  content-visibility: auto;
+  contain-intrinsic-size: auto 64px;
   font: inherit;
   color: var(--neo-text);
   /* Sized to its content (no width:100%) — combined with the parent's
@@ -8716,4 +8728,44 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
 .neo-perf-bench-empty strong {
   color: #ff8b3e;
   font-weight: 700;
+}
+
+/* Safety row inside the Perf Lab — Reset + auto-reset checkbox. The
+   reset is the single click escape valve when a perf-* scenario has
+   the tab feeling sluggish. Always visible (even while running) but
+   disabled at the appropriate moments so the user gets the cue. */
+.neo-perf-bench-reset {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-top: 6px;
+  border-top: 1px dashed var(--neo-border);
+}
+.neo-perf-bench-btn-reset {
+  flex: 1 1 auto;
+  /* Slightly desaturated vs the orange brand — this is a "back to
+     normal" action, not a celebrated CTA. */
+  border-color: rgba(148, 163, 184, 0.55);
+  background: rgba(148, 163, 184, 0.08);
+  color: var(--neo-text-2);
+}
+.neo-perf-bench-btn-reset:hover:not(:disabled) {
+  background: rgba(148, 163, 184, 0.18);
+  color: var(--neo-text);
+}
+.neo-perf-bench-autoreset {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font: 500 10px var(--neo-mono);
+  color: var(--neo-text-3);
+  cursor: pointer;
+  white-space: nowrap;
+  user-select: none;
+}
+.neo-perf-bench-autoreset input {
+  width: 12px;
+  height: 12px;
+  accent-color: #ff8b3e;
+  cursor: pointer;
 }

@@ -58,7 +58,12 @@ function downloadJson(name: string, data: unknown): void {
 }
 
 export const PerfBenchmarkPanel: React.FC = () => {
-  const [scenario] = useScenario();
+  const [scenario, setScenario] = useScenario();
+  /** Auto-reset countdown after a benchmark finishes. Opt-in via the
+   *  checkbox below — defaults OFF so the user can still inspect
+   *  results without rushing. When enabled, scenario flips back to
+   *  "real" 60 s after the LAST result lands. */
+  const [autoReset, setAutoReset] = useState(false);
   const [running, setRunning] = useState(false);
   const [progress, setProgress] = useState<ProgressState | null>(null);
   // Hydrate from the module-level cache so a previous run's results
@@ -69,6 +74,25 @@ export const PerfBenchmarkPanel: React.FC = () => {
     resultsListeners.add(setResults);
     return () => { resultsListeners.delete(setResults); };
   }, []);
+
+  // Auto-reset effect — when the user opts in AND a benchmark run
+  // is sitting on screen AND no run is in flight, schedule a flip
+  // back to "real" after 60 s. Long enough to copy the JSON or
+  // screenshot the table; short enough that the user can't forget
+  // they're holding 50k synthetic problems in memory. Cleared if
+  // any new run starts or the user manually resets.
+  useEffect(() => {
+    if (!autoReset) return;
+    if (running) return;
+    if (results.length === 0) return;
+    if (!scenario.startsWith("perf-")) return;
+    const id = window.setTimeout(() => setScenario("real"), 60_000);
+    return () => window.clearTimeout(id);
+  }, [autoReset, running, results, scenario, setScenario]);
+
+  const resetToReal = useCallback(() => {
+    setScenario("real");
+  }, [setScenario]);
 
   const runSingle = useCallback(async () => {
     // If the current scenario isn't a perf-*, default to perf-10k
@@ -183,6 +207,33 @@ export const PerfBenchmarkPanel: React.FC = () => {
         >
           {results.length === 0 ? "⤓ JSON (run first)" : "⤓ JSON"}
         </button>
+      </div>
+
+      {/* Escape valve — switch back to real data IMMEDIATELY. The
+          benchmark intentionally leaves the synthetic scenario active
+          afterwards so the user can interact with results; this
+          button is the single click to recover normal app state.
+          Disabled when already on real data so the row reads as
+          "current state" at a glance. */}
+      <div className="neo-perf-bench-reset">
+        <button
+          type="button"
+          className="neo-perf-bench-btn neo-perf-bench-btn-reset"
+          onClick={resetToReal}
+          disabled={running || scenario === "real"}
+          title="Switch back to real tenant data (clears the synthetic scenario)"
+        >
+          ↺ Reset to real data
+        </button>
+        <label className="neo-perf-bench-autoreset" title="Switch back to real automatically 60 s after benchmark finishes">
+          <input
+            type="checkbox"
+            checked={autoReset}
+            onChange={(e) => setAutoReset(e.target.checked)}
+            disabled={running}
+          />
+          <span>auto-reset 60s</span>
+        </label>
       </div>
 
       {/* Inline hint when there are no results yet — surfaces the

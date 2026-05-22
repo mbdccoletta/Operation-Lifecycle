@@ -173,14 +173,26 @@ export const DebugScenarioPanel: React.FC = () => {
                     // chip footprint small until they explicitly
                     // re-open it.
                     onClick={() => {
+                      // Heavy perf-* scenarios are gated behind a
+                      // confirm() so the user doesn't accidentally
+                      // load 30k-50k synthetic problems on a low-spec
+                      // machine and watch the tab go unresponsive.
+                      // Light variants (1k, 10k) skip the prompt — at
+                      // those sizes the app behaves normally.
+                      if (opt.id === "perf-30k" || opt.id === "perf-50k") {
+                        const ok = window.confirm(
+                          `${opt.label} loads ~${opt.label.replace(/\D/g, "")},000 synthetic problems into memory.\n\n` +
+                          `On slower machines this can briefly freeze the browser tab.\n\n` +
+                          `Continue?`,
+                        );
+                        if (!ok) return;
+                      }
                       setScenario(opt.id);
                       // Auto-collapse on commit keeps the panel small
                       // for the regular scenarios — EXCEPT for perf-*
                       // scenarios where the next step is to interact
                       // with the benchmark controls (Run / Sweep / ⤓)
-                      // which only appear inside this panel. Keeping
-                      // it open avoids a confusing "click cenário →
-                      // panel disappears → where do I run the bench?".
+                      // which only appear inside this panel.
                       if (!opt.id.startsWith("perf-")) setCollapsed(true);
                     }}
                     title={opt.hint}
