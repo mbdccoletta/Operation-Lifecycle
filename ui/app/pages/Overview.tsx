@@ -985,6 +985,29 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
     };
   }, [rawProblems]);
 
+  // Memoised list-derived fallback for the mobile rings. Used ONLY
+  // when `constellationCountOverrides` is undefined — which means
+  // either (a) the count query is still loading or (b) a synthetic
+  // scenario is active (perf-1k/10k/30k/50k). In real customer use,
+  // the override is populated almost immediately and this fallback
+  // is never read, so the memo is essentially free.
+  //
+  // Was previously inline `problems.filter(...).length` in the JSX,
+  // which ran O(N) twice on EVERY render of the page (~10 ms × 2 on
+  // 50 k synthetic). On mobile that compounded with React's higher
+  // re-render rate on touch / scroll. The memo collapses it to a
+  // single pair of walks per `problems` change.
+  const mobileRingFallbackCounts = useMemo(() => {
+    let active = 0;
+    let closed = 0;
+    for (let i = 0; i < problems.length; i++) {
+      const s = problems[i]["event.status"];
+      if (s === "ACTIVE") active++;
+      else if (s === "CLOSED") closed++;
+    }
+    return { active, closed };
+  }, [problems]);
+
   // ── Grouping resolution (category vs segment mode) ────────────────
   // In "category" mode the 6 Davis categories are the quadrants and
   // every problem has a known category — `groupings` and
@@ -2093,8 +2116,7 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
           >
             <span className="neo-mobile-ring-label">ACTIVE</span>
             <span className="neo-mobile-ring-value">
-              {constellationCountOverrides?.active
-                ?? problems.filter((p) => p["event.status"] === "ACTIVE").length}
+              {constellationCountOverrides?.active ?? mobileRingFallbackCounts.active}
             </span>
             {/* ACTIVE genuinely moves both ways — bidirectional delta. */}
             <MobileRingTrend mode="delta" value={mobileRingTrends.activeDelta} risingIsBad />
@@ -2108,8 +2130,7 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
           >
             <span className="neo-mobile-ring-label">RESOLVED</span>
             <span className="neo-mobile-ring-value">
-              {constellationCountOverrides?.resolved
-                ?? problems.filter((p) => p["event.status"] === "CLOSED").length}
+              {constellationCountOverrides?.resolved ?? mobileRingFallbackCounts.closed}
             </span>
             {/* RESOLVED is cumulative — show last-hour CLOSURE rate
                 (never decreases), green because resolutions are good. */}
