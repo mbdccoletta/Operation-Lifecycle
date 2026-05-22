@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+<meta charset="UTF-8">
+<title>Layout Comparison</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #05080f; color: #e2e8f0; font-family: "SF Mono", "JetBrains Mono", monospace; padding: 20px; }
+  h1 { font-size: 13px; color: #94a3b8; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 16px; }
+  .options { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+  .option { background: rgba(255,255,255,0.02); padding: 16px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.06); }
+  .option-label { font-size: 10px; color: #94a3b8; letter-spacing: 1px; margin-bottom: 4px; }
+  .option-title { font-size: 14px; font-weight: 800; color: #00e5ff; margin-bottom: 4px; }
+  .option-desc { font-size: 10px; color: #64748b; margin-bottom: 12px; line-height: 1.5; }
+  canvas { display: block; width: 100%; border-radius: 4px; }
+</style>
+</head>
+<body>
+<h1>◈ Layout Comparison — Symmetric Grid + Curves vs Radial</h1>
+<div class="options">
+
+  <div class="option">
+    <div class="option-label">Opção A</div>
+    <div class="option-title">Grade simétrica + paths curvos</div>
+    <div class="option-desc">
+      Fileiras superior/inferior com mesma altura. Spokes dos quadrantes centrais arqueiam para o lado — comprimento visível similar ao dos cantos.
+    </div>
+    <canvas id="cA" width="700" height="380"></canvas>
+  </div>
+
+  <div class="option">
+    <div class="option-label">Opção B</div>
+    <div class="option-title">Layout radial — 60° entre quadrantes</div>
+    <div class="option-desc">
+      6 quadrantes distribuídos em círculo ao redor do hub. Todos equidistantes — animação idêntica em todas as direções.
+    </div>
+    <canvas id="cB" width="700" height="380"></canvas>
+  </div>
+
+</div>
+
+<script>
+const W = 700, H = 380;
+const RISING_COLORS = {
+  AVAILABILITY: "#ff4d6a",
+  ERROR:        "#ff8b3e",
+  SLOWDOWN:     "#4da6ff",
+  RESOURCE:     "#a855f7",
+  CUSTOM:       "#6ee7b7",
+  MONITORING:   "#f59e0b",
+};
+// For demo: all "rising" so we see the animation
+const RISING_DELTAS = { AVAILABILITY: 3, ERROR: 5, SLOWDOWN: 2, RESOURCE: 1, CUSTOM: 4, MONITORING: 2 };
+const CATS = ["AVAILABILITY", "ERROR", "SLOWDOWN", "RESOURCE", "CUSTOM", "MONITORING"];
+
+// ── Option A: Symmetric grid + curved paths ───────────────────────────────
+(function() {
+  const canvas = document.getElementById('cA');
+  canvas.width = W * devicePixelRatio;
+  canvas.height = H * devicePixelRatio;
+  canvas.style.width = W + 'px';
+  canvas.style.height = H + 'px';
+  const ctx = canvas.getContext('2d');
+  ctx.scale(devicePixelRatio, devicePixelRatio);
+
+  // Layout: 3 cols, 2 rows, hub band in middle
+  // Both rows SAME HEIGHT.
+  const rowH = 100;
+  const bandH = 180;
+  const hubCy = rowH + bandH / 2;
+  const hubCx = W / 2;
+  const hubR = 50;
+
+  // catCenters (per category, in canvas px)
+  const colXs = [W/6, W/2, W*5/6];
+  const topRowY = rowH / 2;
+  const botRowY = rowH + bandH + rowH / 2;
+  const catCenter = {
+    AVAILABILITY: { x: colXs[0], y: topRowY },
+    ERROR:        { x: colXs[1], y: topRowY },
+    SLOWDOWN:     { x: colXs[2], y: topRowY },
+    RESOURCE:     { x: colXs[0], y: botRowY },
+    CUSTOM:       { x: colXs[1], y: botRowY },
+    MONITORING:   { x: colXs[2], y: botRowY },
+  };
+
+  // Pre-compute the longest straight-line distance to use as target arc length
+  let maxD = 0;
+  Object.values(catCenter).forEach((p) => {
+    const d = Math.hypot(p.x - hubCx, p.y - hubCy);
+    if (d > maxD) maxD = d;
+  });
+
+  let t = 0;
+  function draw() {
+    ctx.clearRect(0, 0, W, H);
+
+    // Dotted grid dividers (vertical between columns, horizontal around hub band)
+    ctx.save();
+    ctx.setLineDash([4, 5]);
+    ctx.strokeStyle = "rgba(255,255,255,0.22)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    // Vertical, stopping at the band
+    [W/3, 2*W/3].forEach((vx) => {
+      ctx.moveTo(vx, 0);
+      ctx.lineTo(vx, rowH);
+      ctx.moveTo(vx, rowH + bandH);
+      ctx.lineTo(vx, H - 20);
+    });
+    // Horizontal — top of band and bottom of band, full width
+    ctx.moveTo(0, rowH); ctx.lineTo(W, rowH);
+    ctx.moveTo(0, rowH + bandH); ctx.lineTo(W, rowH + bandH);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.restore();
+
+    // Quadrant labels (placeholders)
+    ctx.font = `800 9px "SF Mono", monospace`;
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    CATS.forEach((cat, i) => {
+      const col = i % 3;
+      const row = i < 3 ? 0 : 1;
+      const x = 10 + (W/3) * col;
+      const y = row === 0 ? 8 : rowH + bandH + 8;
+      ctx.fillStyle = RISING_COLORS[cat];
+      ctx.fillText(cat, x, y);
+      ctx.fillStyle = "rgba(226,232,240,0.5)";
+      ctx.font = `600 8px "SF Mono", monospace`;
+      ctx.fillText(`▲ +${RISING_DELTAS[cat]} ativos /1h`, x, y + 14);
+      ctx.font = `800 9px "SF Mono", monospace`;
+    });
+
+    // Compute spoke paths (curved, normalized to similar arc length)
+    Object.entries(catCenter).forEach(([cat, end], i) => {
+      const color = RISING_COLORS[cat];
+      const dx = end.x - hubCx, dy = end.y - hubCy;
+      const dist = Math.hypot(dx, dy);
+      if (dist < 1) return;
+      const ux = dx / dist, uy = dy / dist;
+      const hubEdgeX = hubCx + ux * hubR;
+      const hubEdgeY = hubCy + uy * hubR;
+      const targetX  = end.x - ux * 8;
+      const targetY  = end.y - uy * 8;
+
+      // Control point: perpendicular offset proportional to (1 - dist/maxD)
+      // Direction: clockwise around hub (perpendicular to ux,uy)
+      const perpX = -uy, perpY = ux;
+      const curveAmount = Math.max(0, 1 - dist / maxD) * (maxD - dist) * 0.5;
+      const midX = (hubEdgeX + targetX) / 2 + perpX * curveAmount;
+      const midY = (hubEdgeY + targetY) / 2 + perpY * curveAmount;
+
+      // Faint guide line (Bezier)
+      ctx.save();
+      ctx.strokeStyle = `${color}33`;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(hubEdgeX, hubEdgeY);
+      ctx.quadraticCurveTo(midX, midY, targetX, targetY);
+      ctx.stroke();
+      ctx.restore();
+
+      // Animated incident dot + trail along the curve
+      const cycleMs = 2400;
+      const offset = i * 0.13;
+      const mainPhase = ((t * 1000 / cycleMs + offset) % 1);
+      const TRAIL = 6;
+      for (let k = TRAIL; k >= 0; k--) {
+        const p = mainPhase - k * 0.05;
+        if (p < 0 || p > 1) continue;
+        // Quadratic Bezier point
+        const px = (1-p)*(1-p)*hubEdgeX + 2*(1-p)*p*midX + p*p*targetX;
+        const py = (1-p)*(1-p)*hubEdgeY + 2*(1-p)*p*midY + p*p*targetY;
+        const isHead = k === 0;
+        const fade = (p < 0.08 ? p / 0.08 : p > 0.92 ? (1 - p) / 0.08 : 1);
+        const alpha = fade * (isHead ? 0.95 : 0.45 * (1 - k / TRAIL));
+        const r = isHead ? 4.5 : 2 - k * 0.18;
+
+        ctx.save();
+        if (isHead) { ctx.shadowColor = color; ctx.shadowBlur = 12; }
+        const rgb = hexToRgb(color);
+        ctx.fillStyle = `rgba(${rgb},${alpha})`;
+        ctx.beginPath();
+        ctx.arc(px, py, Math.max(0.5, r), 0, Math.PI * 2);
+        ctx.fill();
+        if (isHead) {
+          ctx.fillStyle = `rgba(255,255,255,${alpha * 0.6})`;
+          ctx.beginPath();
+          ctx.arc(px - r*0.3, py - r*0.3, r*0.4, 0, Math.PI*2);
+          ctx.fill();
+        }
+        ctx.restore();
+      }
+    });
+
+    // Hub
+    drawHub(ctx, hubCx, hubCy, hubR, 12, "+6", t);
+
+    t += 0.016;
+    requestAnimationFrame(draw);
+  }
+  draw();
+})();
+
+// ── Option B: Radial layout ───────────────────────────────────────────────
+(function() {
+  const canvas = document.getElementById('cB');
+  canvas.width = W * devicePixelRatio;
+  canvas.height = H * devicePixelRatio;
+  canvas.style.width = W + 'px';
+  canvas.style.height = H + 'px';
+  const ctx = canvas.getContext('2d');
+  ctx.scale(devicePixelRatio, devicePixelRatio);
+
+  const hubCx = W / 2, hubCy = H / 2;
+  const hubR = 55;
+  const orbitR = 140;  // distance from hub to each quadrant center
+
+  // 6 quadrants at 60° intervals, starting from top (-90°)
+  const catCenter = {};
+  CATS.forEach((cat, i) => {
+    const angle = -Math.PI/2 + (i / 6) * Math.PI * 2;
+    catCenter[cat] = { x: hubCx + Math.cos(angle) * orbitR, y: hubCy + Math.sin(angle) * orbitR, angle };
+  });
+
+  let t = 0;
+  function draw() {
+    ctx.clearRect(0, 0, W, H);
+
+    // Dotted outer ring (suggests the orbital plane)
+    ctx.save();
+    ctx.setLineDash([2, 4]);
+    ctx.strokeStyle = "rgba(255,255,255,0.10)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(hubCx, hubCy, orbitR, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.restore();
+
+    // Quadrant cells — render as small panels at each catCenter
+    CATS.forEach((cat) => {
+      const c = catCenter[cat];
+      const color = RISING_COLORS[cat];
+      ctx.save();
+      ctx.fillStyle = `${color}11`;
+      ctx.strokeStyle = `${color}55`;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      const cellW = 110, cellH = 50;
+      const cellX = c.x - cellW/2, cellY = c.y - cellH/2;
+      roundRect(ctx, cellX, cellY, cellW, cellH, 6);
+      ctx.fill();
+      ctx.stroke();
+      // Label
+      ctx.fillStyle = color;
+      ctx.font = `800 9px "SF Mono", monospace`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(cat, c.x, c.y - 9);
+      ctx.fillStyle = "rgba(226,232,240,0.7)";
+      ctx.font = `600 9px "SF Mono", monospace`;
+      ctx.fillText(`▲ +${RISING_DELTAS[cat]} /1h`, c.x, c.y + 8);
+      ctx.restore();
+    });
+
+    // Spokes + animated incident dots (straight lines, all same length by construction)
+    Object.entries(catCenter).forEach(([cat, end], i) => {
+      const color = RISING_COLORS[cat];
+      const dx = end.x - hubCx, dy = end.y - hubCy;
+      const dist = Math.hypot(dx, dy);
+      const ux = dx / dist, uy = dy / dist;
+      const hubEdgeX = hubCx + ux * hubR;
+      const hubEdgeY = hubCy + uy * hubR;
+      const targetX  = end.x - ux * 30; // stops just before the cell
+      const targetY  = end.y - uy * 30;
+
+      // Faint guide line
+      ctx.save();
+      ctx.strokeStyle = `${color}33`;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(hubEdgeX, hubEdgeY);
+      ctx.lineTo(targetX, targetY);
+      ctx.stroke();
+      ctx.restore();
+
+      // Trail + head
+      const cycleMs = 2400;
+      const offset = i * 0.13;
+      const mainPhase = ((t * 1000 / cycleMs + offset) % 1);
+      const TRAIL = 6;
+      for (let k = TRAIL; k >= 0; k--) {
+        const p = mainPhase - k * 0.05;
+        if (p < 0 || p > 1) continue;
+        const px = hubEdgeX + (targetX - hubEdgeX) * p;
+        const py = hubEdgeY + (targetY - hubEdgeY) * p;
+        const isHead = k === 0;
+        const fade = (p < 0.08 ? p / 0.08 : p > 0.92 ? (1 - p) / 0.08 : 1);
+        const alpha = fade * (isHead ? 0.95 : 0.45 * (1 - k / TRAIL));
+        const r = isHead ? 4.5 : 2 - k * 0.18;
+
+        ctx.save();
+        if (isHead) { ctx.shadowColor = color; ctx.shadowBlur = 12; }
+        const rgb = hexToRgb(color);
+        ctx.fillStyle = `rgba(${rgb},${alpha})`;
+        ctx.beginPath();
+        ctx.arc(px, py, Math.max(0.5, r), 0, Math.PI * 2);
+        ctx.fill();
+        if (isHead) {
+          ctx.fillStyle = `rgba(255,255,255,${alpha * 0.6})`;
+          ctx.beginPath();
+          ctx.arc(px - r*0.3, py - r*0.3, r*0.4, 0, Math.PI*2);
+          ctx.fill();
+        }
+        ctx.restore();
+      }
+    });
+
+    // Hub
+    drawHub(ctx, hubCx, hubCy, hubR, 17, "+17", t);
+
+    t += 0.016;
+    requestAnimationFrame(draw);
+  }
+  draw();
+})();
+
+// Shared hub drawing
+function drawHub(ctx, cx, cy, r, total, deltaText, t) {
+  const pulse = (Math.sin(t * 1.2) + 1) / 2;
+  // Halo (neutral cyan)
+  ctx.save();
+  const halo = ctx.createRadialGradient(cx, cy, r * 0.5, cx, cy, r * 2.6);
+  halo.addColorStop(0, `rgba(0,229,255,${0.18 + pulse * 0.08})`);
+  halo.addColorStop(0.6, `rgba(0,229,255,0.05)`);
+  halo.addColorStop(1, `rgba(0,229,255,0)`);
+  ctx.fillStyle = halo;
+  ctx.beginPath();
+  ctx.arc(cx, cy, r * 2.6, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+  // Disc
+  ctx.fillStyle = "rgba(5,8,15,0.95)";
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.fill();
+  // Outer ring
+  ctx.save();
+  ctx.shadowColor = "#00e5ff";
+  ctx.shadowBlur = 10 + pulse * 4;
+  ctx.strokeStyle = "rgba(0,229,255,0.75)";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.restore();
+  // Inner ring
+  ctx.strokeStyle = `rgba(0,229,255,${0.3 + pulse * 0.15})`;
+  ctx.lineWidth = 0.7;
+  ctx.beginPath();
+  ctx.arc(cx, cy, r - 6, 0, Math.PI * 2);
+  ctx.stroke();
+  // Text
+  ctx.fillStyle = "rgba(148,163,184,0.85)";
+  ctx.font = `800 10px "SF Mono", monospace`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText("ACTIVE", cx, cy - r * 0.48);
+  ctx.fillStyle = "#fff";
+  ctx.font = `900 ${Math.round(r * 0.85)}px "SF Mono", monospace`;
+  ctx.fillText(`${total}`, cx, cy + 2);
+  ctx.fillStyle = "#ff4d6a";
+  ctx.font = `800 10.5px "SF Mono", monospace`;
+  ctx.save();
+  ctx.shadowColor = "#ff4d6a";
+  ctx.shadowBlur = 6;
+  ctx.fillText(`▲ ${deltaText} /1h`, cx, cy + r * 0.55);
+  ctx.restore();
+}
+
+function hexToRgb(hex) {
+  return `${parseInt(hex.slice(1,3),16)},${parseInt(hex.slice(3,5),16)},${parseInt(hex.slice(5,7),16)}`;
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+}
+</script>
+</body>
+</html>

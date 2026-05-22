@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Animation Preview</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #05080f; color: #e2e8f0; font-family: "SF Mono", "JetBrains Mono", monospace; padding: 24px; }
+  h1 { font-size: 13px; color: #94a3b8; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 20px; }
+  .options { display: flex; gap: 20px; flex-wrap: wrap; }
+  .option { flex: 1; min-width: 300px; }
+  .option-label { font-size: 11px; color: #94a3b8; margin-bottom: 8px; letter-spacing: 1px; }
+  .option-title { font-size: 14px; font-weight: 800; margin-bottom: 4px; }
+  .option-desc { font-size: 10px; color: #64748b; margin-bottom: 10px; line-height: 1.5; }
+  canvas { border-radius: 8px; display: block; width: 100%; }
+</style>
+</head>
+<body>
+<h1>◈ Animation Preview — Futuristic Quadrant Styles</h1>
+<div class="options">
+
+  <div class="option">
+    <div class="option-label">Opção 1</div>
+    <div class="option-title" style="color:#ff8b3e">Holographic Scan + Electric Arcs</div>
+    <div class="option-desc">Scan lines varrendo + arcos elétricos entre os dots</div>
+    <canvas id="c1" width="340" height="240"></canvas>
+  </div>
+
+  <div class="option">
+    <div class="option-label">Opção 2</div>
+    <div class="option-title" style="color:#4da6ff">Data Rain — Hex Columns</div>
+    <div class="option-desc">Colunas de dígitos hex caindo — Matrix style</div>
+    <canvas id="c2" width="340" height="240"></canvas>
+  </div>
+
+  <div class="option">
+    <div class="option-label">Opção 3</div>
+    <div class="option-title" style="color:#a855f7">Vórtice de Energia</div>
+    <div class="option-desc">Ondas espirais irradiando do epicentro — JARVIS style</div>
+    <canvas id="c3" width="340" height="240"></canvas>
+  </div>
+
+</div>
+<script>
+const W = 340, H = 240;
+
+// ── Opção 1: Holographic Scan + Electric Arcs ─────────────────────────────
+(function() {
+  const canvas = document.getElementById('c1');
+  canvas.width = W * devicePixelRatio; canvas.height = H * devicePixelRatio;
+  canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+  const ctx = canvas.getContext('2d');
+  ctx.scale(devicePixelRatio, devicePixelRatio);
+
+  const color = '#ff8b3e';
+  const rgb = '255,139,62';
+  const dots = Array.from({length:7}, (_,i) => ({
+    x: 60 + Math.random()*220, y: 60 + Math.random()*140,
+    r: 4 + Math.random()*5
+  }));
+
+  let t = 0;
+  function draw() {
+    ctx.clearRect(0,0,W,H);
+    ctx.fillStyle = '#05080f';
+    ctx.fillRect(0,0,W,H);
+
+    // Zone background pulse
+    const pulse = (Math.sin(t*2.2)+1)/2;
+    ctx.fillStyle = `rgba(${rgb},${0.06+pulse*0.08})`;
+    ctx.fillRect(0,0,W,H);
+
+    // Border glow
+    ctx.save();
+    ctx.shadowColor = color; ctx.shadowBlur = 16+pulse*12;
+    ctx.strokeStyle = `rgba(${rgb},${0.5+pulse*0.35})`;
+    ctx.lineWidth = 2;
+    ctx.strokeRect(2,2,W-4,H-4);
+    ctx.restore();
+
+    // Corner brackets
+    const cl = 22;
+    ctx.strokeStyle = color; ctx.lineWidth = 2.5; ctx.lineCap = 'round';
+    ctx.save(); ctx.shadowColor = color; ctx.shadowBlur = 8;
+    [[4,4,1,1],[W-4,4,-1,1],[4,H-4,1,-1],[W-4,H-4,-1,-1]].forEach(([x,y,dx,dy])=>{
+      ctx.beginPath(); ctx.moveTo(x+dx*cl,y); ctx.lineTo(x,y); ctx.lineTo(x,y+dy*cl); ctx.stroke();
+    });
+    ctx.restore();
+
+    // Horizontal scan lines
+    const scanY = (t * 55) % (H + 20) - 10;
+    for (let i=0; i<4; i++) {
+      const sy = (scanY + i*14) % (H+14);
+      const a = i===0 ? 0.55 : i===1 ? 0.25 : 0.1;
+      ctx.fillStyle = `rgba(${rgb},${a})`;
+      ctx.fillRect(0, sy, W, i===0?1.5:0.5);
+    }
+    // Subtle scan gradient
+    const sg = ctx.createLinearGradient(0, scanY-8, 0, scanY+12);
+    sg.addColorStop(0,'rgba(255,139,62,0)');
+    sg.addColorStop(0.5,`rgba(${rgb},0.06)`);
+    sg.addColorStop(1,'rgba(255,139,62,0)');
+    ctx.fillStyle = sg;
+    ctx.fillRect(0, scanY-8, W, 20);
+
+    // Electric arcs between dots
+    for (let i=0; i<dots.length; i++) {
+      for (let j=i+1; j<dots.length; j++) {
+        const d = Math.hypot(dots[i].x-dots[j].x, dots[i].y-dots[j].y);
+        if (d > 130) continue;
+        const arcActive = Math.sin(t*4 + i*2.1 + j*1.3) > 0.3;
+        if (!arcActive) continue;
+        const alpha = (1-d/130)*0.7;
+        const mx = (dots[i].x+dots[j].x)/2 + Math.sin(t*8+i)*12;
+        const my = (dots[i].y+dots[j].y)/2 + Math.cos(t*6+j)*10;
+        ctx.save();
+        ctx.shadowColor = color; ctx.shadowBlur = 6;
+        ctx.strokeStyle = `rgba(${rgb},${alpha})`;
+        ctx.lineWidth = 0.8;
+        ctx.beginPath();
+        ctx.moveTo(dots[i].x, dots[i].y);
+        ctx.quadraticCurveTo(mx, my, dots[j].x, dots[j].y);
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
+
+    // Dots
+    dots.forEach(d => {
+      const glow = ctx.createRadialGradient(d.x,d.y,0,d.x,d.y,d.r*3);
+      glow.addColorStop(0,`rgba(${rgb},0.4)`); glow.addColorStop(1,`rgba(${rgb},0)`);
+      ctx.beginPath(); ctx.arc(d.x,d.y,d.r*3,0,Math.PI*2); ctx.fillStyle=glow; ctx.fill();
+      ctx.beginPath(); ctx.arc(d.x,d.y,d.r,0,Math.PI*2); ctx.fillStyle=color; ctx.fill();
+    });
+
+    // HUD label
+    ctx.fillStyle = color; ctx.font = '800 11px SF Mono, monospace';
+    ctx.textAlign='left'; ctx.textBaseline='top';
+    ctx.save(); ctx.shadowColor=color; ctx.shadowBlur=8;
+    ctx.fillText('ERROR', 12, 10);
+    ctx.restore();
+    ctx.fillStyle = '#fff'; ctx.font = '900 28px SF Mono, monospace';
+    ctx.fillText('9', 12, 26);
+    ctx.fillStyle = `rgba(${rgb},0.8)`; ctx.font = '700 11px SF Mono, monospace';
+    ctx.fillText('▲ +4 RISING', 12, H-18);
+
+    t += 0.016;
+    requestAnimationFrame(draw);
+  }
+  draw();
+})();
+
+// ── Opção 2: Data Rain ────────────────────────────────────────────────────
+(function() {
+  const canvas = document.getElementById('c2');
+  canvas.width = W * devicePixelRatio; canvas.height = H * devicePixelRatio;
+  canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+  const ctx = canvas.getContext('2d');
+  ctx.scale(devicePixelRatio, devicePixelRatio);
+
+  const color = '#4da6ff';
+  const rgb = '77,166,255';
+  const COLS = 20;
+  const colW = W / COLS;
+  const chars = '0123456789ABCDEF◈▲■◉';
+  const columns = Array.from({length:COLS}, (_,i) => ({
+    y: -Math.random()*H,
+    speed: 0.8 + Math.random()*1.4,
+    chars: Array.from({length:20}, ()=>chars[Math.floor(Math.random()*chars.length)])
+  }));
+
+  let t = 0;
+  function draw() {
+    // Semi-transparent clear for trail effect
+    ctx.fillStyle = 'rgba(5,8,15,0.18)';
+    ctx.fillRect(0,0,W,H);
+
+    // Border
+    const pulse = (Math.sin(t*2)+1)/2;
+    ctx.save();
+    ctx.shadowColor = color; ctx.shadowBlur = 10+pulse*8;
+    ctx.strokeStyle = `rgba(${rgb},${0.4+pulse*0.3})`;
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(2,2,W-4,H-4);
+    ctx.restore();
+
+    // Corner brackets
+    const cl = 18;
+    ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.lineCap = 'round';
+    [[4,4,1,1],[W-4,4,-1,1],[4,H-4,1,-1],[W-4,H-4,-1,-1]].forEach(([x,y,dx,dy])=>{
+      ctx.beginPath(); ctx.moveTo(x+dx*cl,y); ctx.lineTo(x,y); ctx.lineTo(x,y+dy*cl); ctx.stroke();
+    });
+
+    // Data rain columns
+    columns.forEach((col, ci) => {
+      const cx = ci * colW + colW/2;
+      col.y += col.speed;
+      if (col.y > H + 20) {
+        col.y = -20;
+        col.chars = Array.from({length:20}, ()=>chars[Math.floor(Math.random()*chars.length)]);
+      }
+      // Occasionally mutate a char
+      if (Math.random() < 0.04) {
+        const idx = Math.floor(Math.random()*col.chars.length);
+        col.chars[idx] = chars[Math.floor(Math.random()*chars.length)];
+      }
+
+      const charH = 13;
+      col.chars.forEach((ch, ri) => {
+        const cy = col.y - ri * charH;
+        if (cy < -charH || cy > H) return;
+        const distFromHead = ri;
+        let alpha, size;
+        if (distFromHead === 0) {
+          alpha = 1.0; size = 10;
+          ctx.fillStyle = '#ffffff';
+          ctx.shadowColor = color; ctx.shadowBlur = 12;
+        } else if (distFromHead < 3) {
+          alpha = 0.9 - distFromHead*0.2; size = 9;
+          ctx.fillStyle = color;
+          ctx.shadowColor = color; ctx.shadowBlur = 6;
+        } else {
+          alpha = Math.max(0, 0.5 - distFromHead*0.06); size = 8;
+          ctx.fillStyle = `rgba(${rgb},${alpha})`;
+          ctx.shadowBlur = 0;
+        }
+        ctx.font = `600 ${size}px SF Mono, monospace`;
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText(ch, cx, cy);
+        ctx.shadowBlur = 0;
+      });
+    });
+
+    // Label overlay
+    ctx.fillStyle = 'rgba(5,8,15,0.6)';
+    ctx.fillRect(8,8,130,52);
+    ctx.fillStyle = color; ctx.font = '800 11px SF Mono, monospace';
+    ctx.textAlign='left'; ctx.textBaseline='top';
+    ctx.save(); ctx.shadowColor=color; ctx.shadowBlur=8;
+    ctx.fillText('SLOWDOWN', 14, 12);
+    ctx.restore();
+    ctx.fillStyle = '#fff'; ctx.font = '900 28px SF Mono, monospace';
+    ctx.fillText('6', 14, 28);
+    ctx.fillStyle = `rgba(${rgb},0.9)`; ctx.font = '700 11px SF Mono, monospace';
+    ctx.fillText('▲ +6 RISING', 14, H-18);
+
+    t += 0.016;
+    requestAnimationFrame(draw);
+  }
+  draw();
+})();
+
+// ── Opção 3: Vórtice de Energia ───────────────────────────────────────────
+(function() {
+  const canvas = document.getElementById('c3');
+  canvas.width = W * devicePixelRatio; canvas.height = H * devicePixelRatio;
+  canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+  const ctx = canvas.getContext('2d');
+  ctx.scale(devicePixelRatio, devicePixelRatio);
+
+  const color = '#a855f7';
+  const rgb = '168,85,247';
+  const cx = W/2, cy = H/2;
+
+  let t = 0;
+  function draw() {
+    ctx.clearRect(0,0,W,H);
+    ctx.fillStyle = '#05080f';
+    ctx.fillRect(0,0,W,H);
+
+    // Subtle background pulse
+    const pulse = (Math.sin(t*1.8)+1)/2;
+    ctx.fillStyle = `rgba(${rgb},${0.05+pulse*0.08})`;
+    ctx.fillRect(0,0,W,H);
+
+    // Spiral arms radiating outward
+    const ARMS = 5;
+    for (let arm=0; arm<ARMS; arm++) {
+      const armOffset = (arm/ARMS)*Math.PI*2;
+      for (let i=0; i<60; i++) {
+        const progress = i/60;
+        const angle = armOffset + progress*Math.PI*3.5 + t*1.2;
+        const radius = progress * Math.min(W,H)*0.46;
+        const px = cx + Math.cos(angle)*radius;
+        const py = cy + Math.sin(angle)*radius;
+        if (px<0||px>W||py<0||py>H) continue;
+        const alpha = (1-progress)*0.55*((Math.sin(t*3+arm)+1)/2*0.4+0.6);
+        const r = (1-progress)*2.5+0.5;
+        ctx.save();
+        ctx.shadowColor = color; ctx.shadowBlur = 8*(1-progress);
+        ctx.fillStyle = `rgba(${rgb},${alpha})`;
+        ctx.beginPath(); ctx.arc(px,py,r,0,Math.PI*2); ctx.fill();
+        ctx.restore();
+      }
+    }
+
+    // Expanding concentric rings
+    for (let ring=0; ring<4; ring++) {
+      const phase = ((t*0.6 + ring*0.25) % 1);
+      const radius = phase * Math.min(W,H)*0.48;
+      const alpha = (1-phase)*0.35;
+      ctx.save();
+      ctx.shadowColor = color; ctx.shadowBlur = 12*(1-phase);
+      ctx.strokeStyle = `rgba(${rgb},${alpha})`;
+      ctx.lineWidth = 2.5 - phase*1.5;
+      ctx.beginPath(); ctx.arc(cx,cy,radius,0,Math.PI*2); ctx.stroke();
+      ctx.restore();
+    }
+
+    // Inner core — rotating hex
+    ctx.save();
+    ctx.translate(cx,cy);
+    ctx.rotate(t*0.8);
+    ctx.shadowColor=color; ctx.shadowBlur=20+pulse*15;
+    ctx.strokeStyle=`rgba(${rgb},${0.7+pulse*0.3})`;
+    ctx.lineWidth=2;
+    ctx.beginPath();
+    for(let i=0;i<6;i++){
+      const a=i*Math.PI/3;
+      i===0?ctx.moveTo(Math.cos(a)*18,Math.sin(a)*18):ctx.lineTo(Math.cos(a)*18,Math.sin(a)*18);
+    }
+    ctx.closePath(); ctx.stroke();
+    ctx.restore();
+
+    // Core dot
+    ctx.save();
+    ctx.shadowColor=color; ctx.shadowBlur=30;
+    ctx.fillStyle=color;
+    ctx.beginPath(); ctx.arc(cx,cy,6,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle='rgba(255,255,255,0.9)';
+    ctx.beginPath(); ctx.arc(cx-2,cy-2,2.5,0,Math.PI*2); ctx.fill();
+    ctx.restore();
+
+    // Border glow
+    ctx.save();
+    ctx.shadowColor=color; ctx.shadowBlur=14+pulse*10;
+    ctx.strokeStyle=`rgba(${rgb},${0.45+pulse*0.3})`;
+    ctx.lineWidth=2;
+    ctx.strokeRect(2,2,W-4,H-4);
+    ctx.restore();
+
+    // Corner brackets
+    const cl = 20;
+    ctx.save(); ctx.shadowColor=color; ctx.shadowBlur=6;
+    ctx.strokeStyle=`rgba(${rgb},0.9)`; ctx.lineWidth=2.5; ctx.lineCap='round';
+    [[4,4,1,1],[W-4,4,-1,1],[4,H-4,1,-1],[W-4,H-4,-1,-1]].forEach(([x,y,dx,dy])=>{
+      ctx.beginPath(); ctx.moveTo(x+dx*cl,y); ctx.lineTo(x,y); ctx.lineTo(x,y+dy*cl); ctx.stroke();
+    });
+    ctx.restore();
+
+    // Label
+    ctx.fillStyle = color; ctx.font = '800 11px SF Mono, monospace';
+    ctx.textAlign='left'; ctx.textBaseline='top';
+    ctx.save(); ctx.shadowColor=color; ctx.shadowBlur=8;
+    ctx.fillText('RESOURCE', 12, 10);
+    ctx.restore();
+    ctx.fillStyle = '#fff'; ctx.font = '900 28px SF Mono, monospace';
+    ctx.fillText('14', 12, 26);
+    ctx.fillStyle = `rgba(${rgb},0.9)`; ctx.font = '700 11px SF Mono, monospace';
+    ctx.fillText('▲ +14 RISING', 12, H-18);
+
+    t += 0.016;
+    requestAnimationFrame(draw);
+  }
+  draw();
+})();
+</script>
+</body>
+</html>

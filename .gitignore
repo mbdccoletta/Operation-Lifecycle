@@ -1,0 +1,48 @@
+# ── Dependencies ─────────────────────────────────────────────────
+node_modules/
+
+# ── Build output ─────────────────────────────────────────────────
+# `dt-app build` writes here; regenerated on every build, never
+# checked in.
+dist/
+build/
+*.tsbuildinfo
+
+# ── dt-app local state ───────────────────────────────────────────
+# Contains OAuth tokens (.tokens.json), local logs, type-checker
+# cache, and the app.config.schema.json that dt-app regenerates
+# on demand. NEVER commit — `.tokens.json` is a live secret.
+.dt-app/
+
+# ── Local development tooling ────────────────────────────────────
+# Claude Code per-project settings + scheduled task locks.
+.claude/
+
+# ── Local-only audit reports / scratch ───────────────────────────
+reports/
+
+# ── Environments / secrets ───────────────────────────────────────
+# Belt-and-suspenders: even though dt-app doesn't use these, a
+# future contributor might `cp .env.example .env`.
+.env
+.env.local
+.env.*.local
+
+# ── Logs ─────────────────────────────────────────────────────────
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ── Test coverage ────────────────────────────────────────────────
+coverage/
+.vitest-cache/
+
+# ── OS / editor cruft ────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.idea/
+.vscode/

@@ -1,0 +1,21 @@
+{
+  "$schema": "./.dt-app/app.config.schema.json",
+  "environmentUrl": "https://bwm98081.apps.dynatrace.com",
+  "app": {
+    "name": "Operation Lifecycle",
+    "version": "0.0.28",
+    "description": "Triage, prioritize, and share Dynatrace problems with multi-segment analytics.",
+    "id": "my.problems.hub",
+    "icon": "icon.png",
+    "scopes": [
+      { "name": "storage:events:read", "comment": "Read events/problems table" },
+      { "name": "storage:system:read", "comment": "Read dt.system.events for AUTOMATION_ENGINE workflow executions on the Problem Timeline page" },
+      { "name": "storage:entities:read", "comment": "Resolve affected entity / root cause names from dt.entity.* tables" },
+      { "name": "storage:buckets:read", "comment": "Bucket metadata used by the DQL client to validate fetch targets. Removing this caused empty problem lists in dev (audit Tier 2 revert) — keep until we confirm the SDK doesn't need it." },
+      { "name": "storage:filter-segments:read", "comment": "Read segments for filtering" },
+      { "name": "document:documents:read", "comment": "Read comments and segments" },
+      { "name": "document:documents:write", "comment": "Write comments" },
+      { "name": "environment-api:events:write", "comment": "Ingest CUSTOM_ANNOTATION events to mirror comments into the Davis Problems app stream the official UI displays" }
+    ]
+  }
+}
