@@ -2462,9 +2462,17 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
             /* Mobile / tablet variant — cards stacked vertically.
                Desktop layout (the .neo-ttable block below) is
                unreachable on small viewports but kept intact so
-               nothing changes for desktop users. */
+               nothing changes for desktop users.
+               Apply the SAME MAX_RENDER_ROWS slice the desktop list
+               uses (line 2518 below). Without it, synthetic
+               perf-50k scenarios push the entire 50k array into
+               MobileIncidentList → 790k+ DOM nodes → mobile tab
+               unresponsive (the bug the user caught on benchmark
+               run 23:51-23:53). Real customer flows never breach
+               the cap because useProblems.HARD_CEILING limits the
+               source to 10 k. */
             <MobileIncidentList
-              problems={filtered}
+              problems={filtered.slice(0, MAX_RENDER_ROWS)}
               perProblem={perProblem}
               expandedIds={expandedRows}
               onToggleExpand={toggleRow}
