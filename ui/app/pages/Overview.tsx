@@ -860,10 +860,11 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
     [scenario, rawProblems],
   );
   // Defensive cap: skip the 4× O(N log N) aggregation when the list
-  // is large enough that the work would block the main thread (a
-  // benchmark on perf-50k showed 21 s freeze on dataMode toggle).
-  // Hook returns empty KPIs in that mode and the UI advises the user
-  // to filter (see the large-dataset banner below).
+  // is large enough that the work would block the main thread
+  // (synthetic 50 k-problem benchmarks measured ~20 s of jank on
+  // dataMode toggle pre-cap). Hook returns empty KPIs in that mode
+  // and the UI advises the user to filter (see the large-dataset
+  // banner below).
   const teamMetricsEnabled = problems.length < TEAM_METRICS_CAP;
   const teamMetrics = useTeamMetrics(problems, {
     simulatedFirstComments: simMttaMap,
@@ -988,9 +989,10 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
   // Memoised list-derived fallback for the mobile rings. Used ONLY
   // when `constellationCountOverrides` is undefined — which means
   // either (a) the count query is still loading or (b) a synthetic
-  // scenario is active (perf-1k/10k/30k/50k). In real customer use,
-  // the override is populated almost immediately and this fallback
-  // is never read, so the memo is essentially free.
+  // DEMO scenario is active (count query queries the REAL tenant,
+  // so synthetic data would mismatch). In real customer use, the
+  // override is populated almost immediately and this fallback is
+  // never read, so the memo is essentially free.
   //
   // Was previously inline `problems.filter(...).length` in the JSX,
   // which ran O(N) twice on EVERY render of the page (~10 ms × 2 on
@@ -2464,11 +2466,12 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
                unreachable on small viewports but kept intact so
                nothing changes for desktop users.
                Apply the SAME MAX_RENDER_ROWS slice the desktop list
-               uses (line 2518 below). Without it, synthetic
-               perf-50k scenarios push the entire 50k array into
-               MobileIncidentList → 790k+ DOM nodes → mobile tab
-               unresponsive (the bug the user caught on benchmark
-               run 23:51-23:53). Real customer flows never breach
+               uses (line 2518 below). Without it, very large
+               problem sets (synthetic DEMO scenarios or a future
+               regression that lifts the source cap) push the entire
+               array into MobileIncidentList → hundreds of thousands
+               of DOM nodes → mobile tab unresponsive. Real customer
+               flows never breach
                the cap because useProblems.HARD_CEILING limits the
                source to 10 k. */
             <MobileIncidentList
