@@ -21,15 +21,6 @@ export type Scenario =
   | "focused"       // single quadrant in cascading-failure meltdown
   | "stress"        // every quadrant +15 recent (max-intensity spokes)
   | "xlarge"        // enterprise-scale environment · thousands of problems
-  // ── Performance Lab scenarios. Realistic enterprise distribution
-  // (~99% closed / 1% active, weighted category mix matching what
-  // a 10-80k host tenant emits) at increasing volume. Used by the
-  // perf overlay + benchmark runner to validate the app on real-
-  // customer scale before promising delivery.
-  | "perf-1k"          // baseline · medium tenant (~5k hosts)
-  | "perf-10k"         // medium enterprise (~20k hosts)
-  | "perf-30k"         // large enterprise (~50k hosts)
-  | "perf-50k"         // xlarge enterprise (~80k hosts)
   // ── Segments-page test scenarios. Override both the synthetic
   // problem set AND the synthetic filter-segment catalog + membership
   // so the /segments view can be exercised without a tenant that
@@ -235,106 +226,6 @@ function pushHistorical(out: Problem[], cat: typeof SIM_CATEGORIES[number], idx:
   }
 }
 
-// ── Performance Lab — realistic enterprise distribution ──────────────
-//
-// Designed to look STATISTICALLY like a real Davis tenant at scale, so
-// the app's behaviour under these volumes is a credible preview of how
-// it will perform when shipped to a customer with 10–80k hosts.
-//
-// Distribution (validated against observed customer tenants):
-//   • Status: 99% CLOSED, 1% ACTIVE
-//   • Category: CUSTOM_ALERT 40%, ERROR 25%, SLOWDOWN 15%,
-//     AVAILABILITY 10%, RESOURCE_CONTENTION 7%, MONITORING 3%
-//   • Severity: 10% sev5, 25% sev4, 30% sev3, 25% sev2, 10% sev1
-//     (inherited from `makeSimProblem` default branch)
-//   • ACTIVE start times: 30% <1h, 30% 1–24h, 30% 1–7d, 10% >7d
-//   • CLOSED start times: 70% in last 7d, 25% in 7–21d, 5% in 21–30d
-//   • CLOSED duration: log-normal — 70% <1h, 25% 1–6h, 5% >6h
-//   • 1–3 affected entities (existing makeSimProblem default)
-//
-// Output is generated synchronously. Memory: ~500 B per Problem object
-// × 50_000 ≈ 25 MB peak — fits in the 256 MB JS heap default with
-// plenty of headroom. Generation time on a fast laptop:
-//   1 k:   ~10 ms     30 k:  ~250 ms
-//   10 k:  ~80 ms     50 k:  ~420 ms
-const ENTERPRISE_CATEGORY_WEIGHTS: Array<[typeof SIM_CATEGORIES[number], number]> = [
-  ["CUSTOM_ALERT",           40],
-  ["ERROR",                  25],
-  ["SLOWDOWN",               15],
-  ["AVAILABILITY",           10],
-  ["RESOURCE_CONTENTION",     7],
-  ["MONITORING_UNAVAILABLE",  3],
-];
-
-/** Picks an ACTIVE start time according to the realistic mix described
- *  above. Returns absolute milliseconds. */
-function pickActiveStartMs(now: number, slot: number): number {
-  const bucket = slot % 10;            // deterministic, evenly bucketed
-  if (bucket < 3) return now - Math.floor(Math.random() *      60 * 60_000);             // <1h
-  if (bucket < 6) return now - (60 + Math.floor(Math.random() * 23 * 60))       * 60_000; // 1–24h
-  if (bucket < 9) return now - (24 + Math.floor(Math.random() * 6  * 24))       * 3_600_000; // 1–7d
-                  return now - (7  + Math.floor(Math.random() * 23))            * 86_400_000; // 7–30d
-}
-
-/** Picks a CLOSED problem's (start, end) pair so end>start and the
- *  total spread matches realistic tenant data. Returns milliseconds. */
-function pickClosedSpanMs(now: number, slot: number): { start: number; end: number } {
-  // Choose start timeframe band — weighted by frequency.
-  const startBucket = slot % 20;
-  let ageDays: number;
-  if (startBucket < 14)      ageDays = Math.random() * 7;            // 70% last 7d
-  else if (startBucket < 19) ageDays = 7 + Math.random() * 14;       // 25% 7–21d
-  else                       ageDays = 21 + Math.random() * 9;       // 5% 21–30d
-  const startMs = now - ageDays * 86_400_000;
-
-  // Choose duration — log-normal flavour via bucketing.
-  const durBucket = slot % 10;
-  let durMs: number;
-  if (durBucket < 7)      durMs = (5 + Math.random() * 55) * 60_000;       // 70% <1h
-  else if (durBucket < 9) durMs = (1 + Math.random() * 5)  * 3_600_000;    // 25% 1–6h
-  else                    durMs = (6 + Math.random() * 18) * 3_600_000;    // 5% >6h
-  return { start: startMs, end: Math.min(now, startMs + durMs) };
-}
-
-/** Push `total` problems into `out` with realistic enterprise
- *  distribution. Splits roughly 1% ACTIVE / 99% CLOSED across the
- *  category weights above. */
-function pushEnterpriseProblems(out: Problem[], total: number, now: number): void {
-  // Pre-compute the per-category target counts so the totals add up
-  // to `total` exactly (no off-by-rounding-error).
-  const counts: Array<{ cat: typeof SIM_CATEGORIES[number]; n: number }> = [];
-  let assigned = 0;
-  for (let i = 0; i < ENTERPRISE_CATEGORY_WEIGHTS.length; i++) {
-    const [cat, weight] = ENTERPRISE_CATEGORY_WEIGHTS[i];
-    const n = (i === ENTERPRISE_CATEGORY_WEIGHTS.length - 1)
-      ? total - assigned                    // last cat soaks up the remainder
-      : Math.round((total * weight) / 100);
-    counts.push({ cat, n });
-    assigned += n;
-  }
-
-  let slot = 0;
-  for (const { cat, n } of counts) {
-    const catIdx = SIM_CATEGORIES.indexOf(cat);
-    // 1% active within this category — bounded to ≥1 if the category
-    // has at least 100 entries so the visualisation always has stars.
-    const activeN = Math.max(0, Math.round(n * 0.01));
-    const closedN = n - activeN;
-
-    for (let i = 0; i < activeN; i++) {
-      const ts = pickActiveStartMs(now, slot++);
-      out.push(makeSimProblem(cat, catIdx, new Date(ts).toISOString(), "ACTIVE"));
-    }
-    for (let i = 0; i < closedN; i++) {
-      const span = pickClosedSpanMs(now, slot++);
-      out.push(makeSimProblem(
-        cat, catIdx, new Date(span.start).toISOString(), "CLOSED",
-        new Date(span.end).toISOString(),
-      ));
-    }
-  }
-}
-
 // ── Scenarios ─────────────────────────────────────────────────────────
 // Each branch produces the full problem list for that scenario. Kept as
 // inline imperative code so each scenario is self-contained and easy to
@@ -509,16 +400,6 @@ export function getSimulatedProblems(scenario: Scenario, real: Problem[]): Probl
       break;
     }
 
-    // ── Performance Lab — realistic enterprise volumes ─────────────
-    // Each branch hands off to `pushEnterpriseProblems(target)`. See
-    // that helper's docblock for the full distribution rationale.
-    // Sizes were picked to match the host-count ranges customers
-    // self-report (5k / 20k / 50k / 80k hosts → ~1k / 10k / 30k / 50k
-    // problems in a 7-30 d window after dedup).
-    case "perf-1k":  { pushEnterpriseProblems(out, 1_000,  now); break; }
-    case "perf-10k": { pushEnterpriseProblems(out, 10_000, now); break; }
-    case "perf-30k": { pushEnterpriseProblems(out, 30_000, now); break; }
-    case "perf-50k": { pushEnterpriseProblems(out, 50_000, now); break; }
   }
 
   return out;

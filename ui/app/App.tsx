@@ -13,7 +13,6 @@ import { ErrorBoundary, installGlobalErrorHandlers } from "./components/ErrorBou
 // boundary mechanism would otherwise miss. Idempotent.
 installGlobalErrorHandlers();
 import { DebugScenarioPanel } from "./components/DebugScenarioPanel";
-import { PerfOverlay } from "./components/PerfOverlay";
 import { TimeRangeProvider } from "./hooks/useTimeRange";
 import { CategoryFilterProvider } from "./contexts/CategoryFilterContext";
 import { RefreshSignalProvider } from "./contexts/RefreshSignalContext";
@@ -154,11 +153,6 @@ const AppContent = () => {
       </nav>
 
       <DebugScenarioPanel />
-      {/* Perf Lab overlay — auto-shown ONLY while a synthetic
-          scenario is active, anchored bottom-left so it doesn't
-          fight with the DEMO panel (bottom-right). Real customer
-          sessions never render this. */}
-      <PerfOverlay />
       {/* DisplaySettingsPanel moved out of App.tsx — it's now
           rendered INLINE inside each page header next to the
           SegmentSelector (Overview, TrendAnalysis). The pages
