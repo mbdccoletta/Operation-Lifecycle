@@ -211,14 +211,25 @@ export function useComments(problemId: string, davisProblemId?: string) {
             status: sync.status,
             error: sync.error,
           });
-          return {
-            ok: false,
-            error: sync.status === 403
-              ? "Permission denied (problems.write scope missing)"
-              : sync.status === 401
-                ? "Not authenticated"
-                : `Davis API error${sync.status ? ` (${sync.status})` : ""}`,
-          };
+          // Surface the actual error detail in the UI when we have
+          // one. Previously the catch-all read "Davis API error"
+          // with no further info — useless for the user (especially
+          // on mobile where DevTools isn't reachable) and for
+          // support trying to diagnose. We now show e.g. "Network
+          // error: Load failed" or "HTTP 502 — Gateway Timeout".
+          let message: string;
+          if (sync.status === 403) {
+            message = "Permission denied (problems.write scope missing)";
+          } else if (sync.status === 401) {
+            message = "Not authenticated";
+          } else if (sync.error) {
+            // Already-formatted message from davis-comments.ts —
+            // includes HTTP code OR network error description.
+            message = sync.error;
+          } else {
+            message = `Davis API error${sync.status ? ` (${sync.status})` : ""}`;
+          }
+          return { ok: false, error: message };
         }
 
         // Davis accepted the comment → mirror to our local document

@@ -115,10 +115,24 @@ export async function postCommentToDavisProblem(input: DavisCommentInput): Promi
       serverDetail,
       error: err instanceof Error ? err.message : String(err),
     });
+    // Compose a USEFUL error string even when there's no HTTP
+    // response (network failure, CORS preflight reject, timeout).
+    // The previous "HTTP undefined" was opaque — surface the
+    // underlying network error message so mobile users (who can't
+    // pop open DevTools) actually see what went wrong.
+    let errMsg: string;
+    if (status) {
+      errMsg = `HTTP ${status}${serverDetail ? " — " + serverDetail.slice(0, 240) : ""}`;
+    } else {
+      // No HTTP response — likely a network / CORS / timeout
+      // failure. Use the underlying error message as the signal.
+      const nativeMsg = err instanceof Error ? err.message : String(err);
+      errMsg = `Network error: ${nativeMsg || "no response"}`;
+    }
     return {
       ok: false,
       status,
-      error: `HTTP ${status}${serverDetail ? " — " + serverDetail.slice(0, 240) : ""}`,
+      error: errMsg,
     };
   }
 }
