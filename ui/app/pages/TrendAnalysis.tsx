@@ -666,11 +666,20 @@ const KpiCard: React.FC<KpiCardProps> = ({ label, value, color, series, delta, d
       <div className="neo-kpi-card-value-row">
         <span className="neo-kpi-card-value" style={{ color }}>{value}</span>
         <span
-          className="neo-kpi-card-delta"
+          /* `key` re-mounts the chip whenever the trend direction
+             flips so the CSS pulse-in animation runs fresh — same
+             pattern the mobile rings strip uses. Without this, going
+             from ▲ +5 to ▼ -3 would mutate in place without any
+             visual cue that the direction changed. */
+          key={`${sign}-${delta}`}
+          className={`neo-kpi-card-delta neo-kpi-card-delta-${
+            delta > 0 ? "up" : delta < 0 ? "down" : "flat"
+          }`}
           style={{ color: deltaColor }}
           title="last 25% vs prior 25% of the window"
         >
-          {sign} {deltaText}{deltaSuffix}
+          <span className="neo-kpi-card-delta-arrow" aria-hidden="true">{sign}</span>
+          {" "}{deltaText}{deltaSuffix}
         </span>
       </div>
       <div

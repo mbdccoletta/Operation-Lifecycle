@@ -8494,3 +8494,82 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   color: #f59e0b;
   font-weight: 700;
 }
+
+/* ────────────────────────────────────────────────────────────────────
+ * Trend animations — KPI delta chip + Sparkline draw-in
+ *
+ * On the Trends page, the four KPI cards (Active, MTTR, Resolution
+ * rate, Stuck) each show a `▲ +N` / `▼ -N` / `• 0` delta chip and a
+ * sparkline. These animations make the direction-change feel alive:
+ *
+ *   1. The chip re-mounts on direction change (React `key`) so the
+ *      pulse-in keyframe plays again, drawing attention.
+ *   2. The arrow itself bobs gently in its direction so the chip
+ *      reads as actively pointing somewhere.
+ *   3. The sparkline path "draws" from left → right on initial paint
+ *      so the user sees the curve being plotted in real time.
+ *
+ * Keyframes `neo-trend-pulse` / `neo-trend-arrow-up` / `neo-trend-
+ * arrow-down` are SHARED with the mobile rings strip (defined above
+ * around line 1586) — single source of truth for the motion grammar.
+ * `prefers-reduced-motion` already disables those keyframes globally
+ * (see the @media (prefers-reduced-motion: reduce) rule near line
+ * 1599) — these classes inherit that suppression automatically.
+ * ──────────────────────────────────────────────────────────────────── */
+
+/* Delta chip — pulse-in on direction change. */
+.neo-kpi-card-delta {
+  animation: neo-trend-pulse 360ms ease-out;
+}
+.neo-kpi-card-delta-flat {
+  /* Flat / neutral state — no pulse, the value didn't change
+     direction so calling attention would be misleading. */
+  animation: none;
+}
+
+/* Arrow glyph inside the chip — bobs in its direction. */
+.neo-kpi-card-delta-arrow {
+  display: inline-block;
+}
+.neo-kpi-card-delta-up .neo-kpi-card-delta-arrow {
+  animation: neo-trend-arrow-up 1.4s ease-in-out infinite;
+}
+.neo-kpi-card-delta-down .neo-kpi-card-delta-arrow {
+  animation: neo-trend-arrow-down 1.4s ease-in-out infinite;
+}
+
+/* Sparkline path — left-to-right draw-in on mount. `pathLength="1"`
+   on the path normalises the dasharray so the animation runs at a
+   consistent ~700 ms regardless of how many sample points the
+   series carries. */
+.neo-sparkline-path {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: neo-sparkline-draw 700ms ease-out forwards;
+}
+.neo-sparkline-area {
+  /* Fade the filled area in alongside the line so the chart appears
+     as one motion, not two staggered ones. */
+  animation: neo-sparkline-area-fade 700ms ease-out forwards;
+  opacity: 0;
+}
+
+@keyframes neo-sparkline-draw {
+  from { stroke-dashoffset: 1; }
+  to   { stroke-dashoffset: 0; }
+}
+@keyframes neo-sparkline-area-fade {
+  from { opacity: 0; }
+  to   { opacity: 0.15; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .neo-sparkline-path,
+  .neo-sparkline-area,
+  .neo-kpi-card-delta,
+  .neo-kpi-card-delta-arrow {
+    animation: none;
+  }
+  .neo-sparkline-path { stroke-dashoffset: 0; }
+  .neo-sparkline-area { opacity: 0.15; }
+}

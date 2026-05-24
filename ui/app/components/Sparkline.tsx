@@ -124,7 +124,16 @@ export const Sparkline: React.FC<SparklineProps> = ({
         onMouseLeave={onLeave}
         style={{ display: "block" }}
       >
-        {fill && <path d={area} fill={color} opacity="0.15" />}
+        {fill && (
+          <path
+            d={area}
+            fill={color}
+            opacity="0.15"
+            /* Same `key` as the line below — area fades in alongside
+               so the two animate as one chart re-paint. */
+            className="neo-sparkline-area"
+          />
+        )}
         <path
           d={line}
           fill="none"
@@ -132,6 +141,15 @@ export const Sparkline: React.FC<SparklineProps> = ({
           strokeWidth="1.4"
           strokeLinecap="round"
           strokeLinejoin="round"
+          /* `pathLength="1"` normalises the path so the CSS
+             dasharray/dashoffset (defined in theme.css as `1`)
+             always represents the FULL path regardless of how
+             many points it has. Without this, the dasharray
+             length would depend on the absolute pixel length of
+             the curve and longer sparklines would animate at
+             different speeds. */
+          pathLength="1"
+          className="neo-sparkline-path" /* drives draw-in animation */
         />
         {hp && (
           <>
