@@ -1571,23 +1571,33 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
     }
     // Drilldown range filter — when `selectedRange` is set (chart
     // bucket-click, metric-dot-click, or pulse-chart brush), narrow
-    // the list to problems whose `event.start` falls inside that
-    // window. The DQL `from:/to:` on `dt.davis.problems` returns
-    // EVERY problem active during the window — including ones that
-    // opened long before and were still ACTIVE on day X. The chart
-    // buckets, on the other hand, aggregate by `event.start`. So a
-    // bucket showing "n=7" means 7 problems STARTED in the window;
-    // the drilldown should match that, not return the 50+ other
-    // problems that were merely "still open" then. Without this
-    // client-side narrowing, clicking a bucket dot would surface
-    // unrelated problems whose only connection to the bucket is
-    // having a long unresolved tail.
+    // the list to problems that were ACTIVE DURING that window —
+    // i.e. their open interval [event.start, event.end] intersects
+    // [from, to]. Matches the chart's `activeAtT` semantic (line
+    // ~1238) so a bar showing "5 active" drills into 5 problems.
+    //
+    // Previous behaviour (kept here as context for the regression
+    // that motivated the change): filter by `event.start` IN range.
+    // That made the bucket's number ("5 active at 05:30") and the
+    // drilled list ("1 started between 05:18-05:38") disagree —
+    // confusing for users brushing a recent window to inspect what
+    // was happening at that moment. Long-running active problems
+    // are the legitimate answer here, not noise.
     if (selectedRange) {
       const fromMs = selectedRange.from.getTime();
       const toMs   = selectedRange.to.getTime();
       out = out.filter((p) => {
         const startMs = new Date(p["event.start"]).getTime();
-        return Number.isFinite(startMs) && startMs >= fromMs && startMs < toMs;
+        if (!Number.isFinite(startMs)) return false;
+        // Open problems (no end) are still active now — represent
+        // their close time as +∞ so the intersect test always
+        // succeeds for ranges newer than their start.
+        const endMs = p["event.end"]
+          ? new Date(p["event.end"]).getTime()
+          : Number.POSITIVE_INFINITY;
+        // Open interval [start, end] intersects [from, to] iff
+        //   start < to  AND  end > from
+        return startMs < toMs && endMs > fromMs;
       });
     }
     // Metric-availability filter — each chip carries its own bound
