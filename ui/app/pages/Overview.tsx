@@ -760,12 +760,23 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
     // caused by the previous inline parser missing `now()-7d`.
     return parseStratoTimeframe(timeframe);
   }, [timeframe, selectedRange]);
+  // Pass `statusFilter` through to the DQL so the list is filtered
+  // server-side. Without this, the DQL returns up to DEFAULT_INITIAL
+  // (250) records sorted by `event.start desc` — mostly recently-
+  // opened CLOSED problems on busy tenants — and the client status
+  // filter then narrows that biased sample, dropping ACTIVE problems
+  // that started further back and didn't make the first 250.
+  //
+  // Concrete case the user caught: 7-day window, ACTIVE ring shows
+  // 9, list shows only 5. The 4 missing actives were long-running
+  // problems beyond the first 250 by start date. Server-side filter
+  // fixes this — DQL returns all 9 actives directly.
   const problemsFilter = useMemo(() => ({
-    status: "",
+    status: statusFilter ?? "",
     category: "",
     categories: categoriesArr,
     ...timeframeFilter,
-  }), [categoriesArr, timeframeFilter]);
+  }), [statusFilter, categoriesArr, timeframeFilter]);
 
   const {
     problems: tenantProblems,
