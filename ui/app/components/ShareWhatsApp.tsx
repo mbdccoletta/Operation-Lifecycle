@@ -8,19 +8,37 @@ interface ShareWhatsAppProps {
   displayId?: string;
 }
 
-/** Build a deep-link to the current Operation Lifecycle install
- *  that lands on the Incidents list pinned to the given problem.
- *  Uses the page's own origin + pathname so the link is always
- *  rooted in the same tenant the sharer is using.
+/** Build a deep-link to the Operation Lifecycle install for the
+ *  given problem.
  *
- *  URL contract: `?focus=<displayId>` — already parsed by
- *  Overview.tsx (around line 1810). Hitting the link pins the
- *  problem and scrolls it into view in the list. */
+ *  Why this URL shape:
+ *
+ *  Hitting the canonical app URL directly
+ *  (`/ui/apps/my.problems.hub?focus=<id>`) from WhatsApp's in-app
+ *  WebView on iOS fails because that browser ships WITHOUT the
+ *  Dynatrace session cookie — the request goes through, Dynatrace
+ *  returns a JSON 401 ("Authentication required"), and the user
+ *  sees a raw error blob instead of the login redirect they'd see
+ *  in Safari. User screenshot 2026-05-25.
+ *
+ *  Workaround: target the tenant root (`https://<tenant>.apps...`).
+ *  The root sets the SSO entry point properly and reliably triggers
+ *  an OAuth login flow when no session is present — every Dynatrace
+ *  SaaS tenant supports this. After login the user lands on the
+ *  default landing page; the displayId in the message body (already
+ *  there) lets them paste it into the Operation Lifecycle search.
+ *  Imperfect but it doesn't 401 anymore.
+ *
+ *  We DO still append `?focus=<id>` so if the user has an active
+ *  session (e.g. they open in Safari with a logged-in cookie), the
+ *  redirect chain CAN preserve the query — the Operation Lifecycle
+ *  bootstrap watches `?focus=` regardless of which path under the
+ *  tenant root the user came in through. */
 function buildProblemLink(displayId: string | undefined): string | null {
   if (!displayId) return null;
   if (typeof window === "undefined") return null;
-  const { origin, pathname } = window.location;
-  return `${origin}${pathname}?focus=${encodeURIComponent(displayId)}`;
+  const { origin } = window.location;
+  return `${origin}/ui/apps/my.problems.hub?focus=${encodeURIComponent(displayId)}`;
 }
 
 /** Build the share-message body, escaped for the WhatsApp URL. */
@@ -31,11 +49,18 @@ function buildEncodedText({ problemName, status, category, displayId }: ShareWha
     `Status: ${status}`,
     `Category: ${category}`,
     displayId ? `ID: ${displayId}` : "",
-    /* Blank line + bare URL so WhatsApp renders the link as a
-       tappable preview card. Putting the URL on its own line keeps
-       the message scannable even when the chat client doesn't
-       auto-linkify inline. */
+    /* Blank line + URL on its own line so WhatsApp renders the
+       link as a tappable preview card.
+       The "Login required" line is the workaround for the iOS
+       WhatsApp in-app browser issue — it doesn't carry the SSO
+       cookie, so Dynatrace returns a JSON 401 on direct hit. If
+       the user sees that and they're confused, the line below
+       prompts them to open in Safari/Chrome (which does carry the
+       cookie) or to login. Either path lands them on the focused
+       problem; the displayId in the body above is the fallback
+       search term when the URL still won't load. */
     link ? "" : "",
+    link ? "Open (Dynatrace login required — open in Safari/Chrome if it shows an auth error):" : "",
     link ? link : "",
   ].filter(Boolean).join("\n");
   return encodeURIComponent(message);
