@@ -123,23 +123,37 @@ function rootCauseLine(p: Problem): string | null {
   return `Root cause: ${name || id}`;
 }
 
-/** Build the share-message body, escaped for the WhatsApp URL.
+/** The share message is composed of two SEMANTIC HALVES, returned
+ *  separately so the mobile + desktop send paths can mix them
+ *  differently:
  *
- *  Message anatomy (in order, top → bottom):
- *    1. 🚨 Problem name — single-line headline.
- *    2. ID + status badge — searchable handle + lifecycle state.
- *    3. Category + severity — what KIND of incident, how bad.
- *    4. Started / Duration — temporal context (when + how long).
- *    5. Affected entities — blast radius (up to 5 + overflow rollup).
- *    6. Root cause — Davis's pinned cause entity, if any.
- *    7. Action prompt + URL — tenant root so the OAuth flow fires
- *       for unauthenticated users (when the recipient ever opens it).
- *    8. "📱 Tip" footer — explains how to recover from WhatsApp's
- *       in-app browser eating the auth flow.
+ *  - body:   problem details (name, ID, status, category, severity,
+ *            timing, affected entities, root cause). Self-contained
+ *            triage payload — even without the URL, the recipient
+ *            knows what the incident is and can search by ID in
+ *            their own Dynatrace.
+ *  - footer: "Open in Dynatrace:" prompt + URL + the 📱 Tip about
+ *            recovering from the WhatsApp in-app browser. Pure
+ *            access affordance — only useful if the recipient
+ *            wants to actually open the link.
  *
- *  Everything above the URL must be self-sufficient: on-call should
- *  be able to triage off the text alone if the link is unreachable. */
-function buildMessageText(problem: Problem): string {
+ *  Why split:
+ *    Desktop WhatsApp ships body + footer together as one message
+ *    via the URL scheme — no problem there.
+ *    Mobile WhatsApp (iOS specifically) strips text around a URL
+ *    when the share intent arrives via `whatsapp://send?text=…`.
+ *    So we send ONLY the body via the scheme (no URL → no strip
+ *    trigger) and put the footer (URL + tip) on the CLIPBOARD.
+ *    User pastes at the end of compose, and the recipient gets
+ *    both halves intact. If user forgets to paste, the recipient
+ *    still gets the body — never a "share with nothing in it"
+ *    failure mode. */
+interface MessageParts {
+  body:   string;
+  footer: string;
+}
+
+function buildMessageParts(problem: Problem): MessageParts {
   const link = buildProblemLink(problem.display_id);
   const name     = problem["event.name"];
   const status   = getStatusLabel(problem["event.status"]);
@@ -152,36 +166,53 @@ function buildMessageText(problem: Problem): string {
   const durationLine =
     duration && (problem["event.status"] === "ACTIVE" ? `Duration: ${duration} (ongoing)` : `Duration: ${duration}`);
 
-  const lines: string[] = [];
-  lines.push(`🚨 Problem: ${name}`);
-  if (problem.display_id) lines.push(`ID: ${problem.display_id}`);
-  lines.push(`Status: ${status}`);
-  lines.push(`Category: ${category}`);
-  if (sev) lines.push(sev);
-  if (started)      lines.push(`Started: ${started}`);
-  if (durationLine) lines.push(durationLine);
+  const bodyLines: string[] = [];
+  bodyLines.push(`🚨 Problem: ${name}`);
+  if (problem.display_id) bodyLines.push(`ID: ${problem.display_id}`);
+  bodyLines.push(`Status: ${status}`);
+  bodyLines.push(`Category: ${category}`);
+  if (sev) bodyLines.push(sev);
+  if (started)      bodyLines.push(`Started: ${started}`);
+  if (durationLine) bodyLines.push(durationLine);
 
   const affected = affectedEntityLines(problem);
   if (affected.length > 0) {
-    lines.push("");
-    lines.push(...affected);
+    bodyLines.push("");
+    bodyLines.push(...affected);
   }
 
   const rc = rootCauseLine(problem);
   if (rc) {
-    lines.push("");
-    lines.push(rc);
+    bodyLines.push("");
+    bodyLines.push(rc);
   }
 
+  // Footer = the access-affordance half. Empty when no URL could be
+  // resolved (rare — getEnvironmentUrl can fail). The leading blank
+  // line lives in the footer (not the body) so when desktop emits
+  // "body + '\n' + footer" the visual separator appears cleanly,
+  // and when mobile sends body alone the body doesn't end with
+  // dangling whitespace.
+  const footerLines: string[] = [];
   if (link) {
-    lines.push("");
-    lines.push("Open in Dynatrace (login if prompted, then search by ID in Operation Lifecycle):");
-    lines.push(link);
-    lines.push("");
-    lines.push("📱 Tip: if the link shows an error inside WhatsApp, tap the ⋯ menu (top-right) → \"Open in Safari\" (iOS) or \"Open in Chrome\" (Android). The system browser has your Dynatrace session and will log you in normally.");
+    footerLines.push("Open in Dynatrace (login if prompted, then search by ID in Operation Lifecycle):");
+    footerLines.push(link);
+    footerLines.push("");
+    footerLines.push("📱 Tip: if the link shows an error inside WhatsApp, tap the ⋯ menu (top-right) → \"Open in Safari\" (iOS) or \"Open in Chrome\" (Android). The system browser has your Dynatrace session and will log you in normally.");
   }
 
-  return lines.join("\n");
+  return {
+    body:   bodyLines.join("\n"),
+    footer: footerLines.join("\n"),
+  };
+}
+
+/** Convenience for the desktop path which sends both halves in one
+ *  shot — same payload the previous single-string buildMessageText
+ *  used to return. */
+function buildFullMessageText(problem: Problem): string {
+  const { body, footer } = buildMessageParts(problem);
+  return footer ? `${body}\n\n${footer}` : body;
 }
 
 /** Send-via-WhatsApp action. Native button styling matches the other
@@ -218,20 +249,23 @@ function buildMessageText(problem: Problem): string {
  *      desktop path doesn't need the Web Share API workaround. */
 export const ShareWhatsApp: React.FC<ShareWhatsAppProps> = ({ problem }) => {
   const { isMobileOrTablet } = useDevice();
-  const messageText = buildMessageText(problem);
-  // Mobile path needs the URL separately so it can pre-fill the
-  // WhatsApp compose with just the link (body goes via clipboard).
-  const problemUrl  = buildProblemLink(problem.display_id);
 
   if (isMobileOrTablet) {
-    return <MobileShareButton messageText={messageText} problemUrl={problemUrl} />;
+    // Mobile path: body in compose, footer (URL + tip) in clipboard.
+    // See MobileShareButton docblock for the rationale — short version,
+    // iOS WhatsApp's URL-scheme handler strips text around URLs, so we
+    // route the URL-bearing half through the clipboard instead of
+    // through the `text=` param.
+    const { body, footer } = buildMessageParts(problem);
+    return <MobileShareButton bodyText={body} clipboardText={footer} />;
   }
 
   // Desktop path — button that toggles a small two-option menu.
   // Desktop WhatsApp doesn't strip body+URL, so we send the whole
   // payload in the URL scheme as before — confirmed working by user
   // testing in 0.0.72.
-  return <DesktopShareMenu encodedText={encodeURIComponent(messageText)} />;
+  const fullText = buildFullMessageText(problem);
+  return <DesktopShareMenu encodedText={encodeURIComponent(fullText)} />;
 };
 
 /** Mobile-only share button.
@@ -267,26 +301,29 @@ export const ShareWhatsApp: React.FC<ShareWhatsAppProps> = ({ problem }) => {
  *  Even if the user forgets to paste, the URL is still in the
  *  compose (from the URL scheme pre-fill), so at the very least the
  *  recipient gets the deep-link. */
-const MobileShareButton: React.FC<{ messageText: string; problemUrl: string | null }> = ({
-  messageText,
-  // problemUrl is intentionally unused now — we used to pre-fill the
-  // WhatsApp compose with it, but the clipboard body ALREADY contains
-  // the URL, so paste-after-pre-fill produced duplicate links in the
-  // sent message (confirmed by user in 0.0.74 testing). We open
-  // WhatsApp with empty compose so paste lands the full body cleanly
-  // with one and only one URL.
-  problemUrl: _problemUrl,
-}) => {
+const MobileShareButton: React.FC<{
+  /** Plain-text incident summary that goes into the WhatsApp
+   *  compose field. Contains NO URL — that's deliberate, so iOS
+   *  WhatsApp's URL-handler heuristic doesn't fire and strip the
+   *  body. The recipient sees the full triage payload immediately
+   *  when the message arrives. */
+  bodyText: string;
+  /** "Open in Dynatrace: <URL>" + Tip footer. Goes onto the
+   *  clipboard so the user can append it to the compose with a
+   *  long-press → Paste. If they forget to paste, the body still
+   *  carries enough info (problem name, ID, severity, etc.) for
+   *  the recipient to triage — they just don't get the deep-link. */
+  clipboardText: string;
+}> = ({ bodyText, clipboardText }) => {
   // `clipboardReady` controls the confirmation modal. We show it
   // AFTER the clipboard write succeeds and BEFORE opening WhatsApp,
   // so the user always sees the "paste in WhatsApp" instructions
   // and explicitly acknowledges before leaving the app.
   const [clipboardReady, setClipboardReady] = useState(false);
-  // Empty `text=` param invokes WhatsApp's share-intent flow (contact
-  // picker → compose) but leaves the compose blank — so when the user
-  // pastes the clipboard body (which contains the URL inline), the
-  // resulting message has exactly ONE copy of the link.
-  const whatsappHref = "whatsapp://send?text=";
+  // Body pre-filled in compose via the URL scheme. iOS WhatsApp
+  // strips text when a URL is detected in `text=`, but the body
+  // we send here is plain-text only — no URL → no strip trigger.
+  const whatsappHref = `whatsapp://send?text=${encodeURIComponent(bodyText)}`;
 
   const openWhatsapp = () => {
     setClipboardReady(false);
@@ -312,10 +349,14 @@ const MobileShareButton: React.FC<{ messageText: string; problemUrl: string | nu
     // with `allow="web-share"`. AppEngine doesn't currently set
     // that, so this almost always falls through to plan B; but if
     // the embedding ever changes we'll get the "perfect" path back
-    // for free.
+    // for free. We hand the OS the FULL text (body + footer) here
+    // because the Web Share API doesn't suffer from the URL-strip
+    // bug — the OS preserves the payload verbatim.
     if (typeof navigator !== "undefined" && typeof navigator.share === "function") {
       try {
-        await navigator.share({ text: messageText });
+        await navigator.share({
+          text: clipboardText ? `${bodyText}\n\n${clipboardText}` : bodyText,
+        });
         return;
       } catch (err: unknown) {
         const name = (err as { name?: string })?.name;
@@ -327,13 +368,14 @@ const MobileShareButton: React.FC<{ messageText: string; problemUrl: string | nu
       }
     }
 
-    // Plan B — copy full body to clipboard, then show the modal so
-    // the user explicitly acknowledges the paste step BEFORE we
-    // launch WhatsApp.
+    // Plan B — copy ONLY the footer (URL + tip) to clipboard. Body
+    // is already going via the URL scheme (no URL in it → no iOS
+    // strip), so the clipboard only needs to carry the missing half.
+    // User pastes at the end of compose to complete the message.
     let clipboardOk = false;
     try {
-      if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(messageText);
+      if (clipboardText && navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(clipboardText);
         clipboardOk = true;
       }
     } catch {
@@ -346,8 +388,9 @@ const MobileShareButton: React.FC<{ messageText: string; problemUrl: string | nu
       // scheme then.
       setClipboardReady(true);
     } else {
-      // Clipboard failed — no point showing the paste instruction.
-      // Open WhatsApp with just the URL (still a useful share).
+      // Clipboard failed OR no footer to copy (rare). Skip the modal
+      // and just open WhatsApp with the body pre-filled — recipient
+      // still gets the triage payload, just without the deep-link.
       openWhatsapp();
     }
   };
@@ -420,28 +463,30 @@ const PasteInstructionsModal: React.FC<{
         aria-labelledby="neo-share-wa-modal-title"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="neo-share-wa-modal-icon" aria-hidden="true">📋</div>
+        <div className="neo-share-wa-modal-icon" aria-hidden="true">🔗</div>
         <h3 id="neo-share-wa-modal-title" className="neo-share-wa-modal-title">
-          Problem details copied to clipboard
+          Dynatrace link copied to clipboard
         </h3>
         <p className="neo-share-wa-modal-intro">
-          The full incident summary (name, ID, severity, timing, affected
-          entities, root cause, and link) is now on your clipboard. After tapping{" "}
-          <strong>Open WhatsApp</strong>, follow these steps:
+          WhatsApp will open with the <strong>problem summary already
+          filled in</strong> (name, ID, severity, timing, affected entities,
+          root cause). To complete the message with the deep-link, follow
+          these steps after tapping <strong>Open WhatsApp</strong>:
         </p>
         <ol className="neo-share-wa-modal-steps">
           <li>Pick a contact or group</li>
           <li>
-            <strong>Long-press the empty message field</strong>
+            <strong>Long-press at the end of the pre-filled message</strong>
           </li>
           <li>
-            Tap <em>Paste</em> — the full problem summary will appear
+            Tap <em>Paste</em> — the Dynatrace link will be appended
           </li>
           <li>Tap <em>Send</em></li>
         </ol>
         <p className="neo-share-wa-modal-foot">
-          The WhatsApp message field will be <strong>empty</strong> when it
-          opens — that's expected. Paste delivers the full body in one go.
+          If you skip the paste step, the recipient still gets the full
+          incident summary — they just won't have the one-click link to
+          open it in Dynatrace.
         </p>
         <div className="neo-share-wa-modal-actions">
           <button
