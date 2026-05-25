@@ -10,7 +10,7 @@ import React from "react";
 import type { Problem } from "../hooks/useProblems";
 import { CopyChip } from "./CopyChip";
 import { ShareWhatsApp } from "./ShareWhatsApp";
-import { buildOfficialProblemUrl } from "../utils/dynatrace-links";
+import { buildOfficialProblemUrl, buildAppShareUrl } from "../utils/dynatrace-links";
 import { useTriggerRefresh } from "../contexts/RefreshSignalContext";
 
 interface Props {
@@ -49,11 +49,23 @@ export const ProblemActions: React.FC<Props> = ({ problem, sort, onSortChange, d
       <span className="neo-row-act-share" title="Share via WhatsApp">
         <ShareWhatsApp problem={problem} />
       </span>
+      {/* "Share link" — copies a deep-link straight to THIS problem
+          inside our app (tenant root + `/ui/apps/<self>?focus=<id>`).
+          Falls back to the current browser URL when
+          buildAppShareUrl returns null (SDK unavailable / unusual
+          context). Previously we copied window.location.href
+          unconditionally, but inside the AppEngine iframe sandbox
+          that's the per-app HASHED origin (`xktbb3yiewy…`) which
+          doesn't route from outside — recipients always landed
+          nowhere. Fixed in 0.0.97. */}
       <CopyChip
-        text={typeof window !== "undefined" ? window.location.href : ""}
+        text={
+          buildAppShareUrl(problem.display_id)
+          || (typeof window !== "undefined" ? window.location.href : "")
+        }
         label="Share link"
         icon="⛓"
-        title="Copy URL for this problem"
+        title="Copy a deep-link to this problem inside Problem Lifecycle"
       />
       {officialUrl && (
         <a

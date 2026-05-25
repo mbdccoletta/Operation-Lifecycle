@@ -8,6 +8,7 @@ import {
   getCategoryLabel,
   getStatusLabel,
 } from "../utils/formatters";
+import { buildAppShareUrl } from "../utils/dynatrace-links";
 
 interface ShareWhatsAppProps {
   /** Full Problem record. The component pulls everything it needs from
@@ -23,47 +24,36 @@ interface ShareWhatsAppProps {
   problem: Problem;
 }
 
-/** Build a link to the Dynatrace tenant.
+/** Build a link to the problem inside Problem Lifecycle.
  *
- *  CRITICAL: `window.location.origin` from inside an AppEngine app
- *  returns the per-APP SANDBOX origin, e.g.
+ *  Thin wrapper around the shared `buildAppShareUrl` helper in
+ *  utils/dynatrace-links.ts so the WhatsApp share + the "Share
+ *  link" copy button (in ProblemActions.tsx) emit IDENTICAL URLs.
+ *  Single source of truth means a fix there propagates to both
+ *  surfaces — historically these drifted (Share link was still
+ *  using `window.location.href` while WhatsApp had switched to
+ *  `getEnvironmentUrl()` for tenant resolution, see 0.0.97).
  *
- *    https://xktbb3yiewy2q2blln7jdl7cslfg7vxv--bwm98081.prod3.apps.dynatrace.com
+ *  Falls back to the tenant ROOT when displayId is missing —
+ *  better than a dangling /focus= deep-link that 404s. The WhatsApp
+ *  body text still carries the searchable problem name in that
+ *  case so the recipient can find it manually.
  *
- *  That hashed subdomain is the iframe sandbox where this app's
- *  bundle is served — NOT the user-facing tenant URL. Sending that
- *  URL to WhatsApp guarantees a 401 because the sandbox host doesn't
- *  serve the OAuth flow; only the tenant URL does. That's why every
- *  attempt with `window.location.origin` failed.
- *
- *  `getEnvironmentUrl()` from the AppEngine SDK returns the real
- *  tenant URL (e.g. `https://bwm98081.apps.dynatrace.com`) regardless
- *  of whether the code runs inside the sandbox iframe. THAT URL is
- *  the OAuth-aware entry point: unauthenticated requests get a
- *  proper HTML redirect to the login page.
- *
- *  Even so, the link will still fail INSIDE WhatsApp's iOS in-app
- *  browser (WKWebView), because WKWebView is sandboxed away from
- *  the system browser's Dynatrace SSO cookie. The "📱 Tip" line in
- *  `buildEncodedText` instructs the recipient to open the message
- *  in Safari/Chrome where the cookie does exist. */
+ *  WhatsApp-specific caveat: even with the tenant URL, the link
+ *  still fails INSIDE WhatsApp's iOS in-app browser (WKWebView,
+ *  no SSO cookie). The "📱 Tip" line in `buildEncodedText` tells
+ *  the recipient to open the link in Safari/Chrome where the
+ *  cookie does exist. */
 function buildProblemLink(displayId: string | undefined): string | null {
+  const url = buildAppShareUrl(displayId);
+  if (url) return url;
+  // Fallback path — no displayId. Emit the tenant root so the
+  // WhatsApp body at least has a recovery URL to the launcher.
   try {
     const base = getEnvironmentUrl();
     if (!base) return null;
     const root = base.endsWith("/") ? base.slice(0, -1) : base;
-    // Deep-link to the specific problem inside this app. Overview.tsx
-    // honours `?focus=P-####` and on bootstrap pins / expands / scrolls
-    // to the matching row (see Overview.tsx lines ~1810). The OAuth
-    // redirect chain preserves the query string across the login bounce,
-    // so even an unauthenticated recipient lands directly on the right
-    // problem after they sign in.
-    //
-    // Fall back to the tenant ROOT when displayId is missing — better
-    // than a dangling deep-link that 404s. The body text still carries
-    // the searchable problem name in that case.
-    if (!displayId) return `${root}/`;
-    return `${root}/ui/apps/my.problems.hub?focus=${encodeURIComponent(displayId)}`;
+    return `${root}/`;
   } catch {
     return null;
   }

@@ -1,5 +1,41 @@
 import { getAppLink } from "@dynatrace-sdk/navigation";
+import { getEnvironmentUrl } from "@dynatrace-sdk/app-environment";
 import type { Problem } from "../hooks/useProblems";
+
+// ID of THIS app (Problem Lifecycle). Used by buildAppShareUrl to
+// construct a deep-link back to ourselves with `?focus=P-####`.
+// Keep this in sync with `app.id` in app.config.json.
+const SELF_APP_ID = "my.problems.hub";
+
+/** Build a deep-link to OUR app focused on the given problem.
+ *
+ *  Used by the "Share link" copy button and by the WhatsApp share
+ *  flow — anywhere we want the recipient to land on this exact
+ *  problem inside Problem Lifecycle (not the native Davis app, not
+ *  the launcher root).
+ *
+ *  Critical detail: we MUST use `getEnvironmentUrl()` for the host,
+ *  not `window.location.origin`. Inside the AppEngine iframe
+ *  sandbox, `window.location.origin` is the per-app hashed origin
+ *  (e.g. `xktbb3yiewy...prod3.apps.dynatrace.com`) — that URL is
+ *  internal and DOESN'T route from outside. The user-visible tenant
+ *  URL is what we need (`bwm98081.apps.dynatrace.com`), and only
+ *  the SDK exposes it. This bit users in 0.0.66 when the WhatsApp
+ *  share kept landing on a sandbox URL the recipient couldn't open;
+ *  the Share link button had the same bug until 0.0.97 — see the
+ *  TIMEZONE CONVENTION docblock pattern in utils/formatters.ts for
+ *  why we centralise this. */
+export function buildAppShareUrl(displayId: string | undefined): string | null {
+  if (!displayId) return null;
+  try {
+    const base = getEnvironmentUrl();
+    if (!base) return null;
+    const root = base.endsWith("/") ? base.slice(0, -1) : base;
+    return `${root}/ui/apps/${SELF_APP_ID}?focus=${encodeURIComponent(displayId)}`;
+  } catch {
+    return null;
+  }
+}
 
 // App ID of the official Dynatrace problems app. Stable across tenants.
 const DAVIS_PROBLEMS_APP_ID = "dynatrace.davis.problems";
