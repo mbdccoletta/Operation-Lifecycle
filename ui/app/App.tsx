@@ -13,6 +13,7 @@ import { ErrorBoundary, installGlobalErrorHandlers } from "./components/ErrorBou
 // boundary mechanism would otherwise miss. Idempotent.
 installGlobalErrorHandlers();
 import { DebugScenarioPanel } from "./components/DebugScenarioPanel";
+import { getEnvironmentUrl } from "@dynatrace-sdk/app-environment";
 import { TimeRangeProvider } from "./hooks/useTimeRange";
 import { CategoryFilterProvider } from "./contexts/CategoryFilterContext";
 import { RefreshSignalProvider } from "./contexts/RefreshSignalContext";
@@ -176,25 +177,54 @@ const AppContent = () => {
   );
 };
 
-/** URL-gated wrapper around <DebugScenarioPanel/>.
+/** Tenant id of the dev/demo tenant. The panel is ALWAYS visible
+ *  there, regardless of URL params — that's the only tenant where
+ *  we expect to be presenting / iterating on scenarios, so making
+ *  the team type `?scenarios=demo` every time would just be friction.
+ *  Any OTHER tenant (production customer deploys, internal staging,
+ *  whatever) still needs the explicit `?scenarios=demo` URL param. */
+const DEV_TENANT_FRAGMENT = "bwm98081";
+
+/** URL-gated (or tenant-gated) wrapper around <DebugScenarioPanel/>.
  *
  *  Production deploys default to no scenario picker visible — the
  *  panel is the ONLY way to switch away from "real" data, so when
  *  it's hidden the app behaves like a build without any debug
- *  scaffolding. Demo presenters / developers enable it by appending
- *  `?scenarios=demo` to any URL in the app (e.g.
- *  `…/ui/apps/my.problems.hub?scenarios=demo`). The param survives
- *  React Router navigation between pages because every other
- *  setSearchParams call merges into the existing search instead of
- *  replacing it.
+ *  scaffolding.
+ *
+ *  Gate logic (first match wins):
+ *    1. Running on the bwm98081 dev tenant → panel ALWAYS visible.
+ *       getEnvironmentUrl() returns the tenant URL (e.g.
+ *       https://bwm98081.apps.dynatrace.com) regardless of whether
+ *       the app is currently inside the AppEngine iframe sandbox.
+ *    2. URL contains `?scenarios=demo`              → panel visible.
+ *    3. Otherwise                                    → panel hidden.
+ *
+ *  The hook is reactive — toggling the URL param toggles the panel
+ *  without a reload (useSearchParams returns the live value). The
+ *  tenant check runs once per render via getEnvironmentUrl(); cheap
+ *  enough that we don't need to memoize.
  *
  *  We keep the gate at this layer (App.tsx, around the panel) rather
  *  than inside DebugScenarioPanel itself so the panel module stays
  *  pure UI and the policy lives in one obvious place. */
 const DemoPanelGate: React.FC = () => {
   const [searchParams] = useSearchParams();
-  const enabled = searchParams.get("scenarios") === "demo";
-  if (!enabled) return null;
+
+  // Tenant gate — bwm98081 always shows the panel. If
+  // getEnvironmentUrl throws (rare; happens when the Dynatrace
+  // runtime isn't available — e.g. when running this code in tests
+  // / Storybook), fall through to the URL-param gate.
+  let isDevTenant = false;
+  try {
+    const tenantUrl = getEnvironmentUrl() || "";
+    isDevTenant = tenantUrl.includes(DEV_TENANT_FRAGMENT);
+  } catch {
+    /* fall through */
+  }
+
+  const urlEnabled = searchParams.get("scenarios") === "demo";
+  if (!isDevTenant && !urlEnabled) return null;
   return <DebugScenarioPanel />;
 };
 
