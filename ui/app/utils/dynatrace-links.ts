@@ -113,3 +113,72 @@ export function openOfficialProblem(problem: Problem | string): void {
 // Davis app doesn't declare a matching intent, so we render an
 // `<a href={buildOfficialProblemUrl(problem)} target="_blank">`
 // instead, which the sandbox lets through via `allow-popups`.)
+
+/** App IDs for the two focussed Davis surfaces we link to on mobile
+ *  (where the full native Davis Problems page renders with a broken
+ *  layout — see ProblemActions.tsx mobile branch for the user
+ *  rationale).
+ *
+ *  Both IDs are best-effort against the modern Davis app suite. If
+ *  a tenant doesn't have one of these apps installed,
+ *  buildXxxUrl below returns `null` and the caller skips rendering
+ *  the corresponding button. */
+const PROBLEM_GRAPH_APP_ID = "dynatrace.davis.problems"; // graph view of Davis Problems (?view=graph)
+const DAVIS_COPILOT_APP_ID = "dynatrace.davis.copilot";  // AI explainer (Davis CoPilot)
+
+/** Build a deep-link to the "Problem graph" view inside the modern
+ *  Davis Problems app. Same root URL as `buildOfficialProblemUrl`
+ *  but appends `?view=graph` so the topology tab is selected on
+ *  arrival. Works around the broken mobile layout of the default
+ *  /problem/<id> entry point — the graph view renders cleanly on
+ *  small viewports because it's mostly canvas, not text-heavy
+ *  paragraphs. */
+export function buildProblemGraphUrl(problem: Problem | string): string | null {
+  const base = buildOfficialProblemUrl(problem);
+  if (!base) return null;
+  const u = new URL(base);
+  u.searchParams.set("view", "graph");
+  return u.toString();
+}
+
+/** Build a deep-link to Davis CoPilot with the problem context
+ *  pre-loaded. CoPilot's AI then explains the problem in plain
+ *  language — the user can read it directly without ever opening
+ *  the native Davis Problems detail page.
+ *
+ *  Returns `null` when the CoPilot app isn't installed in the
+ *  tenant (e.g. lower DPS tiers where Davis CoPilot is gated by
+ *  licence). Caller renders no button in that case. */
+export function buildExplainProblemUrl(problem: Problem | string): string | null {
+  const isObj = typeof problem !== "string";
+  // Cast via `unknown` first — Problem's narrow shape doesn't index
+  // by arbitrary string, and we need to probe both the canonical
+  // `davis_problem_id` and the legacy `event.id` (some tenants /
+  // SDK versions hand back one but not the other).
+  const rec: Record<string, unknown> = isObj
+    ? (problem as unknown as Record<string, unknown>)
+    : {};
+  const id =
+    (rec.davis_problem_id as string | undefined)
+    || (rec["event.id"] as string | undefined)
+    || (typeof problem === "string" ? problem : undefined);
+  if (!id) return null;
+  let rawLink: string;
+  try {
+    rawLink = getAppLink(DAVIS_COPILOT_APP_ID);
+  } catch {
+    return null;
+  }
+  const u = toCanonicalAppPath(rawLink);
+  // Append the problem id as a query param so CoPilot picks up the
+  // context. The exact param name varies across CoPilot versions —
+  // we set BOTH the canonical `context` and the legacy `problem`
+  // so the link works on a wider range of tenants without us
+  // having to feature-detect at runtime.
+  u.searchParams.set("context", `problem-${id}`);
+  u.searchParams.set("problem", id);
+  return u.toString();
+}
+// Make sure unused imports stay live for tree-shaking sanity in
+// callers that pull the new helpers but not the old ones.
+export { PROBLEM_GRAPH_APP_ID, DAVIS_COPILOT_APP_ID };
