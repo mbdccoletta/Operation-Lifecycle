@@ -8650,3 +8650,64 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   .neo-team-kpi-drill,
   .neo-team-kpi-cta { transition: none; }
 }
+
+/* ────────────────────────────────────────────────────────────────────
+ * Segments column — last cell of each row, shows the filter-segments
+ * the problem belongs to as clickable chips. Chip click toggles the
+ * page-level `segmentFilter`, narrowing the list to that segment.
+ * Membership data comes from `useSegmentMembership`, which is now
+ * loaded regardless of `groupBy` (see Overview.tsx).
+ * ──────────────────────────────────────────────────────────────────── */
+.neo-tcell-segments-head {
+  font-family: var(--neo-mono);
+  font-size: calc(10.5px * var(--neo-fs-mult, 1));
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--neo-text-3);
+  display: inline-flex;
+  align-items: center;
+}
+.neo-tcell-segments {
+  /* Match the inline display contract of the Metrics cell next to
+     it so wrapping behaviour and vertical alignment stay consistent
+     across the rightmost two columns. */
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.neo-row-segments-inline {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+}
+.neo-row-segchip {
+  appearance: none;
+  -webkit-appearance: none;
+  background: rgba(6, 182, 212, 0.10);
+  border: 1px solid rgba(6, 182, 212, 0.35);
+  color: #06B6D4;
+  border-radius: 999px;
+  padding: 2px 8px;
+  font: 600 10px var(--neo-mono);
+  letter-spacing: -0.1px;
+  cursor: pointer;
+  white-space: nowrap;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+.neo-row-segchip:hover {
+  background: rgba(6, 182, 212, 0.20);
+  border-color: rgba(6, 182, 212, 0.65);
+}
+.neo-row-segchip.is-active {
+  background: rgba(6, 182, 212, 0.32);
+  border-color: #06B6D4;
+  color: #67E8F9;
+  box-shadow: 0 0 0 1px rgba(6, 182, 212, 0.55);
+}

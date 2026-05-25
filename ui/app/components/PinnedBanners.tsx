@@ -60,6 +60,14 @@ export interface PinnedBannersProps {
 
   stuckHoursFilter: number | null;
   onClearStuckHoursFilter: () => void;
+
+  /** Segment drilldown — uid of the segment narrowing the list.
+   *  `segmentName` is the resolved display name (the host looks it
+   *  up via `segNameByUid` and passes it in); fall back to the uid
+   *  when the catalog hasn't loaded yet. */
+  segmentFilter?: string | null;
+  segmentName?: string | null;
+  onClearSegmentFilter?: () => void;
 }
 
 export const PinnedBanners: React.FC<PinnedBannersProps> = ({
@@ -74,6 +82,9 @@ export const PinnedBanners: React.FC<PinnedBannersProps> = ({
   onClearStatusFilter,
   stuckHoursFilter,
   onClearStuckHoursFilter,
+  segmentFilter,
+  segmentName,
+  onClearSegmentFilter,
 }) => {
   // The pinned-problem banner has no leading dot in the original
   // markup, so we render it with an undefined background style.
@@ -152,6 +163,19 @@ export const PinnedBanners: React.FC<PinnedBannersProps> = ({
     />
   ) : null;
 
+  // Segment drilldown — uid → friendly name resolved by the host
+  // (using segNameByUid). Cyan dot to match the cool-tone palette
+  // segments use elsewhere (Strato SegmentSelector chip).
+  const segmentSection = segmentFilter && onClearSegmentFilter ? (
+    <BannerRow
+      label="Segment"
+      id={segmentName || segmentFilter}
+      dotColor="#06B6D4"
+      onClear={onClearSegmentFilter}
+      clearTitle="Show problems from every segment again"
+    />
+  ) : null;
+
   return (
     <>
       {pinnedSection}
@@ -159,6 +183,7 @@ export const PinnedBanners: React.FC<PinnedBannersProps> = ({
       {rceSection}
       {statusSection}
       {stuckSection}
+      {segmentSection}
     </>
   );
 };

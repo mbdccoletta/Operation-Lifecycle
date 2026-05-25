@@ -628,6 +628,14 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
     if (typeof window === "undefined") return null;
     return new URLSearchParams(window.location.search).get("rce");
   });
+  /** Segment drilldown from the Trends page Top Segments card OR
+   *  from a chip click in the Incidents list's Segments column. Same
+   *  pattern as `entityFilter`/`rceFilter`. URL: `?segment=<uid>`.
+   *  Lazy-init from URL so the filter applies before first render. */
+  const [segmentFilter, setSegmentFilter] = useState<string | null>(() => {
+    if (typeof window === "undefined") return null;
+    return new URLSearchParams(window.location.search).get("segment");
+  });
   /** When set, the list collapses to show ONLY this problem — driven by
    *  selecting a dot in the constellation. A banner at the top of the
    *  list lets the user clear it and see the full set again. */
@@ -1055,17 +1063,27 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
   }, [segCatalog]);
 
   const segmentUidsToQuery = useMemo(() => {
-    if (groupBy !== "segment") return [] as string[];
+    // We always probe the top-N segments (capped at
+    // MAX_SEGMENTS_TO_RANK = 30) so the Incidents list can render a
+    // Segments column AND honour `?segment=<uid>` drilldowns from
+    // the Trends page. Earlier this was gated behind
+    // `groupBy === "segment"` to save DPS, but downstream features
+    // (Segments column, Top Segments drilldown) need membership data
+    // regardless of grouping mode.
+    //
     // Skip parameterised segments — those that declare required
     // variables can't be applied without bindings the user must
     // supply, so DQL rejects the auto-membership probe with
     // FILTER_SEGMENT_REQUIRES_VARIABLE. Only include "static"
     // segments (no `variables` field on the lean record).
+    //
+    // Cost: ≤30 cheap queries with 5-min cache (DPS Tier 2). Adds
+    // ~150 ms to first load on cold cache; near-zero on warm.
     return segCatalog
       .filter((s) => !(s as { variables?: unknown }).variables)
       .slice(0, MAX_SEGMENTS_TO_RANK)
       .map((s) => s.uid);
-  }, [groupBy, segCatalog]);
+  }, [segCatalog]);
   const { membership: realSegMembership, loading: realSegMembershipLoading } =
     useSegmentMembership(simSegMembership !== null ? [] : segmentUidsToQuery, problemsFilter);
   const segMembership        = simSegMembership !== null ? simSegMembership : realSegMembership;
@@ -1580,6 +1598,19 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
     if (rceFilter) {
       out = out.filter((p) => p.root_cause_entity_id === rceFilter);
     }
+    // Segment drilldown — narrow to problems whose membership map
+    // contains the selected segment uid. Driven from the Top
+    // Segments card on the Trends page OR a chip click in the
+    // Incidents list's Segments column. The membership data comes
+    // from useSegmentMembership (already loaded above for the new
+    // Segments column). When membership is empty (loading) the
+    // filter returns empty list — same UX as other drilldowns.
+    if (segmentFilter) {
+      out = out.filter((p) => {
+        const segs = segMembership.get(p.display_id);
+        return segs ? segs.has(segmentFilter) : false;
+      });
+    }
     // Drilldown range filter — when `selectedRange` is set (chart
     // bucket-click, metric-dot-click, or pulse-chart brush), narrow
     // the list to problems that were ACTIVE DURING that window —
@@ -1629,7 +1660,7 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
       });
     }
     return out;
-  }, [sorted, searchDebounced, catFilter, pinnedProblemId, groupBy, segMembership, resolveGrouping, metricFilter, perProblem, selectedRange, entityFilter, rceFilter, statusFilter, stuckHoursFilter]);
+  }, [sorted, searchDebounced, catFilter, pinnedProblemId, groupBy, segMembership, resolveGrouping, metricFilter, perProblem, selectedRange, entityFilter, rceFilter, segmentFilter, statusFilter, stuckHoursFilter]);
 
   const entityCount = useMemo(() => {
     const set = new Set<string>();
@@ -1842,6 +1873,8 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
     // so refresh / share keeps the visible filter.
     if (entityFilter) next.set("entity", entityFilter); else next.delete("entity");
     if (rceFilter)    next.set("rce",    rceFilter);    else next.delete("rce");
+    // Segment drilldown — same propagation pattern.
+    if (segmentFilter) next.set("segment", segmentFilter); else next.delete("segment");
     // AT A GLANCE drilldown filters — same propagation pattern.
     if (statusFilter)        next.set("status", statusFilter);            else next.delete("status");
     if (stuckHoursFilter !== null) next.set("stuck", String(stuckHoursFilter)); else next.delete("stuck");
@@ -1851,7 +1884,7 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
     const b = searchParams.toString();
     if (a !== b) setSearchParams(next, { replace: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [viewMode, dataMode, timeframe, catFilter, metricFilter, entityFilter, rceFilter, statusFilter, stuckHoursFilter]);
+  }, [viewMode, dataMode, timeframe, catFilter, metricFilter, entityFilter, rceFilter, segmentFilter, statusFilter, stuckHoursFilter]);
 
   // Clicking on a quadrant's HEADER drills into the LIST. When the
   // clicked category is one of several leaders (multiple ★ TOP / ▲ UP
@@ -2355,6 +2388,9 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
             onClearStatusFilter={() => setStatusFilter(null)}
             stuckHoursFilter={stuckHoursFilter}
             onClearStuckHoursFilter={() => setStuckHoursFilter(null)}
+            segmentFilter={segmentFilter}
+            segmentName={segmentFilter ? (segNameByUid[segmentFilter] || segmentFilter) : null}
+            onClearSegmentFilter={() => setSegmentFilter(null)}
           />
           {/* ── Row 1: search · actions · sort · count ── */}
           <div className="neo-list-actions">
@@ -2545,6 +2581,13 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
                 <span className="neo-tcell neo-tcell-metrics-head" role="columnheader">
                   <span className="neo-th-label">Metrics</span>
                 </span>
+                {/* Segments column header — shows the filter segments
+                    each problem belongs to (chips). Not sortable
+                    (multi-value cell). Clicking a chip narrows the
+                    list via the `segmentFilter` state. */}
+                <span className="neo-tcell neo-tcell-segments-head" role="columnheader">
+                  <span className="neo-th-label">Segments</span>
+                </span>
               </div>
 
               {filtered.slice(0, MAX_RENDER_ROWS).map((problem) => {
@@ -2712,6 +2755,42 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
                             <span className="neo-row-metrics-inline">
                               {defined.map(({ key, ms, label, color }) => (
                                 <MetricChip key={key} label={label} ms={ms} color={color} />
+                              ))}
+                            </span>
+                          );
+                        })()}
+                      </span>
+                      {/* Segments column cell — list of filter
+                          segments the problem belongs to. Clicking
+                          a chip activates the segment drilldown
+                          filter for the whole list (mirrors how the
+                          Top Segments card on Trends drills in).
+                          stopPropagation so the row's own click
+                          (focus / expand) doesn't fire. */}
+                      <span className="neo-tcell neo-tcell-segments" data-column="segments">
+                        {(() => {
+                          const segs = segMembership.get(problem.display_id);
+                          if (!segs || segs.size === 0) {
+                            return <span className="neo-tempty">—</span>;
+                          }
+                          const items = Array.from(segs)
+                            .map((uid) => ({ uid, name: segNameByUid[uid] || uid }))
+                            .sort((a, b) => a.name.localeCompare(b.name));
+                          return (
+                            <span className="neo-row-segments-inline">
+                              {items.map(({ uid, name }) => (
+                                <button
+                                  key={uid}
+                                  type="button"
+                                  className={`neo-row-segchip${segmentFilter === uid ? " is-active" : ""}`}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setSegmentFilter(segmentFilter === uid ? null : uid);
+                                  }}
+                                  title={`Filter list to segment "${name}"`}
+                                >
+                                  {name}
+                                </button>
                               ))}
                             </span>
                           );

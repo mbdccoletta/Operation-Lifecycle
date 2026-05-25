@@ -113,8 +113,15 @@ export const TopSegmentsByCategory: React.FC<Props> = ({
             type="button"
             className="neo-topsegs-row"
             role="listitem"
-            onClick={() => navigate("/segments")}
-            title={`${r.name} · ${r.total} problemas (${r.active} ativos)`}
+            /* Drill into the Incidents list, filtered to problems
+               belonging to this segment. The previous target
+               (/segments) led to a now-hidden grouped view —
+               clicking ended up on a dead page. The Incidents drill
+               is what the user wants: see the actual problems behind
+               the number. URL contract `?segment=<uid>` is parsed
+               at Overview mount (lazy useState). */
+            onClick={() => navigate(`/?view=list&segment=${encodeURIComponent(r.uid)}`)}
+            title={`${r.name} · ${r.total} problemas (${r.active} ativos) — click to drill into the list`}
           >
             <span className="neo-topsegs-rank">{idx + 1}</span>
             <span className="neo-topsegs-icon" aria-hidden="true">◇</span>
