@@ -116,7 +116,7 @@ function getSeverity(start: string): "crit" | "warn" | "ok" {
   return "ok";
 }
 
-type SortMode = "urgency" | "newest" | "oldest" | "duration" | "impact" | "segment";
+type SortMode = "urgency" | "newest" | "oldest" | "duration" | "impact" | "segment" | "entity";
 type ConstellationMode = "rising" | "open_time" | "criticality" | "total";
 
 // Picking a sort order in the list view also tells the constellation
@@ -139,6 +139,10 @@ const SORT_TO_SHOW = {
   // canvas still has SOMETHING to render when the user picks
   // "Segment" while viewing the constellation in another tab.
   segment:  "total",
+  // Same reasoning as "segment" — entity grouping is a list-only
+  // concept (the constellation already bins by category quadrants,
+  // there's no entity-level rendering).
+  entity:   "total",
 } as const satisfies Record<SortMode, ConstellationMode>;
 
 // Mirrors the constellation's leader logic, parameterised by the
@@ -1546,14 +1550,32 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
           if (bv === null) return -1;
           return av.localeCompare(bv);
         }
+        case "entity": {
+          // Alphabetical by first affected-entity name (falling back
+          // to the entity id when the name lookup is null). Rows
+          // with no affected entities sink to the bottom — they
+          // can't usefully participate in entity-grouped triage.
+          const firstEntName = (p: Problem) => {
+            const ids = p.affected_entity_ids;
+            if (!ids || ids.length === 0) return null;
+            const names = p.affected_entity_names || [];
+            return (names[0] || ids[0] || "").toLowerCase();
+          };
+          const av = firstEntName(a);
+          const bv = firstEntName(b);
+          if (!av && !bv) return 0;
+          if (!av) return 1;
+          if (!bv) return -1;
+          return av.localeCompare(bv);
+        }
         case "urgency":
         default:         return getUrgencyScore(b) - getUrgencyScore(a);
       }
     };
-    // In segment mode, mix actives + resolved together so the
-    // per-segment groupings are contiguous. Other modes keep the
-    // canonical active-first split for at-a-glance triage.
-    if (sortMode === "segment") {
+    // Grouping modes (segment / entity) mix actives + resolved
+    // together so the per-group cohorts are contiguous. Other modes
+    // keep the canonical active-first split for at-a-glance triage.
+    if (sortMode === "segment" || sortMode === "entity") {
       return [...problems].sort(cmp);
     }
     const a = [...active].sort(cmp);
@@ -2476,6 +2498,7 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
               <option value="duration">Longest duration</option>
               <option value="impact">Highest impact</option>
               <option value="segment">Segment (grouped)</option>
+              <option value="entity">Affected entity (grouped)</option>
             </select>
             <span className="neo-list-count" aria-live="polite">
               <strong>{filtered.length}</strong>
@@ -2649,27 +2672,41 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
               </div>
 
               {(() => {
-                /* Section-divider helper for the "group by segment"
-                   mode. Closure state (a ref-equivalent via local let)
-                   tracks the previous problem's first-segment name so
+                /* Section-divider helper for the two grouping modes:
+                   "segment" and "entity". Closure state (local let)
+                   tracks the previous group label across iterations so
                    the renderer can inject a `<div class="neo-tgroup">`
-                   header whenever the value changes. Only active when:
-                     • Sort dropdown is "segment", OR
-                     • Column header sort key is "segments"
-                   Outside those modes the closure is dormant and the
+                   header whenever the value changes. Each mode
+                   resolves its label via a different lookup:
+                     • segment → first alpha segment name via
+                       segMembership / segNameByUid
+                     • entity  → first affected-entity name (or id)
+                   Outside both modes the closure is dormant and the
                    render is identical to the previous behaviour. */
-                const groupBySegment = sortMode === "segment" || colSort?.key === "segments";
-                let prevSegLabel: string | null = null;
-                const firstSegName = (p: Problem): string => {
-                  const s = segMembership.get(p.display_id);
-                  if (!s || s.size === 0) return "(no segment)";
-                  const names = Array.from(s).map((uid) => segNameByUid[uid] || uid).sort();
-                  return names[0];
+                const groupingMode: "segment" | "entity" | null =
+                  (sortMode === "segment" || colSort?.key === "segments") ? "segment" :
+                  (sortMode === "entity") ? "entity" :
+                  null;
+                let prevGroupLabel: string | null = null;
+                const groupLabelFor = (p: Problem): string => {
+                  if (groupingMode === "segment") {
+                    const s = segMembership.get(p.display_id);
+                    if (!s || s.size === 0) return "(no segment)";
+                    const names = Array.from(s).map((uid) => segNameByUid[uid] || uid).sort();
+                    return names[0];
+                  }
+                  if (groupingMode === "entity") {
+                    const ids = p.affected_entity_ids;
+                    if (!ids || ids.length === 0) return "(no affected entity)";
+                    const names = p.affected_entity_names || [];
+                    return names[0] || ids[0] || "(unknown)";
+                  }
+                  return "";
                 };
                 const renderRow = (problem: Problem) => {
-                const segLabel = groupBySegment ? firstSegName(problem) : null;
-                const showDivider = groupBySegment && segLabel !== prevSegLabel;
-                if (groupBySegment) prevSegLabel = segLabel;
+                const segLabel = groupingMode ? groupLabelFor(problem) : null;
+                const showDivider = groupingMode != null && segLabel !== prevGroupLabel;
+                if (groupingMode) prevGroupLabel = segLabel;
                 const isActive   = problem["event.status"] === "ACTIVE";
                 const catColor   = colorForGrouping(resolveGrouping(problem));
                 const sevLabel   = getSeverityLevel(problem);
