@@ -8826,21 +8826,52 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   margin: 0 0 10px;
   color: var(--neo-text, #fff);
 }
-.neo-share-wa-modal-body {
-  font: 400 14px/1.5 var(--neo-sans);
+.neo-share-wa-modal-intro,
+.neo-share-wa-modal-foot {
+  font: 400 13.5px/1.5 var(--neo-sans);
   color: var(--neo-text-2, #c2cad8);
-  margin: 0 0 22px;
+  margin: 0 0 14px;
   text-align: left;
 }
-.neo-share-wa-modal-body strong {
+.neo-share-wa-modal-foot {
+  font-size: 12.5px;
+  color: var(--neo-text-3, #8e98ac);
+  margin-bottom: 18px;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 8px;
+  border-left: 3px solid #25D366;
+}
+.neo-share-wa-modal-steps {
+  list-style: decimal;
+  margin: 0 0 16px;
+  padding: 0 0 0 22px;
+  font: 400 14px/1.6 var(--neo-sans);
+  color: var(--neo-text-2, #c2cad8);
+  text-align: left;
+}
+.neo-share-wa-modal-steps li {
+  padding-left: 4px;
+  margin-bottom: 4px;
+}
+.neo-share-wa-modal-steps li::marker {
+  color: #25D366;
+  font-weight: 600;
+}
+.neo-share-wa-modal-intro strong,
+.neo-share-wa-modal-foot strong,
+.neo-share-wa-modal-steps strong {
   font-weight: 600;
   color: var(--neo-text, #fff);
 }
-.neo-share-wa-modal-body em {
+.neo-share-wa-modal-intro em,
+.neo-share-wa-modal-foot em,
+.neo-share-wa-modal-steps em {
   font-style: normal;
   font-weight: 600;
   padding: 1px 6px;
-  background: rgba(255, 255, 255, 0.14);
+  background: rgba(37, 211, 102, 0.18);
+  color: #4adc8a;
   border-radius: 4px;
   white-space: nowrap;
 }

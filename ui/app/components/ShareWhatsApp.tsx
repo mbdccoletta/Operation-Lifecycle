@@ -269,23 +269,24 @@ export const ShareWhatsApp: React.FC<ShareWhatsAppProps> = ({ problem }) => {
  *  recipient gets the deep-link. */
 const MobileShareButton: React.FC<{ messageText: string; problemUrl: string | null }> = ({
   messageText,
-  problemUrl,
+  // problemUrl is intentionally unused now — we used to pre-fill the
+  // WhatsApp compose with it, but the clipboard body ALREADY contains
+  // the URL, so paste-after-pre-fill produced duplicate links in the
+  // sent message (confirmed by user in 0.0.74 testing). We open
+  // WhatsApp with empty compose so paste lands the full body cleanly
+  // with one and only one URL.
+  problemUrl: _problemUrl,
 }) => {
   // `clipboardReady` controls the confirmation modal. We show it
   // AFTER the clipboard write succeeds and BEFORE opening WhatsApp,
   // so the user always sees the "paste in WhatsApp" instructions
-  // and explicitly acknowledges before leaving the app. Previous
-  // attempts used an auto-dismissing toast — but users were
-  // already inside WhatsApp by the time the toast appeared, and
-  // skipped the paste step entirely. A blocking modal forces the
-  // instruction to land.
+  // and explicitly acknowledges before leaving the app.
   const [clipboardReady, setClipboardReady] = useState(false);
-  // The URL scheme used to open WhatsApp. When we have a deep-link
-  // URL, pre-fill the compose with it so the user gets SOMETHING in
-  // the message even if they skip the paste step.
-  const whatsappHref = problemUrl
-    ? `whatsapp://send?text=${encodeURIComponent(problemUrl)}`
-    : "whatsapp://send";
+  // Empty `text=` param invokes WhatsApp's share-intent flow (contact
+  // picker → compose) but leaves the compose blank — so when the user
+  // pastes the clipboard body (which contains the URL inline), the
+  // resulting message has exactly ONE copy of the link.
+  const whatsappHref = "whatsapp://send?text=";
 
   const openWhatsapp = () => {
     setClipboardReady(false);
@@ -421,15 +422,26 @@ const PasteInstructionsModal: React.FC<{
       >
         <div className="neo-share-wa-modal-icon" aria-hidden="true">📋</div>
         <h3 id="neo-share-wa-modal-title" className="neo-share-wa-modal-title">
-          Details copied to clipboard
+          Problem details copied to clipboard
         </h3>
-        <p className="neo-share-wa-modal-body">
-          WhatsApp will open with the problem link pre-filled.{" "}
-          <strong>
-            Long-press the message field and tap <em>Paste</em>
-          </strong>{" "}
-          to include the full incident summary (problem name, severity, timing,
-          affected entities, root cause) alongside the link before sending.
+        <p className="neo-share-wa-modal-intro">
+          The full incident summary (name, ID, severity, timing, affected
+          entities, root cause, and link) is now on your clipboard. After tapping{" "}
+          <strong>Open WhatsApp</strong>, follow these steps:
+        </p>
+        <ol className="neo-share-wa-modal-steps">
+          <li>Pick a contact or group</li>
+          <li>
+            <strong>Long-press the empty message field</strong>
+          </li>
+          <li>
+            Tap <em>Paste</em> — the full problem summary will appear
+          </li>
+          <li>Tap <em>Send</em></li>
+        </ol>
+        <p className="neo-share-wa-modal-foot">
+          The WhatsApp message field will be <strong>empty</strong> when it
+          opens — that's expected. Paste delivers the full body in one go.
         </p>
         <div className="neo-share-wa-modal-actions">
           <button
