@@ -1,11 +1,25 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useDevice } from "../hooks/useDevice";
+import type { Problem } from "../hooks/useProblems";
+import {
+  formatStartedDate,
+  formatDuration,
+  getCategoryLabel,
+  getStatusLabel,
+} from "../utils/formatters";
 
 interface ShareWhatsAppProps {
-  problemName: string;
-  status: string;
-  category: string;
-  displayId?: string;
+  /** Full Problem record. The component pulls everything it needs from
+   *  here so the receiving WhatsApp message can carry the WHOLE incident
+   *  context as plain text — name, severity, timing, affected entities,
+   *  root cause — not just a link.
+   *
+   *  Why the whole object: WhatsApp's in-app browser can't follow the
+   *  Dynatrace OAuth flow (WKWebView doesn't carry the system browser's
+   *  SSO cookie), so the link often fails for the recipient. The text
+   *  body has to stand on its own as a complete incident summary that
+   *  any on-call engineer can act on without ever opening the URL. */
+  problem: Problem;
 }
 
 /** Build a link to the Dynatrace tenant.
@@ -25,36 +39,116 @@ interface ShareWhatsAppProps {
  *  recipient to open the link in their SYSTEM browser instead of
  *  WhatsApp's embedded one. That instruction is rendered as the
  *  "📱 Tip" line in `buildEncodedText` below. */
-function buildProblemLink(displayId: string | undefined): string | null {
-  if (!displayId) return null;
+function buildProblemLink(): string | null {
   if (typeof window === "undefined") return null;
   const { origin } = window.location;
   return `${origin}/`;
 }
 
+/** Severity → human label. Davis stores severity as a string "1".."5"
+ *  on `event.severity` (higher = more critical). The list view doesn't
+ *  surface it prominently, but when the recipient can't open the link
+ *  it's the single most useful piece of context — a P1 reads very
+ *  differently from a P5. We render both the number and a one-word
+ *  label so the message is parseable without Davis knowledge. */
+function severityLine(sev: string | undefined): string | null {
+  if (!sev) return null;
+  const n = Number.parseInt(sev, 10);
+  if (!Number.isFinite(n)) return `Severity: ${sev}`;
+  const label =
+    n <= 1 ? "Critical" :
+    n === 2 ? "High" :
+    n === 3 ? "Medium" :
+    n === 4 ? "Low" :
+              "Informational";
+  return `Severity: ${n} (${label})`;
+}
+
+/** Bullet list of affected entities. Pairs ids with names; falls back
+ *  to a shortened id when name is missing. Caps at 5 lines + a "+N more"
+ *  rollup so the message doesn't bloat past readable length on a
+ *  high-blast-radius incident. */
+function affectedEntityLines(p: Problem): string[] {
+  const ids = p.affected_entity_ids ?? [];
+  const names = p.affected_entity_names ?? [];
+  if (ids.length === 0) return [];
+  const MAX = 5;
+  const out: string[] = [];
+  out.push(`Affected entities (${ids.length}):`);
+  const shown = Math.min(ids.length, MAX);
+  for (let i = 0; i < shown; i++) {
+    const name = names[i] && names[i]!.trim() ? names[i]! : null;
+    const id   = ids[i];
+    // Prefer the human name; show the id only when the name is missing
+    // (otherwise the line is noisy: "host-app-07  (HOST-1234…)").
+    out.push(`  • ${name ?? id}`);
+  }
+  if (ids.length > MAX) {
+    out.push(`  • +${ids.length - MAX} more`);
+  }
+  return out;
+}
+
+/** Root cause line. Optional — when Davis hasn't pinned a root cause
+ *  yet, we omit the line entirely rather than render "Root cause:
+ *  unknown" (which looks like a finding rather than missing data). */
+function rootCauseLine(p: Problem): string | null {
+  const name = p.root_cause_entity_name?.trim();
+  const id   = p.root_cause_entity_id?.trim();
+  if (!name && !id) return null;
+  return `Root cause: ${name || id}`;
+}
+
 /** Build the share-message body, escaped for the WhatsApp URL.
  *
- *  Message anatomy (in order):
- *    1. Problem facts (name, status, category, ID) — survive any
- *       browser failure; the recipient at minimum knows WHAT the
- *       incident is.
- *    2. Action prompt + URL — points at the tenant root so the
- *       OAuth flow fires for unauthenticated users.
- *    3. "📱 Tip" footer — explains how to recover from WhatsApp's
- *       in-app browser eating the auth flow. Recipient taps the
- *       ⋯ / share menu inside WhatsApp's browser and chooses
- *       "Open in Safari" (iOS) or "Open in Chrome" (Android),
- *       which DOES carry the SSO cookie. This is the only reliable
- *       cross-platform recovery — we can't force-route past
- *       WKWebView from the sender side. */
-function buildEncodedText({ problemName, status, category, displayId }: ShareWhatsAppProps): string {
-  const link = buildProblemLink(displayId);
-  const lines = [
-    `🚨 Problem: ${problemName}`,
-    `Status: ${status}`,
-    `Category: ${category}`,
-    displayId ? `ID: ${displayId}` : "",
-  ];
+ *  Message anatomy (in order, top → bottom):
+ *    1. 🚨 Problem name — single-line headline.
+ *    2. ID + status badge — searchable handle + lifecycle state.
+ *    3. Category + severity — what KIND of incident, how bad.
+ *    4. Started / Duration — temporal context (when + how long).
+ *    5. Affected entities — blast radius (up to 5 + overflow rollup).
+ *    6. Root cause — Davis's pinned cause entity, if any.
+ *    7. Action prompt + URL — tenant root so the OAuth flow fires
+ *       for unauthenticated users (when the recipient ever opens it).
+ *    8. "📱 Tip" footer — explains how to recover from WhatsApp's
+ *       in-app browser eating the auth flow.
+ *
+ *  Everything above the URL must be self-sufficient: on-call should
+ *  be able to triage off the text alone if the link is unreachable. */
+function buildEncodedText(problem: Problem): string {
+  const link = buildProblemLink();
+  const name     = problem["event.name"];
+  const status   = getStatusLabel(problem["event.status"]);
+  const category = getCategoryLabel(problem["event.category"]);
+  const sev      = severityLine(problem["event.severity"]);
+  const started  = problem["event.start"] ? formatStartedDate(problem["event.start"]) : null;
+  const duration = problem["event.start"] ? formatDuration(problem["event.start"], problem["event.end"]) : null;
+  // "Active" problems have no end → formatDuration uses Date.now(); we
+  // append "(ongoing)" so it's clear the clock is still running.
+  const durationLine =
+    duration && (problem["event.status"] === "ACTIVE" ? `Duration: ${duration} (ongoing)` : `Duration: ${duration}`);
+
+  const lines: string[] = [];
+  lines.push(`🚨 Problem: ${name}`);
+  if (problem.display_id) lines.push(`ID: ${problem.display_id}`);
+  lines.push(`Status: ${status}`);
+  lines.push(`Category: ${category}`);
+  if (sev) lines.push(sev);
+  if (started)      lines.push(`Started: ${started}`);
+  if (durationLine) lines.push(durationLine);
+
+  const affected = affectedEntityLines(problem);
+  if (affected.length > 0) {
+    lines.push("");
+    lines.push(...affected);
+  }
+
+  const rc = rootCauseLine(problem);
+  if (rc) {
+    lines.push("");
+    lines.push(rc);
+  }
+
   if (link) {
     lines.push("");
     lines.push("Open in Dynatrace (login if prompted, then search by ID in Operation Lifecycle):");
@@ -62,8 +156,8 @@ function buildEncodedText({ problemName, status, category, displayId }: ShareWha
     lines.push("");
     lines.push("📱 Tip: if the link shows an error inside WhatsApp, tap the ⋯ menu (top-right) → \"Open in Safari\" (iOS) or \"Open in Chrome\" (Android). The system browser has your Dynatrace session and will log you in normally.");
   }
-  const message = lines.filter((l, i) => l !== "" || (i > 0 && lines[i - 1] !== "")).join("\n");
-  return encodeURIComponent(message);
+
+  return encodeURIComponent(lines.join("\n"));
 }
 
 /** Send-via-WhatsApp action. Native button styling matches the other
@@ -82,9 +176,9 @@ function buildEncodedText({ problemName, status, category, displayId }: ShareWha
  *      when the user picks "Desktop"; if the app isn't installed the
  *      browser shows its own "no handler" message — better than us
  *      guessing wrong. */
-export const ShareWhatsApp: React.FC<ShareWhatsAppProps> = (props) => {
+export const ShareWhatsApp: React.FC<ShareWhatsAppProps> = ({ problem }) => {
   const { isMobileOrTablet } = useDevice();
-  const encodedText = buildEncodedText(props);
+  const encodedText = buildEncodedText(problem);
 
   // Mobile / tablet path — single anchor, OS-level Universal Link
   // routing. No state, no menu.

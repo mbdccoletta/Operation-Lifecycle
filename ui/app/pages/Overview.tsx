@@ -3013,12 +3013,7 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
                               onClick={(e) => e.stopPropagation()}
                               title="Share via WhatsApp"
                             >
-                              <ShareWhatsApp
-                                problemName={problem["event.name"]}
-                                status={getStatusLabel(problem["event.status"])}
-                                category={getCategoryLabel(problem["event.category"])}
-                                displayId={problem.display_id}
-                              />
+                              <ShareWhatsApp problem={problem} />
                             </span>
                             <CopyChip
                               text={window.location.href}

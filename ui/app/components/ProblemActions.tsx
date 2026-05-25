@@ -11,7 +11,6 @@ import type { Problem } from "../hooks/useProblems";
 import { CopyChip } from "./CopyChip";
 import { ShareWhatsApp } from "./ShareWhatsApp";
 import { buildOfficialProblemUrl } from "../utils/dynatrace-links";
-import { getCategoryLabel, getStatusLabel } from "../utils/formatters";
 import { useTriggerRefresh } from "../contexts/RefreshSignalContext";
 
 interface Props {
@@ -40,12 +39,7 @@ export const ProblemActions: React.FC<Props> = ({ problem, sort, onSortChange, d
         title="Copy problem ID"
       />
       <span className="neo-row-act-share" title="Share via WhatsApp">
-        <ShareWhatsApp
-          problemName={problem["event.name"]}
-          status={getStatusLabel(problem["event.status"])}
-          category={getCategoryLabel(problem["event.category"])}
-          displayId={problem.display_id}
-        />
+        <ShareWhatsApp problem={problem} />
       </span>
       <CopyChip
         text={typeof window !== "undefined" ? window.location.href : ""}
