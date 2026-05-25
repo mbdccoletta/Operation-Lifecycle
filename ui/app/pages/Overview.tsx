@@ -16,7 +16,7 @@ import {
   entityTypeLabel,
   shortEntityId,
 } from "../utils/formatters";
-import { buildOfficialProblemUrl } from "../utils/dynatrace-links";
+import { buildOfficialProblemUrl, buildAppShareUrl } from "../utils/dynatrace-links";
 import { ShareWhatsApp } from "../components/ShareWhatsApp";
 import { ProblemActivityFeed } from "../components/ProblemActivityFeed";
 import { MobileIncidentList } from "../components/MobileIncidentList";
@@ -3072,11 +3072,26 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
                             >
                               <ShareWhatsApp problem={problem} />
                             </span>
+                            {/* Share link — same per-problem deep-link the
+                                mobile ProblemActions.tsx variant uses
+                                (`${tenant}/ui/apps/my.problems.hub?focus=
+                                P-####`). The duplicate inline rendering
+                                here (instead of <ProblemActions/>) is
+                                legacy from before ProblemActions was
+                                extracted; the 0.0.97 fix to switch from
+                                window.location.href to buildAppShareUrl
+                                landed on ProblemActions only, missing
+                                this Overview-inline copy. 0.0.98 brings
+                                this site in line with the shared helper
+                                so both surfaces stop drifting. */}
                             <CopyChip
-                              text={window.location.href}
+                              text={
+                                buildAppShareUrl(problem.display_id)
+                                || window.location.href
+                              }
                               label="Share link"
                               icon="⛓"
-                              title="Copy URL for this problem"
+                              title="Copy a deep-link to this problem inside Problem Lifecycle"
                             />
                             {/* "Timeline" link removed in A3 of the
                                 UX consolidation — the activity feed
