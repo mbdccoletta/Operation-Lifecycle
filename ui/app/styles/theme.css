@@ -2468,7 +2468,9 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   outline-offset: -1px;
   background: var(--neo-surface-hover);
 }
-.neo-tcard-open .neo-trow { background: var(--neo-surface-hover); }
+/* (`.neo-tcard-open .neo-trow` styled in detail further down — the
+    duplicate one-liner that used to live here was superseded by the
+    multi-property rule near `.neo-row-body`.) */
 
 /* Left accent edge — category marker. Bumped from 2 px / 50 %
    alpha to 3 px / 70 % alpha + a slightly stronger glow so the
@@ -2593,10 +2595,32 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
 
 .neo-tempty { color: var(--neo-text-3); }
 
-/* When the row is expanded, square off its top borders so the body
-   visually attaches as one card and the edge bar continues down. */
+/* When the row is expanded, the "head row" (the one that stays
+   visible at the top of the expanded card) gets a distinctive
+   treatment so the user always knows WHICH row's details they're
+   looking at — even after scrolling the body. Three signals stack:
+     1. A category-tinted background (stronger than plain hover so
+        the row reads as "selected", not just "hovered").
+     2. A bumped left accent edge (4 px / 80 % alpha + brighter
+        glow — the edge already continues down into the body, so
+        boosting it ties row + body visually as one card.
+     3. Slightly heavier font weight on the row text so the eye
+        anchors to it when scanning past the expansion content
+        below.
+   The accent comes from `--neo-row-accent` which the row already
+   sets per category (Availability, Error, etc.), so the highlight
+   colour matches the problem's category by default. */
 .neo-tcard-open .neo-trow {
-  background: var(--neo-surface-hover);
+  background: color-mix(in srgb, var(--neo-row-accent) 12%, var(--neo-surface-hover));
+  box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--neo-row-accent) 35%, transparent);
+  font-weight: 500;
+}
+.neo-tcard-open .neo-tedge {
+  width: 4px;
+  background: color-mix(in srgb, var(--neo-row-accent) 90%, transparent);
+  box-shadow:
+    0 0 6px color-mix(in srgb, var(--neo-row-accent) 45%, transparent),
+    0 0 12px color-mix(in srgb, var(--neo-row-accent) 22%, transparent);
 }
 /* In the table layout the body sits flush inside a bordered table, so
    strip the body's own outer borders to avoid double lines. The neon
