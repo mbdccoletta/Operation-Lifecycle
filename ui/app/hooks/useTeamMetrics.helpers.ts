@@ -86,6 +86,52 @@ export function aggregateSeries(
   return out;
 }
 
+/** Compute the MTBF (Mean Time Between Failures) interval pairs from
+ *  a set of problems.
+ *
+ *  Formula (worked example):
+ *
+ *    Given N problem starts t₁ ≤ t₂ ≤ … ≤ tₙ sorted ascending,
+ *    the N-1 intervals are:
+ *
+ *      I[i] = t[i+1] − t[i],   for i in 1..N-1
+ *
+ *    MTBF = (Σ I[i]) / (N − 1)
+ *
+ *    Equivalent telescoping form (sum collapses):
+ *
+ *      MTBF = (t[N] − t[1]) / (N − 1)
+ *
+ *  Each output pair anchors the interval to t[i+1] so the bucketing
+ *  step in `aggregateSeries` lands the value in the bucket
+ *  containing the SECOND problem of the pair (the one whose start
+ *  the interval "ended at"). N=0 or N=1 yields an empty array
+ *  (`aggregateScalar` will return `count: 0`, `avgMs: null` for
+ *  the KPI card display).
+ *
+ *  The previous problem's status doesn't matter — MTBF measures
+ *  the cadence of FAILURES (starts), not resolutions. ACTIVE and
+ *  CLOSED problems both contribute. */
+export function computeMtbfPairs(
+  problems: Array<{ "event.start": string }>,
+): Array<{ ms: number; valueMs: number }> {
+  const starts = problems
+    .map((p) => new Date(p["event.start"]).getTime())
+    .filter((n) => Number.isFinite(n))
+    .sort((a, b) => a - b);
+  const out: Array<{ ms: number; valueMs: number }> = [];
+  for (let i = 1; i < starts.length; i++) {
+    const interval = starts[i] - starts[i - 1];
+    // Defensively skip zero / negative intervals — they shouldn't
+    // happen after the ascending sort but two problems can start
+    // at the exact same ms (we saw P-26053266/67/68 in real data),
+    // in which case the interval is 0 and we drop it so it doesn't
+    // pull the average artificially toward zero.
+    if (interval > 0) out.push({ ms: starts[i], valueMs: interval });
+  }
+  return out;
+}
+
 /** Scalar aggregate (avg / median / p95 / count) over a flat values
  *  array — the "all problems collapsed into one number" form that
  *  feeds the KPI cards above the chart. */
