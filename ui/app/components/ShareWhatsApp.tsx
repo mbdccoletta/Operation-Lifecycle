@@ -8,37 +8,36 @@ interface ShareWhatsAppProps {
   displayId?: string;
 }
 
-/** Build a deep-link to the Operation Lifecycle install for the
- *  given problem.
+/** Build a link to the Dynatrace tenant.
  *
- *  Why this URL shape:
+ *  Why the tenant ROOT (`/`) instead of the app's deep-link path:
  *
- *  Hitting the canonical app URL directly
- *  (`/ui/apps/my.problems.hub?focus=<id>`) from WhatsApp's in-app
- *  WebView on iOS fails because that browser ships WITHOUT the
- *  Dynatrace session cookie — the request goes through, Dynatrace
- *  returns a JSON 401 ("Authentication required"), and the user
- *  sees a raw error blob instead of the login redirect they'd see
- *  in Safari. User screenshot 2026-05-25.
+ *  The canonical app URL `/ui/apps/my.problems.hub?focus=<id>`
+ *  fails when opened from WhatsApp's iOS in-app browser. WKWebView
+ *  ships without the Dynatrace SSO cookie, so Dynatrace's auth
+ *  layer returns a JSON 401 ("Authentication required") instead of
+ *  the HTML redirect to login — the SPA never gets a chance to
+ *  bootstrap.
  *
- *  Workaround: target the tenant root (`https://<tenant>.apps...`).
- *  The root sets the SSO entry point properly and reliably triggers
- *  an OAuth login flow when no session is present — every Dynatrace
- *  SaaS tenant supports this. After login the user lands on the
- *  default landing page; the displayId in the message body (already
- *  there) lets them paste it into the Operation Lifecycle search.
- *  Imperfect but it doesn't 401 anymore.
+ *  The tenant ROOT URL is GUARANTEED to return HTML regardless of
+ *  the request's Accept header. Dynatrace's edge handles it as a
+ *  user-facing entry point: unauthenticated requests get redirected
+ *  to the OAuth login page, then bounced back to the launcher. The
+ *  user logs in, lands on the launcher (showing every installed
+ *  app), and can then click into Operation Lifecycle. The displayId
+ *  in the message body is the searchable handle they paste into the
+ *  list once they're inside the app.
  *
- *  We DO still append `?focus=<id>` so if the user has an active
- *  session (e.g. they open in Safari with a logged-in cookie), the
- *  redirect chain CAN preserve the query — the Operation Lifecycle
- *  bootstrap watches `?focus=` regardless of which path under the
- *  tenant root the user came in through. */
+ *  Trade-off: this loses the auto-focus deep-link (we can't
+ *  preserve `?focus=` across the auth-redirect chain in a way
+ *  Operation Lifecycle's bootstrap would honour). The message body
+ *  carries the display id and the problem name, so the user always
+ *  has the data they need to find it manually in 2-3 seconds. */
 function buildProblemLink(displayId: string | undefined): string | null {
   if (!displayId) return null;
   if (typeof window === "undefined") return null;
   const { origin } = window.location;
-  return `${origin}/ui/apps/my.problems.hub?focus=${encodeURIComponent(displayId)}`;
+  return `${origin}/`;
 }
 
 /** Build the share-message body, escaped for the WhatsApp URL. */
@@ -49,18 +48,14 @@ function buildEncodedText({ problemName, status, category, displayId }: ShareWha
     `Status: ${status}`,
     `Category: ${category}`,
     displayId ? `ID: ${displayId}` : "",
-    /* Blank line + URL on its own line so WhatsApp renders the
-       link as a tappable preview card.
-       The "Login required" line is the workaround for the iOS
-       WhatsApp in-app browser issue — it doesn't carry the SSO
-       cookie, so Dynatrace returns a JSON 401 on direct hit. If
-       the user sees that and they're confused, the line below
-       prompts them to open in Safari/Chrome (which does carry the
-       cookie) or to login. Either path lands them on the focused
-       problem; the displayId in the body above is the fallback
-       search term when the URL still won't load. */
+    /* Workflow text — explicit so the recipient knows what to do:
+       open the link, login if needed, find the problem by ID. The
+       URL points at the tenant root which always triggers the
+       OAuth flow when unauthenticated (no more JSON 401 from
+       in-app browsers — see buildProblemLink's docblock for the
+       full rationale). */
     link ? "" : "",
-    link ? "Open (Dynatrace login required — open in Safari/Chrome if it shows an auth error):" : "",
+    link ? "Open Dynatrace (login if prompted, then search by ID in Operation Lifecycle):" : "",
     link ? link : "",
   ].filter(Boolean).join("\n");
   return encodeURIComponent(message);
