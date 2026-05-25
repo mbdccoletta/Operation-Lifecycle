@@ -81,14 +81,19 @@ analytics pages:
 - **SSH key** configured on GitHub if you want SSH transport (or a
   Personal Access Token / `gh` CLI for HTTPS).
 
-### Dynatrace tenant
+### Dynatrace tenant (developer / deployer)
+
+These are the prerequisites for the **person deploying** the app —
+i.e. running `npm run deploy` from this repository.
 
 - A tenant with **AppEngine** enabled (every current SaaS tenant
   has it).
 - Tenant URL in the format `https://<tenant>.apps.dynatrace.com`
   (the `environmentUrl` field in `app.config.json`).
 - Permissions equivalent to the scopes declared in
-  `app.config.json`:
+  `app.config.json` (the deployer's OAuth token must be allowed to
+  hold these scopes so they can be validated against the manifest
+  on upload):
   - `storage:events:read` — read `dt.davis.problems`
   - `storage:system:read` — read `dt.system.events` for Automation
     Engine workflow executions
@@ -102,8 +107,77 @@ analytics pages:
   - `document:documents:write` — write comments
   - `environment-api:events:write` — ingest `CUSTOM_ANNOTATION`
     events to mirror comments into the native Davis app stream
-- A user whose role allows deploying apps to the tenant (typically
-  Administrator, or a custom role with `app:apps:install`).
+- A role that allows deploying apps to the tenant (typically
+  Administrator, or a custom role with `app-engine:apps:install`).
+
+### End-user permissions (people who USE the app after deploy)
+
+After you deploy, **end users do NOT automatically see the app**
+in their Dynatrace launcher. AppEngine apps are gated by IAM
+policies, and every user (or group) who should be able to launch
+Operation Lifecycle needs the right permissions assigned by a
+tenant admin.
+
+The minimum-viable policy that grants a user read-only access
+(view the app, see problems, read comments, see analytics):
+
+```
+ALLOW app-engine:apps:run
+  WHERE app-engine:appId = "my.problems.hub";
+ALLOW storage:events:read,
+      storage:system:read,
+      storage:entities:read,
+      storage:buckets:read,
+      storage:filter-segments:read,
+      document:documents:read;
+```
+
+To also let the user **post comments** (and have those comments
+mirror into the native Davis Problems stream), add the write
+scopes:
+
+```
+ALLOW document:documents:write,
+      environment-api:events:write;
+```
+
+How to apply this in Dynatrace:
+
+1. **Settings → Account Management → Policies** (or via Dynatrace
+   IAM API). Create a new policy named e.g.
+   `Operation Lifecycle — Read` and paste the read-only block
+   above. Create a second `Operation Lifecycle — Comment` policy
+   with the write block if you want some users to comment.
+2. **Settings → Account Management → Groups**. Either create a
+   new group (e.g. `Operation Lifecycle Users`) or pick an
+   existing one (e.g. `SREs`, `On-call`), and **bind the policies**
+   to that group on the tenant where the app is deployed.
+3. **Add users to the group(s).** Users get the permissions on
+   their next login (or right away if they refresh the Dynatrace
+   page).
+
+What goes wrong if a permission is missing:
+
+| Missing scope                       | Symptom for the end user                       |
+|-------------------------------------|------------------------------------------------|
+| `app-engine:apps:run` (for this app)| App icon missing from launcher; direct URL 403 |
+| `storage:events:read`               | Empty problem list; "No incidents found"       |
+| `storage:filter-segments:read`      | Segment Selector dropdown empty                 |
+| `storage:entities:read`             | Affected entities + Root cause cells show IDs instead of names |
+| `document:documents:read`           | Comments section blank; activity feed missing comment events |
+| `document:documents:write`          | Comment composer rejects with 403; UI shows "Davis API error" toast |
+| `environment-api:events:write`      | Comments save but DON'T mirror to native Davis Problems stream |
+| `storage:system:read`               | Automation tab on the per-problem detail is empty |
+
+Read-only users (only the first block of policies above) can still
+do 95 % of the triage workflow: see problems, drill down, view
+metrics, share via WhatsApp / link. They just can't add comments
+from inside the app.
+
+Tenant admins typically grant the FULL set (read + write) to the
+on-call / SRE group, and the read-only set to a broader audience
+(developers, product managers, etc.) who consume incident data but
+don't participate in triage.
 
 ### Local authentication (first time)
 
