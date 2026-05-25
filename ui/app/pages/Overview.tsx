@@ -472,7 +472,7 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
    *  default Sort-by dropdown order). */
   type ColumnSortKey =
     | "id" | "name" | "status" | "category" | "segment" | "affected"
-    | "entities" | "root" | "started" | "duration" | "impact"
+    | "entities" | "root" | "started" | "end" | "duration" | "impact"
     // "segments" (plural) sorts by the FIRST segment name a problem
     // belongs to, alphabetically. Distinct from "segment" (single)
     // which is the legacy sort for the hidden Segments page where
@@ -1512,6 +1512,16 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
           }
           case "root":       return (a.root_cause_entity_id || "").localeCompare(b.root_cause_entity_id || "") * sign;
           case "started":    return (new Date(a["event.start"]).getTime() - new Date(b["event.start"]).getTime()) * sign;
+          case "end": {
+            // ACTIVE problems (event.end == null) sort to the BOTTOM
+            // in asc order (no end yet → "after" any closed problem)
+            // and to the TOP in desc order. Treating them as
+            // ±Infinity rather than 0 keeps the ordering intuitive
+            // when the column header is clicked toggling asc/desc.
+            const ae = a["event.end"] ? new Date(a["event.end"]).getTime() : (sign > 0 ?  Infinity : -Infinity);
+            const be = b["event.end"] ? new Date(b["event.end"]).getTime() : (sign > 0 ?  Infinity : -Infinity);
+            return (ae - be) * sign;
+          }
           case "duration":   return (dur(a) - dur(b)) * sign;
           case "impact": {
             const ai = getImpactLabel(a.affected_entity_ids)?.label || "";
@@ -2620,6 +2630,7 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
                   ["entities", "Affected entities", ""],
                   ["root",     "Root cause",        ""],
                   ["started",  "Started",           ""],
+                  ["end",      "End",               ""],
                   ["duration", "Duration",          ""],
                   ["impact",   "Impact",            ""],
                 ] as Array<[ColumnSortKey, string, string]>).map(([key, label, extra]) => {
@@ -2847,6 +2858,15 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
                       </span>
                       <span className="neo-tcell neo-tcell-time" role="cell">
                         {formatStartedDate(problem["event.start"])}
+                      </span>
+                      {/* End column — ACTIVE problems have no end yet
+                          so they render an em-dash placeholder. Same
+                          formatter as Started keeps the column visually
+                          aligned (day + month + year + 24-h clock). */}
+                      <span className="neo-tcell neo-tcell-time" role="cell">
+                        {problem["event.end"]
+                          ? formatStartedDate(problem["event.end"])
+                          : <span className="neo-tempty">—</span>}
                       </span>
                       <span className="neo-tcell neo-tcell-dur" role="cell">{duration}</span>
                       <span className="neo-tcell" role="cell">
