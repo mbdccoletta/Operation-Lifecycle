@@ -14,6 +14,7 @@ import { ErrorBoundary, installGlobalErrorHandlers } from "./components/ErrorBou
 installGlobalErrorHandlers();
 import { DebugScenarioPanel } from "./components/DebugScenarioPanel";
 import { getEnvironmentUrl } from "@dynatrace-sdk/app-environment";
+import { useDevice } from "./hooks/useDevice";
 import { TimeRangeProvider } from "./hooks/useTimeRange";
 import { CategoryFilterProvider } from "./contexts/CategoryFilterContext";
 import { RefreshSignalProvider } from "./contexts/RefreshSignalContext";
@@ -210,6 +211,13 @@ const DEV_TENANT_FRAGMENT = "bwm98081";
  *  pure UI and the policy lives in one obvious place. */
 const DemoPanelGate: React.FC = () => {
   const [searchParams] = useSearchParams();
+  const { isMobileOrTablet } = useDevice();
+
+  // Mobile / tablet → ALWAYS hide, regardless of tenant or URL.
+  // The floating panel competes with the header chip strip on small
+  // viewports and the user's primary mobile workflow is read-only
+  // triage, not scenario-switching. Demos use desktop.
+  if (isMobileOrTablet) return null;
 
   // Tenant gate — bwm98081 always shows the panel. If
   // getEnvironmentUrl throws (rare; happens when the Dynatrace

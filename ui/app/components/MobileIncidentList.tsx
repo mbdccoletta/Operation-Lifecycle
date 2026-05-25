@@ -303,6 +303,20 @@ const MobileIncidentCard: React.FC<CardProps> = ({ problem: p, metrics, expanded
           form factors. */}
       {expanded && (
         <div id={`mc-body-${p.display_id}`} className="neo-mobile-card-body">
+          {/* Re-statement of the problem name inside the expanded
+              body. The collapsed-card row2 already shows the name,
+              but as soon as the user scrolls through the activity
+              feed below, the title disappears off-screen and the
+              user loses context ("whose details am I reading?").
+              Echoing the name here keeps it visible alongside the
+              action toolbar AND scrolls with the body, so it's
+              always at the top of whatever the user is actively
+              looking at. ID + name read together so the visual
+              pair matches the launcher chip in WhatsApp shares. */}
+          <header className="neo-mobile-card-body-title">
+            <span className="neo-mobile-card-body-id">{p.display_id}</span>
+            <span className="neo-mobile-card-body-name">{p["event.name"]}</span>
+          </header>
           {/* Action toolbar — same affordances the desktop row gets
               (Copy ID · WhatsApp · Share link · Open Problem App ·
               Refresh · Sort). Lives ABOVE the activity feed so

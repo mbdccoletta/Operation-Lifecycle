@@ -7850,6 +7850,47 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
 [data-theme="light"] .neo-mobile-card-body {
   background: rgba(99,102,241,0.04);
 }
+/* Echoed problem title at the top of the expanded body — see the
+   docblock in MobileIncidentList.tsx for the rationale. Sticky so
+   the title stays pinned to the top of the viewport while the user
+   scrolls the activity feed below; otherwise the collapsed-card
+   row2 (which already shows the name) disappears off-screen and
+   the user loses context. */
+.neo-mobile-card-body-title {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: -10px -12px 8px;
+  padding: 10px 12px 8px;
+  background: var(--neo-surface);
+  border-bottom: 1px solid var(--neo-border);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.20);
+}
+.neo-mobile-card-body-id {
+  font-family: var(--neo-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--neo-text-3);
+  flex: 0 0 auto;
+}
+.neo-mobile-card-body-name {
+  font-family: var(--neo-sans);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.25;
+  color: var(--neo-text);
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  /* Allow two-line wrap so longer titles don't get cropped. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
 
 /* ─── Match-mode toggle (All / Any) ────────────────────────────
    Segmented control between the "Has metric" label and the chip
