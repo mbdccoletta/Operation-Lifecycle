@@ -8959,3 +8959,119 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   text-transform: uppercase;
   letter-spacing: 0.06em;
 }
+
+/* Per-LEVEL indentation for nested grouping (Group by entity → root).
+   `--neo-tgroup-depth` is set inline by the renderer (0 = outer
+   level, 1 = inner). Each step indents by 18 px so the hierarchy is
+   readable without a tree-toggle UI. */
+.neo-tgroup {
+  padding-left: calc(18px + 18px * var(--neo-tgroup-depth, 0));
+}
+
+/* Per-KIND colour accent so the user can tell which COLUMN drove a
+   given divider at a glance. Segment keeps the cyan it already had
+   (visual continuity); entity uses purple (matches the Affected
+   chips); root cause uses amber (matches the existing root-cause
+   icon colour). */
+.neo-tgroup-kind-entity {
+  background: linear-gradient(
+    to right,
+    rgba(168, 85, 247, 0.10),
+    rgba(168, 85, 247, 0)
+  );
+  border-top:    1px solid rgba(168, 85, 247, 0.25);
+  border-bottom: 1px dashed rgba(168, 85, 247, 0.18);
+}
+.neo-tgroup-kind-entity .neo-tgroup-icon  { color: #A855F7; }
+.neo-tgroup-kind-entity .neo-tgroup-label { color: #D8B4FE; }
+
+.neo-tgroup-kind-root {
+  background: linear-gradient(
+    to right,
+    rgba(245, 158, 11, 0.10),
+    rgba(245, 158, 11, 0)
+  );
+  border-top:    1px solid rgba(245, 158, 11, 0.25);
+  border-bottom: 1px dashed rgba(245, 158, 11, 0.18);
+}
+.neo-tgroup-kind-root .neo-tgroup-icon  { color: #F59E0B; }
+.neo-tgroup-kind-root .neo-tgroup-label { color: #FCD34D; }
+
+/* Group-By chip strip — replaces the "Has metric" strip from 0.0.80.
+   Lives in the same horizontal slot, same chip-strip styling
+   conventions, but toggles GROUPING instead of filtering. Active
+   chips show a numeric badge (1, 2) telling the user which nesting
+   level the column drives. */
+.neo-groupby {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 8px 18px;
+  background: var(--neo-surface-2);
+  border-bottom: 1px solid var(--neo-border);
+}
+.neo-groupby-label {
+  font-family: var(--neo-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: var(--neo-text-3);
+  text-transform: uppercase;
+  padding-right: 4px;
+}
+.neo-groupby-chip {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 12px;
+  border-radius: 13px;
+  background: var(--neo-surface);
+  border: 1px solid var(--neo-border);
+  color: var(--neo-text-2);
+  font-family: var(--neo-mono);
+  font-size: 11px;
+  letter-spacing: -0.05px;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+.neo-groupby-chip:hover,
+.neo-groupby-chip:focus-visible {
+  background: var(--neo-surface-2);
+  border-color: var(--neo-border-2, rgba(255,255,255,0.18));
+  color: var(--neo-text);
+}
+.neo-groupby-chip-glyph {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  border-radius: 8px;
+  font-size: 10px;
+  font-weight: 700;
+  background: rgba(255,255,255,0.06);
+  color: var(--neo-text-3);
+}
+.neo-groupby-chip-active {
+  background: rgba(6, 182, 212, 0.10);
+  border-color: rgba(6, 182, 212, 0.45);
+  color: #67E8F9;
+}
+.neo-groupby-chip-active .neo-groupby-chip-glyph {
+  background: rgba(6, 182, 212, 0.35);
+  color: #ECFEFF;
+}
+.neo-groupby-clear {
+  margin-left: 2px;
+  padding: 0 10px;
+  color: var(--neo-text-3);
+}
+.neo-groupby-clear:hover {
+  color: #FCA5A5;
+}

@@ -19,17 +19,9 @@ import {
 import { buildOfficialProblemUrl } from "../utils/dynatrace-links";
 import { ShareWhatsApp } from "../components/ShareWhatsApp";
 import { ProblemActivityFeed } from "../components/ProblemActivityFeed";
-import { MetricFilterChip } from "../components/MetricFilterChip";
 import { MobileIncidentList } from "../components/MobileIncidentList";
 import { DisplaySettingsPanel } from "../components/DisplaySettingsPanel";
 import { useDevice } from "../hooks/useDevice";
-import {
-  MetricKey,
-  MetricBound,
-  matchesBound,
-  parseMetricFilter,
-  serializeMetricFilter,
-} from "../utils/metricBound";
 import { useTeamMetrics } from "../hooks/useTeamMetrics";
 import { CopyChip } from "../components/CopyChip";
 import { CategoryFilterChips } from "../components/CategoryFilterChips";
@@ -576,38 +568,43 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
       return next;
     });
   }, []);
-  /** Filter chip toggles — narrow the list to problems that have
-   *  the selected metric(s) defined AND match the chosen value /
-   *  range bound. Each chip carries its own `MetricBound` (any /
-   *  lt / gt / between) so the user can express constraints like
-   *  "MTTA > 1 h" or "MTTR between 4 h and 1 d". Multi-select: a
-   *  row passes when AT LEAST ONE active metric's bound is
-   *  satisfied (OR semantics across chips). */
-  // Lazy initializer reads `?metric=` straight from `window.location`
-  // so the filter is populated BEFORE the first render of `filtered`.
-  // The previous effect-based hydration ran AFTER the first paint,
-  // which meant Analytics drilldowns ("click MTTA line") briefly
-  // showed the unfiltered list. The effect at the URL-hydration
-  // section below still runs for back/forward navigation, but the
-  // initial value below covers the common navigate-with-param case.
-  const [metricFilter, setMetricFilter] = useState<Map<MetricKey, MetricBound>>(() => {
-    if (typeof window === "undefined") return new Map();
+  /** Group-By columns — the new explicit grouping control that
+   *  replaced the "Has metric" filter strip (which lost its purpose
+   *  when the per-problem Metrics column was removed in 0.0.81).
+   *
+   *  Array carries column keys in NESTING ORDER. e.g.:
+   *    []                 → no grouping; flat list
+   *    ["entity"]         → group by first affected entity (1 level)
+   *    ["root"]           → group by root cause entity (1 level)
+   *    ["entity", "root"] → group by entity, then nested by root cause (2 levels)
+   *    ["root", "entity"] → reversed nesting
+   *
+   *  Initial value lazy-read from `?groupBy=entity,root` so a
+   *  bookmarked URL hydrates the chip strip before first render. */
+  type GroupByCol = "entity" | "root";
+  const ALL_GROUPBY_COLS: ReadonlyArray<GroupByCol> = ["entity", "root"];
+  const [groupByColumns, setGroupByColumns] = useState<GroupByCol[]>(() => {
+    if (typeof window === "undefined") return [];
     const params = new URLSearchParams(window.location.search);
-    return parseMetricFilter(params.get("metric"));
+    const raw = params.get("groupBy");
+    if (!raw) return [];
+    const parsed = raw.split(",").map((s) => s.trim()).filter((s): s is GroupByCol =>
+      s === "entity" || s === "root",
+    );
+    // Deduplicate while preserving order.
+    return Array.from(new Set(parsed));
   });
-  const setMetricFilterBound = useCallback((key: MetricKey, next: MetricBound | null) => {
-    setMetricFilter((prev) => {
-      const m = new Map(prev);
-      if (next === null) m.delete(key);
-      else m.set(key, next);
-      return m;
+  /** Toggle a column in/out of the Group-By order. Click a chip
+   *  that's already active to remove it; click an inactive one to
+   *  append it as the next nesting level. Order matters and is
+   *  preserved across toggles. */
+  const toggleGroupByColumn = useCallback((col: GroupByCol) => {
+    setGroupByColumns((prev) => {
+      const idx = prev.indexOf(col);
+      if (idx >= 0) return prev.filter((c) => c !== col);
+      return [...prev, col];
     });
   }, []);
-  /* Match mode hardcoded to AND (intersection). The previous
-   * ALL/ANY toggle was removed: users couldn't tell what it did
-   * with cryptic 4-letter labels, and the OR semantic almost
-   * never fits triage workflows where the user is NARROWING DOWN.
-   * The `metricm` URL param is no longer read/written. */
   /** Drilldown filter from the "At a glance" KPI cards on Trends:
    *  Active / MTTR / Resolution Rate / Stuck > 4h → land here with
    *  the cohort the KPI was computed from preselected.
@@ -1714,25 +1711,8 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
         return startMs < toMs && endMs > fromMs;
       });
     }
-    // Metric-availability filter — each chip carries its own bound
-    // (`any` / `lt` / `gt` / `between`). Multi-chip composition is
-    // AND (intersection) only: a row must satisfy every active chip.
-    // Within a chip the `matchesBound` predicate also implies
-    // "metric is defined" — a null value never matches any bound.
-    if (metricFilter.size > 0) {
-      out = out.filter((p) => {
-        const pid = (p as unknown as { davis_problem_id?: string }).davis_problem_id;
-        const m = pid ? perProblem.get(pid) : undefined;
-        if (!m) return false;
-        for (const [key, bound] of metricFilter) {
-          const v = m[`${key}Ms` as keyof typeof m] as number | null | undefined;
-          if (!matchesBound(v, bound)) return false;
-        }
-        return true;
-      });
-    }
     return out;
-  }, [sorted, searchDebounced, catFilter, pinnedProblemId, groupBy, segMembership, resolveGrouping, metricFilter, perProblem, selectedRange, entityFilter, rceFilter, segmentFilter, statusFilter, stuckHoursFilter]);
+  }, [sorted, searchDebounced, catFilter, pinnedProblemId, groupBy, segMembership, resolveGrouping, selectedRange, entityFilter, rceFilter, segmentFilter, statusFilter, stuckHoursFilter]);
 
   const entityCount = useMemo(() => {
     const set = new Set<string>();
@@ -1882,18 +1862,25 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
       if (cats.length > 0) setCatFilter(new Set(cats));
     }
     // Metric filter — extended wire format that also carries the
-    // per-chip bound (`mtta`, `mtta:gt:3600000`, `mttr:bw:60000:300000`, …).
-    // See `parseMetricFilter` for the grammar. Lets Analytics
-    // drilldowns AND deep-links restore the chip strip with the
-    // exact constraint the user picked.
-    const metricParam = searchParams.get("metric");
-    if (metricParam) {
-      const parsed = parseMetricFilter(metricParam);
-      if (parsed.size > 0) setMetricFilter(parsed);
+    // Group-By columns — order matters and is preserved.
+    //   ?groupBy=entity        → 1 level (Affected entity)
+    //   ?groupBy=entity,root   → 2 levels (Affected entity → Root cause)
+    //   ?groupBy=root          → 1 level (Root cause only)
+    // Unknown tokens are silently ignored so old / typo'd links don't
+    // break the page. The previous `?metric=` filter param is also
+    // silently ignored for the same reason — bookmarks that included
+    // it from the 0.0.80 release won't error, they'll just lose the
+    // metric filter (which no longer exists).
+    const groupByParam = searchParams.get("groupBy");
+    if (groupByParam != null) {
+      const cols = groupByParam
+        .split(",")
+        .map((s) => s.trim())
+        .filter((s): s is GroupByCol => s === "entity" || s === "root");
+      setGroupByColumns(Array.from(new Set(cols)));
+    } else {
+      setGroupByColumns([]);
     }
-    // `metricm` URL param is silently ignored — toggle was removed
-    // and composition is fixed to AND. Old deep-links won't break;
-    // they just compose chips with AND regardless of the param.
     // WHERE TO LOOK drilldowns. Always overwrite from URL (including
     // clearing when absent) so back/forward navigation reflects the
     // intended state — without `else setEntityFilter(null)` the
@@ -1931,14 +1918,14 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
     // Category filter — comma-joined; omit when empty.
     if (catFilter.size === 0) next.delete("cat");
     else next.set("cat", Array.from(catFilter).join(","));
-    // Metric filter — extended wire format ("mtta:gt:3600000,mttr").
-    // Re-serialised on every change so the URL doubles as the share
-    // link for the current filter state. When no chip is active the
-    // param is dropped entirely to keep the canonical URL clean.
-    if (metricFilter.size === 0) next.delete("metric");
-    else next.set("metric", serializeMetricFilter(metricFilter));
-    // Strip legacy `metricm` from the URL if present — the toggle
-    // is gone, composition is always AND.
+    // Group-By columns — comma-joined. Dropped from URL when no
+    // grouping is active to keep canonical URL clean.
+    if (groupByColumns.length === 0) next.delete("groupBy");
+    else next.set("groupBy", groupByColumns.join(","));
+    // Strip legacy `?metric=` / `?metricm=` from the URL if present.
+    // The "Has metric" filter strip was removed when the per-problem
+    // Metrics column was retired (0.0.81 → 0.0.82).
+    next.delete("metric");
     next.delete("metricm");
     // WHERE TO LOOK drilldown filters — propagate state changes
     // (e.g. clicking the clear button in the banner) back to the URL
@@ -1956,7 +1943,7 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
     const b = searchParams.toString();
     if (a !== b) setSearchParams(next, { replace: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [viewMode, dataMode, timeframe, catFilter, metricFilter, entityFilter, rceFilter, segmentFilter, statusFilter, stuckHoursFilter]);
+  }, [viewMode, dataMode, timeframe, catFilter, groupByColumns, entityFilter, rceFilter, segmentFilter, statusFilter, stuckHoursFilter]);
 
   // Clicking on a quadrant's HEADER drills into the LIST. When the
   // clicked category is one of several leaders (multiple ★ TOP / ▲ UP
@@ -2564,23 +2551,44 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
               removed: users couldn't tell what it did, and the OR
               semantic almost never fits a "narrow down" triage
               flow. */}
-          <div className="neo-metric-filter">
-            <span className="neo-metric-filter-label">Has metric</span>
-            {(["mtta", "mttr", "mtbf", "mttf"] as const).map((key) => (
-              <MetricFilterChip
-                key={key}
-                metric={key}
-                bound={metricFilter.get(key)}
-                onChange={(next) => setMetricFilterBound(key, next)}
-              />
-            ))}
-            {metricFilter.size > 0 && (
+          {/* Group-By chip strip — replaces the previous "Has metric"
+              filter (0.0.81 retired the per-problem Metrics column, so
+              the filter lost its accompanying visual).
+              Clicking a chip toggles that column in/out of the
+              grouping order. Active chips show a badge with their
+              nesting level (1 = outer, 2 = inner). Up to two chips
+              can be active at once; nesting renders in click-order. */}
+          <div className="neo-groupby">
+            <span className="neo-groupby-label">Group by</span>
+            {ALL_GROUPBY_COLS.map((col) => {
+              const idx = groupByColumns.indexOf(col);
+              const isActive = idx >= 0;
+              const label = col === "entity" ? "Affected entity" : "Root cause";
+              return (
+                <button
+                  key={col}
+                  type="button"
+                  className={`neo-groupby-chip${isActive ? " neo-groupby-chip-active" : ""}`}
+                  onClick={() => toggleGroupByColumn(col)}
+                  title={isActive
+                    ? `Stop grouping by ${label}`
+                    : `Group rows by ${label}${groupByColumns.length === 0 ? "" : ` (nested inside ${groupByColumns.map((c) => c === "entity" ? "Affected entity" : "Root cause").join(" → ")})`}`}
+                  aria-pressed={isActive}
+                >
+                  <span className="neo-groupby-chip-glyph" aria-hidden="true">
+                    {isActive ? idx + 1 : "⊕"}
+                  </span>
+                  <span className="neo-groupby-chip-label">{label}</span>
+                </button>
+              );
+            })}
+            {groupByColumns.length > 0 && (
               <button
                 type="button"
-                className="neo-metric-filter-chip neo-metric-filter-clear"
-                onClick={() => setMetricFilter(new Map())}
-                title="Clear all metric filters"
-                aria-label="Clear all metric filters"
+                className="neo-groupby-chip neo-groupby-clear"
+                onClick={() => setGroupByColumns([])}
+                title="Clear grouping"
+                aria-label="Clear grouping"
               >✕</button>
             )}
           </div>
@@ -2676,41 +2684,86 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
               </div>
 
               {(() => {
-                /* Section-divider helper for the two grouping modes:
-                   "segment" and "entity". Closure state (local let)
-                   tracks the previous group label across iterations so
-                   the renderer can inject a `<div class="neo-tgroup">`
-                   header whenever the value changes. Each mode
-                   resolves its label via a different lookup:
-                     • segment → first alpha segment name via
-                       segMembership / segNameByUid
-                     • entity  → first affected-entity name (or id)
-                   Outside both modes the closure is dormant and the
-                   render is identical to the previous behaviour. */
-                const groupingMode: "segment" | "entity" | null =
-                  (sortMode === "segment" || colSort?.key === "segments") ? "segment" :
-                  (sortMode === "entity") ? "entity" :
-                  null;
-                let prevGroupLabel: string | null = null;
-                const groupLabelFor = (p: Problem): string => {
-                  if (groupingMode === "segment") {
+                /* Multi-level group-by renderer. The grouping ORDER is
+                   the concatenation of (a) the implicit segment-grouping
+                   trigger ("Sort by segment" / Segments-column header
+                   click) and (b) the explicit `groupByColumns` chip
+                   strip. Both can be active simultaneously; in that
+                   case segment is the OUTER level and groupByColumns
+                   nest inside.
+
+                   For each row we resolve a label per level. When ANY
+                   level's label differs from the previous row's, we
+                   emit a divider (or stack of dividers, one per level
+                   that changed). The prevLabels closure tracks the
+                   running label per level across renderRow calls.
+
+                   levels[i].kind identifies the lookup type:
+                     • "segment" → first alpha segment name (via
+                                   segMembership + segNameByUid)
+                     • "entity"  → first affected-entity name (or id)
+                     • "root"    → root cause entity name (or id) */
+                type LevelKind = "segment" | "entity" | "root";
+                const levels: { kind: LevelKind; label: string }[] = [];
+                if (sortMode === "segment" || colSort?.key === "segments") {
+                  levels.push({ kind: "segment", label: "Segment" });
+                }
+                for (const col of groupByColumns) {
+                  levels.push({
+                    kind: col === "entity" ? "entity" : "root",
+                    label: col === "entity" ? "Affected entity" : "Root cause",
+                  });
+                }
+
+                const labelFor = (p: Problem, kind: LevelKind): string => {
+                  if (kind === "segment") {
                     const s = segMembership.get(p.display_id);
                     if (!s || s.size === 0) return "(no segment)";
                     const names = Array.from(s).map((uid) => segNameByUid[uid] || uid).sort();
                     return names[0];
                   }
-                  if (groupingMode === "entity") {
+                  if (kind === "entity") {
                     const ids = p.affected_entity_ids;
                     if (!ids || ids.length === 0) return "(no affected entity)";
                     const names = p.affected_entity_names || [];
                     return names[0] || ids[0] || "(unknown)";
                   }
-                  return "";
+                  // root
+                  const rcName = p.root_cause_entity_name?.trim();
+                  const rcId   = p.root_cause_entity_id?.trim();
+                  if (rcName) return rcName;
+                  if (rcId)   return rcId;
+                  return "(no root cause)";
                 };
+
+                // Running labels per level — first row triggers ALL
+                // dividers because every "prev" starts as null.
+                const prevLabels: (string | null)[] = levels.map(() => null);
+
                 const renderRow = (problem: Problem) => {
-                const segLabel = groupingMode ? groupLabelFor(problem) : null;
-                const showDivider = groupingMode != null && segLabel !== prevGroupLabel;
-                if (groupingMode) prevGroupLabel = segLabel;
+                // Resolve labels for every active level for this row,
+                // then find the FIRST level whose label changed. All
+                // levels from that index onward need a divider emitted
+                // (because changing an outer group resets the inner
+                // grouping too). prevLabels are advanced for emitted
+                // levels.
+                const curLabels = levels.map((lvl) => labelFor(problem, lvl.kind));
+                let changedFrom = -1;
+                for (let i = 0; i < levels.length; i++) {
+                  if (curLabels[i] !== prevLabels[i]) { changedFrom = i; break; }
+                }
+                const dividerLevels: { idx: number; label: string; kind: LevelKind; depth: number }[] = [];
+                if (changedFrom >= 0) {
+                  for (let i = changedFrom; i < levels.length; i++) {
+                    dividerLevels.push({
+                      idx: i,
+                      label: curLabels[i],
+                      kind: levels[i].kind,
+                      depth: i,
+                    });
+                    prevLabels[i] = curLabels[i];
+                  }
+                }
                 const isActive   = problem["event.status"] === "ACTIVE";
                 const catColor   = colorForGrouping(resolveGrouping(problem));
                 const sevLabel   = getSeverityLevel(problem);
@@ -2736,17 +2789,31 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
                 const accent = highlightColor || (isListTop ? listModeAccent : catColor);
                 return (
                   <React.Fragment key={problem.display_id}>
-                    {showDivider && segLabel != null && (
-                      /* Section divider — only emitted in group-by-
-                         segment mode. Spans the full table width via
-                         CSS `grid-column: 1 / -1`. Keeps the visual
-                         contract of the existing grid (sticky header,
-                         padding) intact. */
-                      <div className="neo-tgroup" role="rowgroup" aria-label={`Segment ${segLabel}`}>
-                        <span className="neo-tgroup-icon" aria-hidden="true">◆</span>
-                        <span className="neo-tgroup-label">{segLabel}</span>
-                      </div>
-                    )}
+                    {/* Section dividers — one per level that changed
+                        between the previous row and this row. Outer
+                        levels (lower depth) render before inner ones.
+                        Depth controls left indentation via the
+                        `--neo-tgroup-depth` CSS custom property. */}
+                    {dividerLevels.map((d) => {
+                      const icon = d.kind === "segment" ? "◆"
+                                 : d.kind === "entity"  ? "◉"
+                                 :                        "✺"; /* root */
+                      const aria = `${d.kind === "segment" ? "Segment"
+                                    : d.kind === "entity"  ? "Affected entity"
+                                    :                        "Root cause"} ${d.label}`;
+                      return (
+                        <div
+                          key={`gh-${d.idx}-${d.label}`}
+                          className={`neo-tgroup neo-tgroup-depth-${d.depth} neo-tgroup-kind-${d.kind}`}
+                          role="rowgroup"
+                          aria-label={aria}
+                          style={{ ["--neo-tgroup-depth" as string]: d.depth }}
+                        >
+                          <span className="neo-tgroup-icon" aria-hidden="true">{icon}</span>
+                          <span className="neo-tgroup-label">{d.label}</span>
+                        </div>
+                      );
+                    })}
                   <article
                     data-display-id={problem.display_id}
                     className={`neo-tcard${isExpanded ? " neo-tcard-open" : ""}${isActive ? "" : " neo-tcard-resolved"}${showHighlight ? " neo-tcard-highlighted" : ""}`}
