@@ -73,15 +73,47 @@ describe("parseStratoTimeframe — compact / legacy shapes", () => {
 });
 
 describe("parseStratoTimeframe — `@d` (Today)", () => {
-  it("emits explicit ISO bounds anchored to UTC midnight", () => {
+  it("anchors `from` to LOCAL midnight of the current day", () => {
+    // We anchor to local midnight (the user's wall-clock day) so the
+    // window matches "today" as the user understands it, not "today
+    // in UTC". For a user in UTC-3 (Brazil) at 10:00 local on
+    // 2026-05-25, the previous behaviour returned UTC 00:00 which is
+    // 21:00 of 2026-05-24 in their timezone — three hours of
+    // "yesterday" leaked into "today".
     const parsed = parseStratoTimeframe(tf("@d", "now()"));
     expect(parsed.timeframe).toBeUndefined();
-    expect(parsed.from).toMatch(/T00:00:00\.000Z$/);
+    expect(parsed.from).toBeDefined();
     expect(parsed.to).toBeDefined();
+
+    const fromMs = Date.parse(parsed.from!);
+    const toMs   = Date.parse(parsed.to!);
+
+    // The from timestamp, when read in LOCAL time, should be
+    // midnight (00:00:00) of today.
+    const fromDate = new Date(fromMs);
+    expect(fromDate.getHours()).toBe(0);
+    expect(fromDate.getMinutes()).toBe(0);
+    expect(fromDate.getSeconds()).toBe(0);
+    expect(fromDate.getMilliseconds()).toBe(0);
+
+    // And the date itself should match today's local date.
+    const today = new Date();
+    expect(fromDate.getFullYear()).toBe(today.getFullYear());
+    expect(fromDate.getMonth()).toBe(today.getMonth());
+    expect(fromDate.getDate()).toBe(today.getDate());
+
     // Sanity: from ≤ to, and the diff is at most 24h.
-    const diffMs = Date.parse(parsed.to!) - Date.parse(parsed.from!);
-    expect(diffMs).toBeGreaterThanOrEqual(0);
-    expect(diffMs).toBeLessThanOrEqual(24 * 3_600_000 + 1000);
+    expect(toMs - fromMs).toBeGreaterThanOrEqual(0);
+    expect(toMs - fromMs).toBeLessThanOrEqual(24 * 3_600_000 + 1000);
+  });
+
+  it("produces ISO strings with the trailing Z (UTC encoding) for DQL", () => {
+    // The ISO is emitted in UTC for the DQL query (DQL expects UTC),
+    // even though the LOCAL midnight semantic is what the user picks.
+    // We just check the timestamp encoding is valid and ends in Z.
+    const parsed = parseStratoTimeframe(tf("@d", "now()"));
+    expect(parsed.from).toMatch(/Z$/);
+    expect(parsed.to).toMatch(/Z$/);
   });
 });
 

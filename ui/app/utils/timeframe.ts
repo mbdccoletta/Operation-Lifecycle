@@ -75,16 +75,23 @@ export function parseStratoTimeframe(
   const toIsNow = toVal === "now" || toVal === "now()";
 
   // ── "Today" (`@d` → `now()`) ────────────────────────────────────
-  // The native Davis Problems app uses this as its default. We
-  // emit explicit ISO timestamps anchored to UTC midnight so the
-  // window aligns with the calendar boundary instead of rounding
-  // through a fractional-hour conversion.
+  // Anchored to LOCAL midnight (the user's browser timezone) so
+  // "Today" matches the user's wall-clock day rather than the UTC
+  // day. Previously we used UTC midnight, which for any user not in
+  // UTC produced a window that included a slice of the previous
+  // local day (3 h for Brazil / UTC-3, 12 h for NZ / UTC+12). The
+  // ISO timestamp we emit still carries a Z (UTC offset), so DQL
+  // gets an unambiguous timestamp — the shift is purely about where
+  // the window STARTS in the calendar.
   if (fromVal === "@d" && toIsNow) {
     const now = new Date();
-    const startOfDayUtc = new Date(Date.UTC(
-      now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0, 0,
-    ));
-    return { from: startOfDayUtc.toISOString(), to: now.toISOString() };
+    // `new Date(year, month, day)` constructs a Date at LOCAL
+    // 00:00:00.000; `.toISOString()` then renders it in UTC for DQL.
+    // The net effect is: from = "midnight in the user's timezone".
+    const startOfDayLocal = new Date(
+      now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0,
+    );
+    return { from: startOfDayLocal.toISOString(), to: now.toISOString() };
   }
 
   // ── Relative preset / compact form ──────────────────────────────

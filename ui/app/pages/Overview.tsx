@@ -405,19 +405,22 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
   /** Timeframe — uses Strato's TimeframeSelector value shape so the
    *  picker exposes the same presets (Last 30m, 1h, 2h, Today,
    *  Yesterday, 7d, 30d…) + custom range + Recently used as the rest
-   *  of Dynatrace. Default: **Today** — `from: "@d"` (start of UTC
-   *  day), `to: "now()"`. Same preset the native Davis Problems app
-   *  picks and the most common triage window. The relative-value
-   *  strings mirror Strato's preset table at
+   *  of Dynatrace. Default: **Today** anchored to the user's LOCAL
+   *  midnight (was UTC midnight pre-fix — see `timeframe.ts` docblock
+   *  for the rationale). The relative-value strings mirror Strato's
+   *  preset table at
    *  @dynatrace/strato-components/filters/timeframe-selector/constants/timeframe-presets.js. */
   const initialTimeframe = useMemo<Timeframe>(() => {
     const now = new Date();
-    const startOfDayUtc = new Date(Date.UTC(
-      now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0, 0,
-    ));
+    // Local midnight: `new Date(year, month, day)` builds a Date at
+    // 00:00 LOCAL, then `.toISOString()` converts to the equivalent
+    // UTC timestamp for DQL.
+    const startOfDayLocal = new Date(
+      now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0,
+    );
     return {
-      from: { absoluteDate: startOfDayUtc.toISOString(), value: "@d",    type: "expression" },
-      to:   { absoluteDate: now.toISOString(),           value: "now()", type: "expression" },
+      from: { absoluteDate: startOfDayLocal.toISOString(), value: "@d",    type: "expression" },
+      to:   { absoluteDate: now.toISOString(),             value: "now()", type: "expression" },
     };
   }, []);
   const [timeframe, setTimeframe] = useState<Timeframe | null>(initialTimeframe);
