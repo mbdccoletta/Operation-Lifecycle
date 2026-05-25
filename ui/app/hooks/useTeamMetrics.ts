@@ -28,6 +28,10 @@ import {
   aggregateScalar,
   aggregateSeries,
   pickBucketMs,
+  computeMttaPairs,
+  computeMttrPairs,
+  computeMtbfPairs,
+  computeMttfPairs,
 } from "./useTeamMetrics.helpers";
 
 /** Look-back window for the comments stream. Matches the per-problem
@@ -197,80 +201,19 @@ export function useTeamMetrics(
     return map;
   }, [query.data, simulated, simulatedFirstComments]);
 
-  // ── MTTA: event.start → first comment, per problem ──────────────
-  const mttaPairs = useMemo(() => {
-    const out: Array<{ ms: number; valueMs: number }> = [];
-    for (const p of problems) {
-      const pid = (p as unknown as { davis_problem_id?: string }).davis_problem_id;
-      if (!pid) continue;
-      const firstAt = firstCommentByPid.get(pid);
-      if (!firstAt) continue;
-      const start = new Date(p["event.start"]).getTime();
-      const ack   = new Date(firstAt).getTime();
-      if (!Number.isFinite(start) || !Number.isFinite(ack)) continue;
-      const v = ack - start;
-      if (v < 0) continue;
-      out.push({ ms: start, valueMs: v });
-    }
-    return out;
-  }, [problems, firstCommentByPid]);
-
-  // ── MTTR: event.start → event.end, per closed problem ───────────
-  const mttrPairs = useMemo(() => {
-    const out: Array<{ ms: number; valueMs: number }> = [];
-    for (const p of problems) {
-      if (p["event.status"] !== "CLOSED") continue;
-      const start = new Date(p["event.start"]).getTime();
-      const endIso = p["event.end"];
-      if (!endIso) continue;
-      const end = new Date(endIso).getTime();
-      if (!Number.isFinite(start) || !Number.isFinite(end)) continue;
-      const v = end - start;
-      if (v <= 0) continue;
-      out.push({ ms: start, valueMs: v });
-    }
-    return out;
-  }, [problems]);
-
-  // ── MTBF: interval between consecutive problem starts ───────────
-  const mtbfPairs = useMemo(() => {
-    const starts = problems
-      .map((p) => new Date(p["event.start"]).getTime())
-      .filter((n) => Number.isFinite(n))
-      .sort((a, b) => a - b);
-    const out: Array<{ ms: number; valueMs: number }> = [];
-    for (let i = 1; i < starts.length; i++) {
-      const interval = starts[i] - starts[i - 1];
-      if (interval > 0) out.push({ ms: starts[i], valueMs: interval });
-    }
-    return out;
-  }, [problems]);
-
-  // ── MTTF: uptime between previous CLOSED end → next start ───────
-  const mttfPairs = useMemo(() => {
-    const sorted = [...problems].sort(
-      (a, b) => new Date(a["event.start"]).getTime() - new Date(b["event.start"]).getTime(),
-    );
-    const out: Array<{ ms: number; valueMs: number }> = [];
-    let lastEndMs: number | null = null;
-    for (const p of sorted) {
-      const start = new Date(p["event.start"]).getTime();
-      if (!Number.isFinite(start)) continue;
-      if (lastEndMs !== null && start > lastEndMs) {
-        out.push({ ms: start, valueMs: start - lastEndMs });
-      }
-      // Update the "last close" cursor with whichever previous
-      // problem closed most recently before this one started.
-      const endIso = p["event.end"];
-      if (endIso) {
-        const end = new Date(endIso).getTime();
-        if (Number.isFinite(end) && (lastEndMs === null || end > lastEndMs)) {
-          lastEndMs = end;
-        }
-      }
-    }
-    return out;
-  }, [problems]);
+  // All four metric pair arrays are computed by the pure helpers in
+  // `useTeamMetrics.helpers.ts`. Each is independently unit-tested
+  // against didactic worked examples + a real-data fixture from the
+  // bwm98081 tenant (see `useTeamMetrics.helpers.test.ts`). The
+  // helpers also document the exact formula each implements with a
+  // reference to the Atlassian SRE KPI definitions.
+  const mttaPairs = useMemo(
+    () => computeMttaPairs(problems, firstCommentByPid),
+    [problems, firstCommentByPid],
+  );
+  const mttrPairs = useMemo(() => computeMttrPairs(problems), [problems]);
+  const mtbfPairs = useMemo(() => computeMtbfPairs(problems), [problems]);
+  const mttfPairs = useMemo(() => computeMttfPairs(problems), [problems]);
 
   // Shared window + bucket size — both derived from the union of
   // problem starts so all four metric series line up exactly on the

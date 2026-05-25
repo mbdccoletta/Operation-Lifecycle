@@ -132,6 +132,162 @@ export function computeMtbfPairs(
   return out;
 }
 
+/** Compute MTTA (Mean Time To Acknowledge) interval pairs.
+ *
+ *  Atlassian definition:
+ *    MTTA = average time between alert generated and operator
+ *           acknowledging it.
+ *    https://www.atlassian.com/incident-management/kpis/common-metrics
+ *
+ *  Davis Problems doesn't expose an explicit "acknowledged at"
+ *  timestamp. The closest proxy we have is the FIRST user comment
+ *  (CUSTOM_ANNOTATION event) against the problem — the moment an
+ *  engineer engaged with the incident in the Problems app stream.
+ *
+ *    MTTA_i = firstComment[i] − event.start[i]
+ *
+ *  Problems WITHOUT any comment are silently skipped (yield no pair)
+ *  so they don't pollute the average — but they DO reduce the
+ *  effective sample size. Auto-resolved incidents that nobody had to
+ *  comment on therefore don't appear in the MTTA mean.
+ *
+ *  `firstCommentByDavisId` maps the long composite `davis_problem_id`
+ *  (`event.id` from DQL) to the ISO timestamp of the first comment.
+ *  We use the davis id (not display_id) because that's what
+ *  CUSTOM_ANNOTATION's `annotation.problem_ids` field carries. */
+export function computeMttaPairs(
+  problems: Array<{
+    davis_problem_id?: string;
+    "event.start": string;
+  }>,
+  firstCommentByDavisId: Map<string, string>,
+): Array<{ ms: number; valueMs: number }> {
+  const out: Array<{ ms: number; valueMs: number }> = [];
+  for (const p of problems) {
+    if (!p.davis_problem_id) continue;
+    const firstAt = firstCommentByDavisId.get(p.davis_problem_id);
+    if (!firstAt) continue;
+    const start = new Date(p["event.start"]).getTime();
+    const ack   = new Date(firstAt).getTime();
+    if (!Number.isFinite(start) || !Number.isFinite(ack)) continue;
+    const v = ack - start;
+    // Skip negative values: a comment timestamped BEFORE the problem
+    // start is data corruption (clock skew, manual import) — silently
+    // drop it rather than show a meaningless negative MTTA.
+    if (v < 0) continue;
+    out.push({ ms: start, valueMs: v });
+  }
+  return out;
+}
+
+/** Compute MTTR (Mean Time To Repair / Resolve) interval pairs.
+ *
+ *  Atlassian definition:
+ *    MTTR = average wall-clock time from incident detection to
+ *           system fully functional. Same as "Mean Time to Resolve"
+ *           in most SRE practice; Atlassian's diagram differentiates
+ *           "Repair" (repairs begin → fully functional) from
+ *           "Resolve" (alert → fully functional) but the industry
+ *           uses the terms interchangeably.
+ *
+ *  We compute:
+ *
+ *    MTTR_i = event.end[i] − event.start[i]
+ *
+ *  ONLY for CLOSED problems. ACTIVE problems have no `event.end` so
+ *  we can't measure their resolution time — they're excluded entirely
+ *  (otherwise they'd contribute partial / open-ended values that
+ *  drift the average toward whatever Date.now() happens to be).
+ *
+ *  Skips zero / negative durations defensively. Same rationale as
+ *  the MTBF skip: data anomalies where end < start shouldn't pull
+ *  the mean toward zero. */
+export function computeMttrPairs(
+  problems: Array<{
+    "event.start": string;
+    "event.end"?: string | null;
+    "event.status": string;
+  }>,
+): Array<{ ms: number; valueMs: number }> {
+  const out: Array<{ ms: number; valueMs: number }> = [];
+  for (const p of problems) {
+    if (p["event.status"] !== "CLOSED") continue;
+    const endIso = p["event.end"];
+    if (!endIso) continue;
+    const start = new Date(p["event.start"]).getTime();
+    const end   = new Date(endIso).getTime();
+    if (!Number.isFinite(start) || !Number.isFinite(end)) continue;
+    const v = end - start;
+    if (v <= 0) continue;
+    out.push({ ms: start, valueMs: v });
+  }
+  return out;
+}
+
+/** Compute MTTF (Mean Time To Failure / uptime) interval pairs.
+ *
+ *  Atlassian definition (from the diagram + doc):
+ *    MTTF = average operational time between failures. The "system
+ *           up" half of the reliability identity:
+ *
+ *           MTBF  =  MTTR  +  MTTF
+ *           (cycle)  (down)  (up)
+ *
+ *           — per-pair, not per-aggregate. Holds when consecutive
+ *           problems are non-overlapping and the previous one closed
+ *           before the next one started.
+ *
+ *  We compute, for each problem after the first, the gap from the
+ *  most recent CLOSED end timestamp BEFORE the current problem's
+ *  start:
+ *
+ *    MTTF_i = event.start[i] − max{ event.end[j] : j < i, j CLOSED }
+ *
+ *  Why the running maximum (rather than just previous-problem end):
+ *  Davis problems can overlap. If P1 is still ACTIVE when P2 starts,
+ *  P1's end (when it eventually closes) might be LATER than P2's
+ *  start — using "previous problem's end" would yield a negative
+ *  uptime. We instead track the latest end we've seen so far, and
+ *  measure from THAT to the current start. If the current start
+ *  predates the running latest-end (concurrent failures), we skip
+ *  the pair entirely.
+ *
+ *  The first problem in the timeline has no MTTF (no previous end
+ *  to subtract from) → silently skipped, same as MTBF.
+ *
+ *  ACTIVE problems contribute their START to the calc (we can
+ *  measure MTTF UP TO an active problem), but their unknown END
+ *  doesn't advance the running latest-end cursor. */
+export function computeMttfPairs(
+  problems: Array<{
+    "event.start": string;
+    "event.end"?: string | null;
+  }>,
+): Array<{ ms: number; valueMs: number }> {
+  const sorted = [...problems].sort(
+    (a, b) => new Date(a["event.start"]).getTime() - new Date(b["event.start"]).getTime(),
+  );
+  const out: Array<{ ms: number; valueMs: number }> = [];
+  let lastEndMs: number | null = null;
+  for (const p of sorted) {
+    const start = new Date(p["event.start"]).getTime();
+    if (!Number.isFinite(start)) continue;
+    if (lastEndMs !== null && start > lastEndMs) {
+      out.push({ ms: start, valueMs: start - lastEndMs });
+    }
+    // Advance the latest-end cursor with whichever previous problem
+    // closed most recently before the next start.
+    const endIso = p["event.end"];
+    if (endIso) {
+      const end = new Date(endIso).getTime();
+      if (Number.isFinite(end) && (lastEndMs === null || end > lastEndMs)) {
+        lastEndMs = end;
+      }
+    }
+  }
+  return out;
+}
+
 /** Scalar aggregate (avg / median / p95 / count) over a flat values
  *  array — the "all problems collapsed into one number" form that
  *  feeds the KPI cards above the chart. */
