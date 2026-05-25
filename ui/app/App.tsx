@@ -152,7 +152,21 @@ const AppContent = () => {
             so old deeplinks resolve. */}
       </nav>
 
-      <DebugScenarioPanel />
+      {/* DEMO scenario panel — gated by the `?scenarios=demo` URL
+          param so production deploys don't surface synthetic data
+          to end users. Anyone (developer / demo presenter) who
+          needs to switch scenarios just appends `?scenarios=demo`
+          to any URL inside the app. The hook below reads the
+          search params live; toggling the URL toggles the panel
+          (and therefore the user's ability to switch scenarios)
+          without a rebuild.
+
+          When the panel is hidden, the underlying ScenarioContext
+          still defaults to "real" — so the app behaves identically
+          to a build that didn't include the panel at all. No
+          synthetic data path runs unless someone explicitly enables
+          the demo gate AND picks a non-real scenario. */}
+      <DemoPanelGate />
       {/* DisplaySettingsPanel moved out of App.tsx — it's now
           rendered INLINE inside each page header next to the
           SegmentSelector (Overview, TrendAnalysis). The pages
@@ -160,6 +174,28 @@ const AppContent = () => {
           themselves. */}
     </div>
   );
+};
+
+/** URL-gated wrapper around <DebugScenarioPanel/>.
+ *
+ *  Production deploys default to no scenario picker visible — the
+ *  panel is the ONLY way to switch away from "real" data, so when
+ *  it's hidden the app behaves like a build without any debug
+ *  scaffolding. Demo presenters / developers enable it by appending
+ *  `?scenarios=demo` to any URL in the app (e.g.
+ *  `…/ui/apps/my.problems.hub?scenarios=demo`). The param survives
+ *  React Router navigation between pages because every other
+ *  setSearchParams call merges into the existing search instead of
+ *  replacing it.
+ *
+ *  We keep the gate at this layer (App.tsx, around the panel) rather
+ *  than inside DebugScenarioPanel itself so the panel module stays
+ *  pure UI and the policy lives in one obvious place. */
+const DemoPanelGate: React.FC = () => {
+  const [searchParams] = useSearchParams();
+  const enabled = searchParams.get("scenarios") === "demo";
+  if (!enabled) return null;
+  return <DebugScenarioPanel />;
 };
 
 export const App = () => {
