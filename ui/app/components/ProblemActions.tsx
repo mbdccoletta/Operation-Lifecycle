@@ -10,11 +10,7 @@ import React from "react";
 import type { Problem } from "../hooks/useProblems";
 import { CopyChip } from "./CopyChip";
 import { ShareWhatsApp } from "./ShareWhatsApp";
-import {
-  buildOfficialProblemUrl,
-  buildExplainProblemUrl,
-} from "../utils/dynatrace-links";
-import { useDevice } from "../hooks/useDevice";
+import { buildOfficialProblemUrl } from "../utils/dynatrace-links";
 import { useTriggerRefresh } from "../contexts/RefreshSignalContext";
 
 interface Props {
@@ -30,21 +26,15 @@ interface Props {
 
 export const ProblemActions: React.FC<Props> = ({ problem, sort, onSortChange, density = "default" }) => {
   const triggerRefresh = useTriggerRefresh();
-  const { isMobileOrTablet } = useDevice();
-  // Native Davis Problems detail page link — kept on every form
-  // factor (the mobile rendering is broken in the native app, but
-  // we tried bypassing it via a graph-view deep-link in 0.0.93 and
-  // the param was ignored; user reverted in 0.0.94. So we ship
-  // the same button on mobile and accept the broken native UX —
-  // it's still useful for users who want to drill into Davis's
-  // own data, even if the layout is rough).
+  // Native Davis Problems detail page link — same on every form
+  // factor. The mobile rendering of the destination is rough (text
+  // layout breaks on narrow viewports) but the link itself lands
+  // the user on the correct problem. We tried sidestepping it in
+  // 0.0.93/94 with `?view=graph` (Problems) and `?context=...`
+  // (CoPilot) deep-links; neither was honoured by the target apps,
+  // so both helpers + buttons were dropped in 0.0.95. See
+  // `dynatrace-links.ts` HISTORY block for context.
   const officialUrl = buildOfficialProblemUrl(problem);
-  // Davis CoPilot deep-link (mobile only). The CoPilot chat UI is
-  // mobile-native by design — gives users a way to get problem
-  // context without having to fight the broken Davis Problems
-  // detail page on small viewports. Returns null when CoPilot
-  // isn't installed in the tenant; button just doesn't render.
-  const explainUrl  = isMobileOrTablet ? buildExplainProblemUrl(problem) : null;
   return (
     <div
       className={`neo-row-actions${density === "compact" ? " neo-row-actions-compact" : ""}`}
@@ -75,25 +65,6 @@ export const ProblemActions: React.FC<Props> = ({ problem, sort, onSortChange, d
         >
           <span className="neo-row-act-icon" aria-hidden="true">↗</span>
           <span>Open Problem App</span>
-        </a>
-      )}
-      {/* Mobile-only: "Explain Problem" → Davis CoPilot. The CoPilot
-          chat UI scales cleanly on small viewports, so it's the
-          mobile-safe complement to the (rougher) native Davis
-          Problems link above. Hidden on desktop because there the
-          native page renders fine and one drill-down is plenty.
-          Skipped when the helper returns null (CoPilot not
-          installed in tenant). */}
-      {isMobileOrTablet && explainUrl && (
-        <a
-          href={explainUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="neo-row-act"
-          title="Ask Davis CoPilot to explain this problem in plain language"
-        >
-          <span className="neo-row-act-icon" aria-hidden="true">✦</span>
-          <span>Explain Problem</span>
         </a>
       )}
       <button
