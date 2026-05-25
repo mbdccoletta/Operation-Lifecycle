@@ -47,14 +47,23 @@ interface ShareWhatsAppProps {
  *  the system browser's Dynatrace SSO cookie. The "📱 Tip" line in
  *  `buildEncodedText` instructs the recipient to open the message
  *  in Safari/Chrome where the cookie does exist. */
-function buildProblemLink(): string | null {
+function buildProblemLink(displayId: string | undefined): string | null {
   try {
-    const url = getEnvironmentUrl();
-    if (!url) return null;
-    // Ensure trailing slash so the URL renders as a clean root link
-    // ("…dynatrace.com/" not "…dynatrace.com"); both work but a
-    // trailing slash matches what the user types in a browser bar.
-    return url.endsWith("/") ? url : `${url}/`;
+    const base = getEnvironmentUrl();
+    if (!base) return null;
+    const root = base.endsWith("/") ? base.slice(0, -1) : base;
+    // Deep-link to the specific problem inside this app. Overview.tsx
+    // honours `?focus=P-####` and on bootstrap pins / expands / scrolls
+    // to the matching row (see Overview.tsx lines ~1810). The OAuth
+    // redirect chain preserves the query string across the login bounce,
+    // so even an unauthenticated recipient lands directly on the right
+    // problem after they sign in.
+    //
+    // Fall back to the tenant ROOT when displayId is missing — better
+    // than a dangling deep-link that 404s. The body text still carries
+    // the searchable problem name in that case.
+    if (!displayId) return `${root}/`;
+    return `${root}/ui/apps/my.problems.hub?focus=${encodeURIComponent(displayId)}`;
   } catch {
     return null;
   }
@@ -131,7 +140,7 @@ function rootCauseLine(p: Problem): string | null {
  *  Everything above the URL must be self-sufficient: on-call should
  *  be able to triage off the text alone if the link is unreachable. */
 function buildEncodedText(problem: Problem): string {
-  const link = buildProblemLink();
+  const link = buildProblemLink(problem.display_id);
   const name     = problem["event.name"];
   const status   = getStatusLabel(problem["event.status"]);
   const category = getCategoryLabel(problem["event.category"]);
@@ -179,11 +188,17 @@ function buildEncodedText(problem: Problem): string {
  *  row actions (Copy ID, Share link, Open Problem App).
  *
  *  Platform handling:
- *    • Mobile / tablet → render an `<a href="https://wa.me/?text=...">`
- *      anchor. iOS Safari + Android Chrome both route this URL via
- *      WhatsApp's Universal Link / App Link, opening the native app
- *      directly. Using `<a>` (not `window.open`) avoids the popup-
- *      intermediary that occasionally breaks the iOS handover.
+ *    • Mobile / tablet → render an `<a href="whatsapp://send?text=...">`
+ *      anchor. The native URI scheme opens WhatsApp directly with the
+ *      pre-filled text. Previously we used `wa.me/?text=...` (the
+ *      universal link) but empirically WhatsApp's iOS share-intent
+ *      handler was stripping the surrounding text when the body
+ *      contained a URL, leaving the recipient with only the link in
+ *      the bubble. Going through the native scheme bypasses the
+ *      wa.me redirect entirely and preserves the multi-line body.
+ *      We keep `target="_blank"` so the browser handles the protocol
+ *      handover even when the anchor is rendered inside an iframe
+ *      (which is our default — the app runs sandboxed in AppEngine).
  *    • Desktop → button that opens an inline disclosure with two
  *      choices: WhatsApp Desktop (`whatsapp://send?text=...` URI
  *      scheme) or WhatsApp Web (`https://web.whatsapp.com/...`).
@@ -195,13 +210,15 @@ export const ShareWhatsApp: React.FC<ShareWhatsAppProps> = ({ problem }) => {
   const { isMobileOrTablet } = useDevice();
   const encodedText = buildEncodedText(problem);
 
-  // Mobile / tablet path — single anchor, OS-level Universal Link
-  // routing. No state, no menu.
+  // Mobile / tablet path — single anchor using the native WhatsApp
+  // URI scheme. The OS hands off `whatsapp://` to the installed app
+  // directly and the message body is delivered as plain text without
+  // wa.me's URL-extraction heuristics interfering.
   if (isMobileOrTablet) {
     return (
       <a
         className="neo-row-act"
-        href={`https://wa.me/?text=${encodedText}`}
+        href={`whatsapp://send?text=${encodedText}`}
         target="_blank"
         rel="noopener noreferrer"
         title="Share via WhatsApp"
