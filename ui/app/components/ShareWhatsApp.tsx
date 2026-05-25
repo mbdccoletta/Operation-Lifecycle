@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import { getEnvironmentUrl } from "@dynatrace-sdk/app-environment";
 import { useDevice } from "../hooks/useDevice";
 import type { Problem } from "../hooks/useProblems";
 import {
@@ -24,25 +25,39 @@ interface ShareWhatsAppProps {
 
 /** Build a link to the Dynatrace tenant.
  *
- *  We send the tenant ROOT (`/`) rather than the app's deep-link
- *  path because deep paths return JSON 401 to unauthenticated
- *  requests — there's no SPA to render the friendly login page.
- *  The root path is the most likely to redirect to the OAuth login
- *  cleanly. The problem ID lives in the message body as the manual
- *  search handle once the user is inside the app.
+ *  CRITICAL: `window.location.origin` from inside an AppEngine app
+ *  returns the per-APP SANDBOX origin, e.g.
  *
- *  HOWEVER: even the tenant root fails inside WhatsApp's iOS in-app
- *  browser (WKWebView). The WKWebView sandbox doesn't carry the
- *  user's Safari/Chrome session cookies, so Dynatrace's auth layer
- *  returns a JSON 401 regardless of the requested path. We can't
- *  fix that from our side — the only working path is for the
- *  recipient to open the link in their SYSTEM browser instead of
- *  WhatsApp's embedded one. That instruction is rendered as the
- *  "📱 Tip" line in `buildEncodedText` below. */
+ *    https://xktbb3yiewy2q2blln7jdl7cslfg7vxv--bwm98081.prod3.apps.dynatrace.com
+ *
+ *  That hashed subdomain is the iframe sandbox where this app's
+ *  bundle is served — NOT the user-facing tenant URL. Sending that
+ *  URL to WhatsApp guarantees a 401 because the sandbox host doesn't
+ *  serve the OAuth flow; only the tenant URL does. That's why every
+ *  attempt with `window.location.origin` failed.
+ *
+ *  `getEnvironmentUrl()` from the AppEngine SDK returns the real
+ *  tenant URL (e.g. `https://bwm98081.apps.dynatrace.com`) regardless
+ *  of whether the code runs inside the sandbox iframe. THAT URL is
+ *  the OAuth-aware entry point: unauthenticated requests get a
+ *  proper HTML redirect to the login page.
+ *
+ *  Even so, the link will still fail INSIDE WhatsApp's iOS in-app
+ *  browser (WKWebView), because WKWebView is sandboxed away from
+ *  the system browser's Dynatrace SSO cookie. The "📱 Tip" line in
+ *  `buildEncodedText` instructs the recipient to open the message
+ *  in Safari/Chrome where the cookie does exist. */
 function buildProblemLink(): string | null {
-  if (typeof window === "undefined") return null;
-  const { origin } = window.location;
-  return `${origin}/`;
+  try {
+    const url = getEnvironmentUrl();
+    if (!url) return null;
+    // Ensure trailing slash so the URL renders as a clean root link
+    // ("…dynatrace.com/" not "…dynatrace.com"); both work but a
+    // trailing slash matches what the user types in a browser bar.
+    return url.endsWith("/") ? url : `${url}/`;
+  } catch {
+    return null;
+  }
 }
 
 /** Severity → human label. Davis stores severity as a string "1".."5"
