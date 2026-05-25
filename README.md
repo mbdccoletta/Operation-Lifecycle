@@ -1,4 +1,4 @@
-# Operation Lifecycle
+# Problem Lifecycle
 
 Dynatrace AppEngine application for triaging, prioritising, and
 sharing Davis problems with multi-segment analytics.
@@ -115,7 +115,7 @@ i.e. running `npm run deploy` from this repository.
 After you deploy, **end users do NOT automatically see the app**
 in their Dynatrace launcher. AppEngine apps are gated by IAM
 policies, and every user (or group) who should be able to launch
-Operation Lifecycle needs the right permissions assigned by a
+Problem Lifecycle needs the right permissions assigned by a
 tenant admin.
 
 The minimum-viable policy that grants a user read-only access
@@ -145,11 +145,11 @@ How to apply this in Dynatrace:
 
 1. **Settings → Account Management → Policies** (or via Dynatrace
    IAM API). Create a new policy named e.g.
-   `Operation Lifecycle — Read` and paste the read-only block
-   above. Create a second `Operation Lifecycle — Comment` policy
+   `Problem Lifecycle — Read` and paste the read-only block
+   above. Create a second `Problem Lifecycle — Comment` policy
    with the write block if you want some users to comment.
 2. **Settings → Account Management → Groups**. Either create a
-   new group (e.g. `Operation Lifecycle Users`) or pick an
+   new group (e.g. `Problem Lifecycle Users`) or pick an
    existing one (e.g. `SREs`, `On-call`), and **bind the policies**
    to that group on the tenant where the app is deployed.
 3. **Add users to the group(s).** Users get the permissions on

@@ -195,7 +195,7 @@ function buildMessageParts(problem: Problem): MessageParts {
   // dangling whitespace.
   const footerLines: string[] = [];
   if (link) {
-    footerLines.push("Open in Dynatrace (login if prompted, then search by ID in Operation Lifecycle):");
+    footerLines.push("Open in Dynatrace (login if prompted, then search by ID in Problem Lifecycle):");
     footerLines.push(link);
     footerLines.push("");
     footerLines.push("📱 Tip: if the link shows an error inside WhatsApp, tap the ⋯ menu (top-right) → \"Open in Safari\" (iOS) or \"Open in Chrome\" (Android). The system browser has your Dynatrace session and will log you in normally.");
