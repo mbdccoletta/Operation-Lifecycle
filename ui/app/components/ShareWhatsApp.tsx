@@ -10,29 +10,21 @@ interface ShareWhatsAppProps {
 
 /** Build a link to the Dynatrace tenant.
  *
- *  Why the tenant ROOT (`/`) instead of the app's deep-link path:
+ *  We send the tenant ROOT (`/`) rather than the app's deep-link
+ *  path because deep paths return JSON 401 to unauthenticated
+ *  requests — there's no SPA to render the friendly login page.
+ *  The root path is the most likely to redirect to the OAuth login
+ *  cleanly. The problem ID lives in the message body as the manual
+ *  search handle once the user is inside the app.
  *
- *  The canonical app URL `/ui/apps/my.problems.hub?focus=<id>`
- *  fails when opened from WhatsApp's iOS in-app browser. WKWebView
- *  ships without the Dynatrace SSO cookie, so Dynatrace's auth
- *  layer returns a JSON 401 ("Authentication required") instead of
- *  the HTML redirect to login — the SPA never gets a chance to
- *  bootstrap.
- *
- *  The tenant ROOT URL is GUARANTEED to return HTML regardless of
- *  the request's Accept header. Dynatrace's edge handles it as a
- *  user-facing entry point: unauthenticated requests get redirected
- *  to the OAuth login page, then bounced back to the launcher. The
- *  user logs in, lands on the launcher (showing every installed
- *  app), and can then click into Operation Lifecycle. The displayId
- *  in the message body is the searchable handle they paste into the
- *  list once they're inside the app.
- *
- *  Trade-off: this loses the auto-focus deep-link (we can't
- *  preserve `?focus=` across the auth-redirect chain in a way
- *  Operation Lifecycle's bootstrap would honour). The message body
- *  carries the display id and the problem name, so the user always
- *  has the data they need to find it manually in 2-3 seconds. */
+ *  HOWEVER: even the tenant root fails inside WhatsApp's iOS in-app
+ *  browser (WKWebView). The WKWebView sandbox doesn't carry the
+ *  user's Safari/Chrome session cookies, so Dynatrace's auth layer
+ *  returns a JSON 401 regardless of the requested path. We can't
+ *  fix that from our side — the only working path is for the
+ *  recipient to open the link in their SYSTEM browser instead of
+ *  WhatsApp's embedded one. That instruction is rendered as the
+ *  "📱 Tip" line in `buildEncodedText` below. */
 function buildProblemLink(displayId: string | undefined): string | null {
   if (!displayId) return null;
   if (typeof window === "undefined") return null;
@@ -40,24 +32,37 @@ function buildProblemLink(displayId: string | undefined): string | null {
   return `${origin}/`;
 }
 
-/** Build the share-message body, escaped for the WhatsApp URL. */
+/** Build the share-message body, escaped for the WhatsApp URL.
+ *
+ *  Message anatomy (in order):
+ *    1. Problem facts (name, status, category, ID) — survive any
+ *       browser failure; the recipient at minimum knows WHAT the
+ *       incident is.
+ *    2. Action prompt + URL — points at the tenant root so the
+ *       OAuth flow fires for unauthenticated users.
+ *    3. "📱 Tip" footer — explains how to recover from WhatsApp's
+ *       in-app browser eating the auth flow. Recipient taps the
+ *       ⋯ / share menu inside WhatsApp's browser and chooses
+ *       "Open in Safari" (iOS) or "Open in Chrome" (Android),
+ *       which DOES carry the SSO cookie. This is the only reliable
+ *       cross-platform recovery — we can't force-route past
+ *       WKWebView from the sender side. */
 function buildEncodedText({ problemName, status, category, displayId }: ShareWhatsAppProps): string {
   const link = buildProblemLink(displayId);
-  const message = [
+  const lines = [
     `🚨 Problem: ${problemName}`,
     `Status: ${status}`,
     `Category: ${category}`,
     displayId ? `ID: ${displayId}` : "",
-    /* Workflow text — explicit so the recipient knows what to do:
-       open the link, login if needed, find the problem by ID. The
-       URL points at the tenant root which always triggers the
-       OAuth flow when unauthenticated (no more JSON 401 from
-       in-app browsers — see buildProblemLink's docblock for the
-       full rationale). */
-    link ? "" : "",
-    link ? "Open Dynatrace (login if prompted, then search by ID in Operation Lifecycle):" : "",
-    link ? link : "",
-  ].filter(Boolean).join("\n");
+  ];
+  if (link) {
+    lines.push("");
+    lines.push("Open in Dynatrace (login if prompted, then search by ID in Operation Lifecycle):");
+    lines.push(link);
+    lines.push("");
+    lines.push("📱 Tip: if the link shows an error inside WhatsApp, tap the ⋯ menu (top-right) → \"Open in Safari\" (iOS) or \"Open in Chrome\" (Android). The system browser has your Dynatrace session and will log you in normally.");
+  }
+  const message = lines.filter((l, i) => l !== "" || (i > 0 && lines[i - 1] !== "")).join("\n");
   return encodeURIComponent(message);
 }
 
