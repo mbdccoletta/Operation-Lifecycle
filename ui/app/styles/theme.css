@@ -2306,7 +2306,8 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
     minmax(150px, 1fr)    /* Started */
     96px                  /* Duration */
     minmax(120px, 1fr)    /* Impact */
-    minmax(220px, 280px); /* Metrics (MTTA/MTTR/MTBF/MTTF chips) */
+    minmax(220px, 280px)  /* Metrics (MTTA/MTTR/MTBF/MTTF chips) */
+    minmax(160px, 220px); /* Segments (filter-segment chips) */
 }
 /* Segments view appends an extra Segment column so the user can see
    which filter segment(s) each problem belongs to. */
@@ -2316,14 +2317,15 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
     minmax(140px, 1.6fr)  /* Name */
     96px                  /* Status */
     minmax(120px, 1fr)    /* Category */
-    minmax(140px, 1.1fr)  /* Segment */
+    minmax(140px, 1.1fr)  /* Segment (single — groupBy=segment mode) */
     72px                  /* Affected */
     minmax(140px, 1.2fr)  /* Affected entities */
     minmax(110px, 1fr)    /* Root cause */
     minmax(150px, 1fr)    /* Started */
     96px                  /* Duration */
     minmax(120px, 1fr)    /* Impact */
-    minmax(220px, 280px); /* Metrics */
+    minmax(220px, 280px)  /* Metrics */
+    minmax(160px, 220px); /* Segments (multi — chips for every membership) */
   display: flex; flex-direction: column;
   background: var(--neo-surface);
   border: 1px solid var(--neo-border);
