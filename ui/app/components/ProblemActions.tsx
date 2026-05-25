@@ -10,7 +10,10 @@ import React from "react";
 import type { Problem } from "../hooks/useProblems";
 import { CopyChip } from "./CopyChip";
 import { ShareWhatsApp } from "./ShareWhatsApp";
-import { buildOfficialProblemUrl, buildAppShareUrl } from "../utils/dynatrace-links";
+import {
+  buildOfficialProblemUrl,
+  buildShareLinkText,
+} from "../utils/dynatrace-links";
 import { useTriggerRefresh } from "../contexts/RefreshSignalContext";
 
 interface Props {
@@ -49,23 +52,17 @@ export const ProblemActions: React.FC<Props> = ({ problem, sort, onSortChange, d
       <span className="neo-row-act-share" title="Share via WhatsApp">
         <ShareWhatsApp problem={problem} />
       </span>
-      {/* "Share link" — copies a deep-link straight to THIS problem
-          inside our app (tenant root + `/ui/apps/<self>?focus=<id>`).
-          Falls back to the current browser URL when
-          buildAppShareUrl returns null (SDK unavailable / unusual
-          context). Previously we copied window.location.href
-          unconditionally, but inside the AppEngine iframe sandbox
-          that's the per-app HASHED origin (`xktbb3yiewy…`) which
-          doesn't route from outside — recipients always landed
-          nowhere. Fixed in 0.0.97. */}
+      {/* "Share link" — copies BOTH deep-links (ours + native Davis
+          Problems), labelled, newline-separated. The recipient can
+          pick whichever app suits their workflow. Single helper in
+          utils/dynatrace-links.ts (`buildShareLinkText`) keeps the
+          formatting identical to the desktop-inline duplicate in
+          Overview.tsx. See helper docblock for the fallback chain. */}
       <CopyChip
-        text={
-          buildAppShareUrl(problem.display_id)
-          || (typeof window !== "undefined" ? window.location.href : "")
-        }
+        text={buildShareLinkText(problem)}
         label="Share link"
         icon="⛓"
-        title="Copy a deep-link to this problem inside Problem Lifecycle"
+        title="Copy deep-links (Problem Lifecycle + Davis Problems) for this problem"
       />
       {officialUrl && (
         <a

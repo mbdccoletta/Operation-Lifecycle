@@ -37,6 +37,37 @@ export function buildAppShareUrl(displayId: string | undefined): string | null {
   }
 }
 
+/** Build the full clipboard payload for the "Share link" copy button.
+ *
+ *  Includes BOTH deep-links the user might want to forward:
+ *
+ *    Problem Lifecycle: <our-app-url>?focus=P-####
+ *    Davis Problems:    <native-app-url>/problem/<event.id>
+ *
+ *  Labelled so the recipient can pick whichever fits their workflow
+ *  (our richer triage view vs. the canonical Dynatrace detail page).
+ *  Most messaging apps (Slack, Teams, WhatsApp, email) auto-detect
+ *  both URLs and make them clickable, so the user pastes once and
+ *  the recipient gets two one-click entry points.
+ *
+ *  Falls back to whatever URLs we can build — if one helper returns
+ *  null (e.g. native Davis app isn't installed, no display_id), the
+ *  corresponding line is dropped rather than emitting an empty
+ *  "Davis Problems: " line. If BOTH fail (very rare), returns the
+ *  current `window.location.href` as a last resort so the button
+ *  still copies SOMETHING. */
+export function buildShareLinkText(problem: Problem): string {
+  const ours   = buildAppShareUrl(problem.display_id);
+  const native = buildOfficialProblemUrl(problem);
+  const lines: string[] = [];
+  if (ours)   lines.push(`Problem Lifecycle: ${ours}`);
+  if (native) lines.push(`Davis Problems: ${native}`);
+  if (lines.length === 0) {
+    return typeof window !== "undefined" ? window.location.href : "";
+  }
+  return lines.join("\n");
+}
+
 // App ID of the official Dynatrace problems app. Stable across tenants.
 const DAVIS_PROBLEMS_APP_ID = "dynatrace.davis.problems";
 
