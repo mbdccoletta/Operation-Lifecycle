@@ -8,13 +8,35 @@ interface ShareWhatsAppProps {
   displayId?: string;
 }
 
+/** Build a deep-link to the current Operation Lifecycle install
+ *  that lands on the Incidents list pinned to the given problem.
+ *  Uses the page's own origin + pathname so the link is always
+ *  rooted in the same tenant the sharer is using.
+ *
+ *  URL contract: `?focus=<displayId>` — already parsed by
+ *  Overview.tsx (around line 1810). Hitting the link pins the
+ *  problem and scrolls it into view in the list. */
+function buildProblemLink(displayId: string | undefined): string | null {
+  if (!displayId) return null;
+  if (typeof window === "undefined") return null;
+  const { origin, pathname } = window.location;
+  return `${origin}${pathname}?focus=${encodeURIComponent(displayId)}`;
+}
+
 /** Build the share-message body, escaped for the WhatsApp URL. */
 function buildEncodedText({ problemName, status, category, displayId }: ShareWhatsAppProps): string {
+  const link = buildProblemLink(displayId);
   const message = [
     `🚨 Problem: ${problemName}`,
     `Status: ${status}`,
     `Category: ${category}`,
     displayId ? `ID: ${displayId}` : "",
+    /* Blank line + bare URL so WhatsApp renders the link as a
+       tappable preview card. Putting the URL on its own line keeps
+       the message scannable even when the chat client doesn't
+       auto-linkify inline. */
+    link ? "" : "",
+    link ? link : "",
   ].filter(Boolean).join("\n");
   return encodeURIComponent(message);
 }
