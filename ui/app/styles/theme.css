@@ -8785,56 +8785,108 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   letter-spacing: -0.1px;
 }
 
-/* Mobile "details copied, paste in WhatsApp" toast.
-   Fixed-position overlay at the bottom of the viewport so it doesn't
-   shift the underlying chat-row layout when it appears. Survives the
-   user's switch to WhatsApp because the iframe parent renders the
-   toast above the iframe boundary via z-index + position:fixed.
-   7-second auto-dismiss handled in TS (matches the time the user
-   needs to switch apps + pick a contact + reach compose). */
-.neo-share-wa-toast {
+/* Mobile "details copied — paste in WhatsApp" confirmation modal.
+   Blocks user interaction until they explicitly tap Open WhatsApp
+   or Cancel, so the paste-instructions are impossible to miss
+   (an auto-dismissing toast was tested first but users were already
+   inside WhatsApp before they read it).
+   Position-fixed full-viewport backdrop covers the row toolbar +
+   any other UI underneath; the modal centers above it. */
+.neo-share-wa-modal-backdrop {
   position: fixed;
-  bottom: 24px;
-  left: 50%;
-  transform: translateX(-50%);
+  inset: 0;
   display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  background: rgba(18, 26, 42, 0.96);
-  color: #fff;
-  padding: 14px 18px;
-  border-radius: 12px;
-  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45),
-              0 0 0 1px rgba(255, 255, 255, 0.08) inset;
+  align-items: center;
+  justify-content: center;
+  background: rgba(8, 12, 24, 0.72);
+  backdrop-filter: blur(4px);
   z-index: 10000;
-  max-width: min(420px, 92vw);
-  font: 500 13px/1.4 var(--neo-sans);
-  pointer-events: none;
-  animation: neo-share-wa-toast-in 0.25s ease-out;
+  padding: 16px;
+  animation: neo-share-wa-backdrop-in 0.18s ease-out;
 }
-.neo-share-wa-toast-icon {
-  font-size: 22px;
+.neo-share-wa-modal {
+  background: var(--neo-bg-1, #131826);
+  color: var(--neo-text, #e8ecf4);
+  border-radius: 16px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.6),
+              0 0 0 1px rgba(255, 255, 255, 0.08) inset;
+  max-width: 440px;
+  width: 100%;
+  padding: 24px 22px 18px;
+  text-align: center;
+  animation: neo-share-wa-modal-in 0.22s ease-out;
+}
+.neo-share-wa-modal-icon {
+  font-size: 42px;
   line-height: 1;
-  flex: 0 0 auto;
+  margin: 0 auto 10px;
 }
-.neo-share-wa-toast-body {
-  flex: 1 1 auto;
+.neo-share-wa-modal-title {
+  font: 600 18px/1.25 var(--neo-sans);
+  margin: 0 0 10px;
+  color: var(--neo-text, #fff);
 }
-.neo-share-wa-toast-body strong {
+.neo-share-wa-modal-body {
+  font: 400 14px/1.5 var(--neo-sans);
+  color: var(--neo-text-2, #c2cad8);
+  margin: 0 0 22px;
+  text-align: left;
+}
+.neo-share-wa-modal-body strong {
   font-weight: 600;
-  color: #fff;
+  color: var(--neo-text, #fff);
 }
-.neo-share-wa-toast-body em {
+.neo-share-wa-modal-body em {
   font-style: normal;
   font-weight: 600;
   padding: 1px 6px;
-  margin: 0 2px;
   background: rgba(255, 255, 255, 0.14);
   border-radius: 4px;
+  white-space: nowrap;
 }
-@keyframes neo-share-wa-toast-in {
-  from { opacity: 0; transform: translate(-50%, 12px); }
-  to   { opacity: 1; transform: translate(-50%, 0); }
+.neo-share-wa-modal-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+.neo-share-wa-modal-btn {
+  appearance: none;
+  border: 0;
+  border-radius: 10px;
+  padding: 11px 18px;
+  font: 600 14px/1 var(--neo-sans);
+  cursor: pointer;
+  transition: filter 0.15s ease, transform 0.05s ease;
+}
+.neo-share-wa-modal-btn:active {
+  transform: scale(0.97);
+}
+.neo-share-wa-modal-btn-secondary {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--neo-text-2, #c2cad8);
+}
+.neo-share-wa-modal-btn-secondary:hover,
+.neo-share-wa-modal-btn-secondary:focus-visible {
+  background: rgba(255, 255, 255, 0.14);
+}
+.neo-share-wa-modal-btn-primary {
+  /* WhatsApp green — instantly recognizable as the brand colour for
+     the "go to WhatsApp" action, removes any ambiguity about which
+     button continues vs cancels. */
+  background: #25D366;
+  color: #0a1a14;
+}
+.neo-share-wa-modal-btn-primary:hover,
+.neo-share-wa-modal-btn-primary:focus-visible {
+  filter: brightness(1.08);
+}
+@keyframes neo-share-wa-backdrop-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes neo-share-wa-modal-in {
+  from { opacity: 0; transform: translateY(12px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0)    scale(1); }
 }
 
 /* Section divider for "group by segment" sort mode. Spans the full

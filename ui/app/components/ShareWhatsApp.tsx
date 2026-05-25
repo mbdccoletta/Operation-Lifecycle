@@ -271,22 +271,24 @@ const MobileShareButton: React.FC<{ messageText: string; problemUrl: string | nu
   messageText,
   problemUrl,
 }) => {
-  const [showHint, setShowHint] = useState(false);
-  const hintTimeoutRef = useRef<number | null>(null);
+  // `clipboardReady` controls the confirmation modal. We show it
+  // AFTER the clipboard write succeeds and BEFORE opening WhatsApp,
+  // so the user always sees the "paste in WhatsApp" instructions
+  // and explicitly acknowledges before leaving the app. Previous
+  // attempts used an auto-dismissing toast — but users were
+  // already inside WhatsApp by the time the toast appeared, and
+  // skipped the paste step entirely. A blocking modal forces the
+  // instruction to land.
+  const [clipboardReady, setClipboardReady] = useState(false);
   // The URL scheme used to open WhatsApp. When we have a deep-link
   // URL, pre-fill the compose with it so the user gets SOMETHING in
-  // the message even if they skip the paste step. When we don't,
-  // open WhatsApp's empty share intent so the user can paste freely.
+  // the message even if they skip the paste step.
   const whatsappHref = problemUrl
     ? `whatsapp://send?text=${encodeURIComponent(problemUrl)}`
     : "whatsapp://send";
 
-  // Cancel any pending hint-hide timeout on unmount.
-  useEffect(() => () => {
-    if (hintTimeoutRef.current) window.clearTimeout(hintTimeoutRef.current);
-  }, []);
-
   const openWhatsapp = () => {
+    setClipboardReady(false);
     // Programmatic anchor click — same as the user tapping the
     // original `<a>`. Using window.location.href would navigate
     // THIS iframe to the protocol scheme, which AppEngine's sandbox
@@ -300,15 +302,6 @@ const MobileShareButton: React.FC<{ messageText: string; problemUrl: string | nu
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-  };
-
-  const flashHint = () => {
-    setShowHint(true);
-    if (hintTimeoutRef.current) window.clearTimeout(hintTimeoutRef.current);
-    // 7 s is long enough for the user to read the hint, switch to
-    // WhatsApp, pick a contact, and reach the compose field before
-    // the toast self-dismisses.
-    hintTimeoutRef.current = window.setTimeout(() => setShowHint(false), 7000);
   };
 
   const onClick = async (e: React.MouseEvent<HTMLAnchorElement>) => {
@@ -333,8 +326,9 @@ const MobileShareButton: React.FC<{ messageText: string; problemUrl: string | nu
       }
     }
 
-    // Plan B — copy full body to clipboard, open WhatsApp with URL
-    // pre-filled. User long-presses + pastes to inject the body.
+    // Plan B — copy full body to clipboard, then show the modal so
+    // the user explicitly acknowledges the paste step BEFORE we
+    // launch WhatsApp.
     let clipboardOk = false;
     try {
       if (navigator.clipboard?.writeText) {
@@ -343,13 +337,21 @@ const MobileShareButton: React.FC<{ messageText: string; problemUrl: string | nu
       }
     } catch {
       // Clipboard API may reject (insecure context, permission, etc.).
-      // We continue anyway — the user at least gets the URL via the
-      // WhatsApp scheme; they lose the body if clipboard failed.
     }
 
-    if (clipboardOk) flashHint();
-    openWhatsapp();
+    if (clipboardOk) {
+      // Show the modal — user reads the instructions, taps "Open
+      // WhatsApp" when ready, and the click handler launches the
+      // scheme then.
+      setClipboardReady(true);
+    } else {
+      // Clipboard failed — no point showing the paste instruction.
+      // Open WhatsApp with just the URL (still a useful share).
+      openWhatsapp();
+    }
   };
+
+  const onCancel = () => setClipboardReady(false);
 
   return (
     <>
@@ -364,17 +366,90 @@ const MobileShareButton: React.FC<{ messageText: string; problemUrl: string | nu
         <span className="neo-row-act-icon" aria-hidden="true">▤</span>
         <span>WhatsApp</span>
       </a>
-      {showHint && (
-        <div className="neo-share-wa-toast" role="status" aria-live="polite">
-          <span className="neo-share-wa-toast-icon" aria-hidden="true">📋</span>
-          <span className="neo-share-wa-toast-body">
-            <strong>Details copied to clipboard</strong>
-            <br />
-            Long-press WhatsApp's message field and tap <em>Paste</em> to include the full incident summary before sending.
-          </span>
-        </div>
+      {clipboardReady && (
+        <PasteInstructionsModal
+          onConfirm={openWhatsapp}
+          onCancel={onCancel}
+        />
       )}
     </>
+  );
+};
+
+/** Modal shown after clipboard copy succeeds, BEFORE WhatsApp launches.
+ *  Blocks until the user taps "Open WhatsApp" or dismisses, so the
+ *  paste-into-WhatsApp instruction is impossible to miss.
+ *
+ *  Why a blocking modal instead of a toast: the previous toast
+ *  auto-dismissed after 7 s and users found themselves already inside
+ *  WhatsApp before they'd read it — they'd send the URL-only message
+ *  not realizing the full body was sitting in their clipboard. A
+ *  blocking modal forces the read.
+ *
+ *  Implementation notes:
+ *    • Backdrop click cancels (matches platform "tap outside to
+ *      dismiss" conventions for modals).
+ *    • Escape key cancels (keyboard parity for tablet users with
+ *      external keyboards).
+ *    • Primary action is the GREEN "Open WhatsApp" button so it
+ *      reads as the obvious next step, not a destructive choice. */
+const PasteInstructionsModal: React.FC<{
+  onConfirm: () => void;
+  onCancel: () => void;
+}> = ({ onConfirm, onCancel }) => {
+  // Escape-key handler — close the modal without launching WhatsApp.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onCancel();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onCancel]);
+
+  return (
+    <div
+      className="neo-share-wa-modal-backdrop"
+      onClick={onCancel}
+      role="presentation"
+    >
+      <div
+        className="neo-share-wa-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="neo-share-wa-modal-title"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="neo-share-wa-modal-icon" aria-hidden="true">📋</div>
+        <h3 id="neo-share-wa-modal-title" className="neo-share-wa-modal-title">
+          Details copied to clipboard
+        </h3>
+        <p className="neo-share-wa-modal-body">
+          WhatsApp will open with the problem link pre-filled.{" "}
+          <strong>
+            Long-press the message field and tap <em>Paste</em>
+          </strong>{" "}
+          to include the full incident summary (problem name, severity, timing,
+          affected entities, root cause) alongside the link before sending.
+        </p>
+        <div className="neo-share-wa-modal-actions">
+          <button
+            type="button"
+            className="neo-share-wa-modal-btn neo-share-wa-modal-btn-secondary"
+            onClick={onCancel}
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            className="neo-share-wa-modal-btn neo-share-wa-modal-btn-primary"
+            onClick={onConfirm}
+            autoFocus
+          >
+            Open WhatsApp
+          </button>
+        </div>
+      </div>
+    </div>
   );
 };
 
