@@ -219,47 +219,82 @@ function buildMessageText(problem: Problem): string {
 export const ShareWhatsApp: React.FC<ShareWhatsAppProps> = ({ problem }) => {
   const { isMobileOrTablet } = useDevice();
   const messageText = buildMessageText(problem);
+  // Mobile path needs the URL separately so it can pre-fill the
+  // WhatsApp compose with just the link (body goes via clipboard).
+  const problemUrl  = buildProblemLink(problem.display_id);
 
   if (isMobileOrTablet) {
-    return <MobileShareButton messageText={messageText} />;
+    return <MobileShareButton messageText={messageText} problemUrl={problemUrl} />;
   }
 
   // Desktop path — button that toggles a small two-option menu.
+  // Desktop WhatsApp doesn't strip body+URL, so we send the whole
+  // payload in the URL scheme as before — confirmed working by user
+  // testing in 0.0.72.
   return <DesktopShareMenu encodedText={encodeURIComponent(messageText)} />;
 };
 
 /** Mobile-only share button.
  *
- *  Tries `navigator.share` first (the Web Share API). When the user
- *  picks WhatsApp from the OS share sheet, iOS / Android deliver the
- *  whole `text` payload to WhatsApp's Share Extension, which preserves
- *  multi-line content + the embedded URL intact.
+ *  Background: iOS WhatsApp's URL-scheme handler (`whatsapp://send`
+ *  and `wa.me/?text=`) auto-detects URLs in the `text` param and
+ *  converts the entire message into a "URL share" type, discarding
+ *  the surrounding body. Desktop WhatsApp (Mac/Windows/Web) doesn't
+ *  do this — that's why the desktop chooser works perfectly. And
+ *  the Web Share API (`navigator.share`) would preserve the body,
+ *  but it's gated by the `web-share` permission policy which the
+ *  AppEngine iframe shell doesn't grant — calls throw NotAllowedError.
  *
- *  But the Web Share API has a HARD requirement that bit us in 0.0.71:
- *  it is gated by the `web-share` permission policy, and inside an
- *  iframe (which is where Dynatrace AppEngine apps run) it only works
- *  if the parent embedded us with `allow="web-share"`. The AppEngine
- *  shell doesn't grant that permission, so `navigator.share` throws
- *  `NotAllowedError` and the original 0.0.71 code swallowed the
- *  error silently — clicking the button did nothing.
+ *  Workaround on mobile (the design that finally works):
+ *    1. Try `navigator.share` first — covers the off-chance the
+ *       iframe gains the permission later, or the app gets opened
+ *       outside an iframe.
+ *    2. On failure → copy the FULL message (body + URL + tip) to
+ *       the clipboard via `navigator.clipboard.writeText`, then
+ *       open WhatsApp with the URL pre-filled in the compose field.
+ *    3. Render a fixed-position toast at the bottom of the screen
+ *       instructing the user to long-press WhatsApp's compose and
+ *       tap "Paste" — that injects the body in the chat as a normal
+ *       compose (no URL detection runs on already-typed text), so
+ *       the recipient gets the WHOLE message intact.
  *
- *  Fix: try Web Share, and on ANY error other than user-cancel, fall
- *  back to the `whatsapp://send?text=…` URL scheme. The fallback may
- *  truncate the body (WhatsApp iOS strips text around URLs in the
- *  scheme handler), but at least the share intent fires and the
- *  recipient receives the link. */
-const MobileShareButton: React.FC<{ messageText: string }> = ({ messageText }) => {
-  const encoded = encodeURIComponent(messageText);
-  const fallbackHref = `whatsapp://send?text=${encoded}`;
+ *  Why this works: the URL-strip behaviour is a parse-time decision
+ *  WhatsApp makes when handling the share intent. Manual paste into
+ *  the compose field bypasses that path — the text is already inside
+ *  the composer when WhatsApp considers it, so multi-line body + URL
+ *  ship together as a normal compose message.
+ *
+ *  Even if the user forgets to paste, the URL is still in the
+ *  compose (from the URL scheme pre-fill), so at the very least the
+ *  recipient gets the deep-link. */
+const MobileShareButton: React.FC<{ messageText: string; problemUrl: string | null }> = ({
+  messageText,
+  problemUrl,
+}) => {
+  const [showHint, setShowHint] = useState(false);
+  const hintTimeoutRef = useRef<number | null>(null);
+  // The URL scheme used to open WhatsApp. When we have a deep-link
+  // URL, pre-fill the compose with it so the user gets SOMETHING in
+  // the message even if they skip the paste step. When we don't,
+  // open WhatsApp's empty share intent so the user can paste freely.
+  const whatsappHref = problemUrl
+    ? `whatsapp://send?text=${encodeURIComponent(problemUrl)}`
+    : "whatsapp://send";
 
-  const openFallback = () => {
-    // Programmatic anchor click — equivalent to the user tapping the
-    // original `<a>`. Using window.location.href would navigate THIS
-    // iframe to the protocol scheme, which AppEngine's sandbox blocks
-    // (no top-level nav permission). A real anchor click bubbles to
-    // the browser's URL-scheme dispatcher and reliably opens WhatsApp.
+  // Cancel any pending hint-hide timeout on unmount.
+  useEffect(() => () => {
+    if (hintTimeoutRef.current) window.clearTimeout(hintTimeoutRef.current);
+  }, []);
+
+  const openWhatsapp = () => {
+    // Programmatic anchor click — same as the user tapping the
+    // original `<a>`. Using window.location.href would navigate
+    // THIS iframe to the protocol scheme, which AppEngine's sandbox
+    // blocks (no top-level nav permission). A real anchor click
+    // bubbles to the browser's URL-scheme dispatcher and reliably
+    // opens WhatsApp.
     const a = document.createElement("a");
-    a.href = fallbackHref;
+    a.href = whatsappHref;
     a.target = "_blank";
     a.rel = "noopener noreferrer";
     document.body.appendChild(a);
@@ -267,35 +302,79 @@ const MobileShareButton: React.FC<{ messageText: string }> = ({ messageText }) =
     document.body.removeChild(a);
   };
 
-  const onClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
-    // No Web Share API support → let the default <a> href fire.
-    if (typeof navigator === "undefined" || typeof navigator.share !== "function") {
-      return;
-    }
+  const flashHint = () => {
+    setShowHint(true);
+    if (hintTimeoutRef.current) window.clearTimeout(hintTimeoutRef.current);
+    // 7 s is long enough for the user to read the hint, switch to
+    // WhatsApp, pick a contact, and reach the compose field before
+    // the toast self-dismisses.
+    hintTimeoutRef.current = window.setTimeout(() => setShowHint(false), 7000);
+  };
+
+  const onClick = async (e: React.MouseEvent<HTMLAnchorElement>) => {
     e.preventDefault();
-    navigator.share({ text: messageText }).catch((err: unknown) => {
-      // User cancelled the iOS share sheet → don't re-open WhatsApp
-      // behind their back.
-      const name = (err as { name?: string })?.name;
-      if (name === "AbortError") return;
-      // Iframe blocked us (NotAllowedError), or some other OS error.
-      // Fall back to the URL scheme so the user gets SOMETHING.
-      openFallback();
-    });
+
+    // Plan A — Web Share API. Works only if the iframe was embedded
+    // with `allow="web-share"`. AppEngine doesn't currently set
+    // that, so this almost always falls through to plan B; but if
+    // the embedding ever changes we'll get the "perfect" path back
+    // for free.
+    if (typeof navigator !== "undefined" && typeof navigator.share === "function") {
+      try {
+        await navigator.share({ text: messageText });
+        return;
+      } catch (err: unknown) {
+        const name = (err as { name?: string })?.name;
+        // User cancelled the iOS share sheet → bail without re-opening
+        // WhatsApp behind their back.
+        if (name === "AbortError") return;
+        // Anything else (NotAllowedError from iframe restriction,
+        // etc.) → fall through to Plan B.
+      }
+    }
+
+    // Plan B — copy full body to clipboard, open WhatsApp with URL
+    // pre-filled. User long-presses + pastes to inject the body.
+    let clipboardOk = false;
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(messageText);
+        clipboardOk = true;
+      }
+    } catch {
+      // Clipboard API may reject (insecure context, permission, etc.).
+      // We continue anyway — the user at least gets the URL via the
+      // WhatsApp scheme; they lose the body if clipboard failed.
+    }
+
+    if (clipboardOk) flashHint();
+    openWhatsapp();
   };
 
   return (
-    <a
-      className="neo-row-act"
-      href={fallbackHref}
-      onClick={onClick}
-      target="_blank"
-      rel="noopener noreferrer"
-      title="Share via WhatsApp"
-    >
-      <span className="neo-row-act-icon" aria-hidden="true">▤</span>
-      <span>WhatsApp</span>
-    </a>
+    <>
+      <a
+        className="neo-row-act"
+        href={whatsappHref}
+        onClick={onClick}
+        target="_blank"
+        rel="noopener noreferrer"
+        title="Share via WhatsApp"
+      >
+        <span className="neo-row-act-icon" aria-hidden="true">▤</span>
+        <span>WhatsApp</span>
+      </a>
+      {showHint && (
+        <div className="neo-share-wa-toast" role="status" aria-live="polite">
+          <span className="neo-share-wa-toast-icon" aria-hidden="true">📋</span>
+          <span className="neo-share-wa-toast-body">
+            <strong>Details copied to clipboard</strong>
+            <br />
+            Long-press WhatsApp's message field and tap <em>Paste</em> to include the full incident summary before sending.
+          </span>
+        </div>
+      )}
+    </>
   );
 };
 
