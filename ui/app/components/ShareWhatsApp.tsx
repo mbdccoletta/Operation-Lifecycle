@@ -139,7 +139,7 @@ function rootCauseLine(p: Problem): string | null {
  *
  *  Everything above the URL must be self-sufficient: on-call should
  *  be able to triage off the text alone if the link is unreachable. */
-function buildEncodedText(problem: Problem): string {
+function buildMessageText(problem: Problem): string {
   const link = buildProblemLink(problem.display_id);
   const name     = problem["event.name"];
   const status   = getStatusLabel(problem["event.status"]);
@@ -181,56 +181,97 @@ function buildEncodedText(problem: Problem): string {
     lines.push("📱 Tip: if the link shows an error inside WhatsApp, tap the ⋯ menu (top-right) → \"Open in Safari\" (iOS) or \"Open in Chrome\" (Android). The system browser has your Dynatrace session and will log you in normally.");
   }
 
-  return encodeURIComponent(lines.join("\n"));
+  return lines.join("\n");
 }
 
 /** Send-via-WhatsApp action. Native button styling matches the other
  *  row actions (Copy ID, Share link, Open Problem App).
  *
  *  Platform handling:
- *    • Mobile / tablet → render an `<a href="whatsapp://send?text=...">`
- *      anchor. The native URI scheme opens WhatsApp directly with the
- *      pre-filled text. Previously we used `wa.me/?text=...` (the
- *      universal link) but empirically WhatsApp's iOS share-intent
- *      handler was stripping the surrounding text when the body
- *      contained a URL, leaving the recipient with only the link in
- *      the bubble. Going through the native scheme bypasses the
- *      wa.me redirect entirely and preserves the multi-line body.
- *      We keep `target="_blank"` so the browser handles the protocol
- *      handover even when the anchor is rendered inside an iframe
- *      (which is our default — the app runs sandboxed in AppEngine).
+ *    • Mobile / tablet → use the Web Share API (`navigator.share`) when
+ *      available. This is the ONLY reliable way to deliver multi-line
+ *      text + URL to WhatsApp on iOS: the OS hands the entire payload
+ *      to the picked target as a structured share intent. Both
+ *      `wa.me/?text=…` (universal link) and `whatsapp://send?text=…`
+ *      (custom scheme) were empirically stripping the surrounding text
+ *      when the body contained a URL — WhatsApp's URL handler turns the
+ *      whole message into a "URL share" type and discards the
+ *      neighbouring lines. The Web Share API bypasses that path
+ *      entirely because the OS delivers `text` to WhatsApp via its
+ *      Share Extension, not through the URL scheme.
+ *
+ *      Fallback for browsers without `navigator.share` (older Chrome
+ *      on Android, in-app browsers that strip the API): we still
+ *      navigate to `whatsapp://send?text=…` so the user gets *some*
+ *      WhatsApp handoff, even if the body is truncated.
+ *
+ *      Trade-off: tapping the button on iOS now opens the OS share
+ *      sheet first; the user picks "WhatsApp" from the icons row,
+ *      then WhatsApp opens with the full text pre-filled. One extra
+ *      tap, but it's the only way the body actually arrives.
+ *
  *    • Desktop → button that opens an inline disclosure with two
  *      choices: WhatsApp Desktop (`whatsapp://send?text=...` URI
  *      scheme) or WhatsApp Web (`https://web.whatsapp.com/...`).
- *      The browser asks the OS to handle the `whatsapp://` protocol
- *      when the user picks "Desktop"; if the app isn't installed the
- *      browser shows its own "no handler" message — better than us
- *      guessing wrong. */
+ *      Both desktop targets preserve the multi-line body fine (the
+ *      URL-handler stripping behaviour is iOS-specific), so the
+ *      desktop path doesn't need the Web Share API workaround. */
 export const ShareWhatsApp: React.FC<ShareWhatsAppProps> = ({ problem }) => {
   const { isMobileOrTablet } = useDevice();
-  const encodedText = buildEncodedText(problem);
+  const messageText = buildMessageText(problem);
 
-  // Mobile / tablet path — single anchor using the native WhatsApp
-  // URI scheme. The OS hands off `whatsapp://` to the installed app
-  // directly and the message body is delivered as plain text without
-  // wa.me's URL-extraction heuristics interfering.
   if (isMobileOrTablet) {
-    return (
-      <a
-        className="neo-row-act"
-        href={`whatsapp://send?text=${encodedText}`}
-        target="_blank"
-        rel="noopener noreferrer"
-        title="Share via WhatsApp"
-      >
-        <span className="neo-row-act-icon" aria-hidden="true">▤</span>
-        <span>WhatsApp</span>
-      </a>
-    );
+    return <MobileShareButton messageText={messageText} />;
   }
 
   // Desktop path — button that toggles a small two-option menu.
-  return <DesktopShareMenu encodedText={encodedText} />;
+  return <DesktopShareMenu encodedText={encodeURIComponent(messageText)} />;
+};
+
+/** Mobile-only share button.
+ *
+ *  Tries `navigator.share` first (the Web Share API). When the user
+ *  picks WhatsApp from the OS share sheet, iOS / Android deliver the
+ *  whole `text` payload to WhatsApp's Share Extension, which preserves
+ *  multi-line content + the embedded URL intact.
+ *
+ *  Falls back to `whatsapp://send?text=…` for browsers that don't
+ *  expose the API (or expose a stub that throws synchronously). The
+ *  fallback may strip the body — but it's the best we can do without
+ *  the OS-level share intent. */
+const MobileShareButton: React.FC<{ messageText: string }> = ({ messageText }) => {
+  const onClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
+    // Feature-detect the Web Share API. Older iOS Safari versions
+    // expose `navigator.share` but throw "NotAllowedError" if the
+    // call isn't directly inside a user-gesture handler — we ARE in
+    // one (button click), so we're fine.
+    if (typeof navigator !== "undefined" && typeof navigator.share === "function") {
+      e.preventDefault();
+      navigator.share({ text: messageText }).catch(() => {
+        /* User cancelled the share sheet, or the OS rejected it.
+           Both are non-errors — we just let the moment pass. We do
+           NOT fall back to the URL scheme here, because falling back
+           on cancel would re-open WhatsApp against the user's wish. */
+      });
+    }
+    // If navigator.share is unavailable, the default <a> navigation
+    // fires and opens WhatsApp via the URL scheme. The body may get
+    // truncated but the share still happens.
+  };
+
+  return (
+    <a
+      className="neo-row-act"
+      href={`whatsapp://send?text=${encodeURIComponent(messageText)}`}
+      onClick={onClick}
+      target="_blank"
+      rel="noopener noreferrer"
+      title="Share via WhatsApp"
+    >
+      <span className="neo-row-act-icon" aria-hidden="true">▤</span>
+      <span>WhatsApp</span>
+    </a>
+  );
 };
 
 /** Desktop disclosure: button + inline menu. State + click-outside
