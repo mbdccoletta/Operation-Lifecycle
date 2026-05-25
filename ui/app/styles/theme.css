@@ -8784,3 +8784,38 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   color: var(--neo-text-3);
   letter-spacing: -0.1px;
 }
+
+/* Section divider for "group by segment" sort mode. Spans the full
+   table width via grid-column 1 / -1 so it cuts cleanly across all
+   12 columns. Cyan accent matches the Segments column + pinned
+   banner so the visual relationship is immediate. */
+.neo-tgroup {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px 6px;
+  background: linear-gradient(
+    to right,
+    rgba(6, 182, 212, 0.10),
+    rgba(6, 182, 212, 0)
+  );
+  border-top: 1px solid rgba(6, 182, 212, 0.25);
+  border-bottom: 1px dashed rgba(6, 182, 212, 0.18);
+  font-family: var(--neo-mono);
+  letter-spacing: -0.1px;
+}
+.neo-tgroup:first-child {
+  border-top: 0;
+}
+.neo-tgroup-icon {
+  color: #06B6D4;
+  font-size: 14px;
+}
+.neo-tgroup-label {
+  color: #67E8F9;
+  font-weight: 700;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}

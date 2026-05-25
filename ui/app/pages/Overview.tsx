@@ -116,7 +116,7 @@ function getSeverity(start: string): "crit" | "warn" | "ok" {
   return "ok";
 }
 
-type SortMode = "urgency" | "newest" | "oldest" | "duration" | "impact";
+type SortMode = "urgency" | "newest" | "oldest" | "duration" | "impact" | "segment";
 type ConstellationMode = "rising" | "open_time" | "criticality" | "total";
 
 // Picking a sort order in the list view also tells the constellation
@@ -134,6 +134,11 @@ const SORT_TO_SHOW = {
   oldest:   "open_time",
   duration: "open_time",
   impact:   "total",
+  // "segment" doesn't map to a constellation mode — it's a list-only
+  // organising mode. Pick "total" as the safest default so the
+  // canvas still has SOMETHING to render when the user picks
+  // "Segment" while viewing the constellation in another tab.
+  segment:  "total",
 } as const satisfies Record<SortMode, ConstellationMode>;
 
 // Mirrors the constellation's leader logic, parameterised by the
@@ -463,7 +468,13 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
    *  default Sort-by dropdown order). */
   type ColumnSortKey =
     | "id" | "name" | "status" | "category" | "segment" | "affected"
-    | "entities" | "root" | "started" | "duration" | "impact";
+    | "entities" | "root" | "started" | "duration" | "impact"
+    // "segments" (plural) sorts by the FIRST segment name a problem
+    // belongs to, alphabetically. Distinct from "segment" (single)
+    // which is the legacy sort for the hidden Segments page where
+    // each row carried one canonical segment. Multi-membership cells
+    // collapse to their alpha-first name for sort purposes.
+    | "segments";
   const [colSort, setColSort] = useState<{ key: ColumnSortKey; dir: "asc" | "desc" } | null>(null);
   const handleColumnSort = useCallback((key: ColumnSortKey) => {
     setColSort((prev) => {
@@ -1464,10 +1475,14 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
           case "name":       return a["event.name"].localeCompare(b["event.name"]) * sign;
           case "status":     return (a["event.status"] === b["event.status"] ? 0 : a["event.status"] === "ACTIVE" ? -1 : 1) * sign;
           case "category":   return a["event.category"].localeCompare(b["event.category"]) * sign;
-          case "segment": {
-            // Sort by the first segment name (alphabetical). Problems
-            // with no segment membership sort to the end ascending,
-            // to the front descending.
+          // "segment" (legacy, groupBy=segment single-segment column) and
+          // "segments" (plural, the new multi-chip column at the table's
+          // right edge) share the same sort semantics: order by the
+          // alphabetically-first segment name a problem belongs to.
+          // Problems with no segment membership sort to the end asc, to
+          // the front desc.
+          case "segment":
+          case "segments": {
             const av = (() => {
               const s = segMembership.get(a.display_id);
               if (!s || s.size === 0) return null;
@@ -1505,20 +1520,46 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
       return [...problems].sort(colCmp);
     }
     // Dropdown sort: keeps active-before-resolved separation.
+    // "segment" mode is the exception — it groups by segment first
+    // (mixing actives + resolved within each segment) so the user
+    // sees per-segment cohorts together. Section dividers in the
+    // render step rely on this contiguous ordering.
     const cmp = (a: Problem, b: Problem) => {
       switch (sortMode) {
         case "newest":   return new Date(b["event.start"]).getTime() - new Date(a["event.start"]).getTime();
         case "oldest":   return new Date(a["event.start"]).getTime() - new Date(b["event.start"]).getTime();
         case "duration": return new Date(a["event.start"]).getTime() - new Date(b["event.start"]).getTime();
         case "impact":   return (b.affected_entity_ids?.length || 0) - (a.affected_entity_ids?.length || 0);
+        case "segment": {
+          // Alphabetical by first segment name; problems with no
+          // membership sink to the bottom.
+          const firstSeg = (p: Problem) => {
+            const s = segMembership.get(p.display_id);
+            if (!s || s.size === 0) return null;
+            const names = Array.from(s).map((uid) => segNameByUid[uid] || uid).sort();
+            return names[0];
+          };
+          const av = firstSeg(a);
+          const bv = firstSeg(b);
+          if (av === null && bv === null) return 0;
+          if (av === null) return 1;
+          if (bv === null) return -1;
+          return av.localeCompare(bv);
+        }
         case "urgency":
         default:         return getUrgencyScore(b) - getUrgencyScore(a);
       }
     };
+    // In segment mode, mix actives + resolved together so the
+    // per-segment groupings are contiguous. Other modes keep the
+    // canonical active-first split for at-a-glance triage.
+    if (sortMode === "segment") {
+      return [...problems].sort(cmp);
+    }
     const a = [...active].sort(cmp);
     const r = [...resolved].sort(cmp);
     return [...a, ...r];
-  }, [problems, active, resolved, sortMode, colSort]);
+  }, [problems, active, resolved, sortMode, colSort, segMembership, segNameByUid]);
 
   const filtered = useMemo(() => {
     let out = sorted;
@@ -2434,6 +2475,7 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
               <option value="oldest">Oldest first</option>
               <option value="duration">Longest duration</option>
               <option value="impact">Highest impact</option>
+              <option value="segment">Segment (grouped)</option>
             </select>
             <span className="neo-list-count" aria-live="polite">
               <strong>{filtered.length}</strong>
@@ -2581,16 +2623,53 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
                 <span className="neo-tcell neo-tcell-metrics-head" role="columnheader">
                   <span className="neo-th-label">Metrics</span>
                 </span>
-                {/* Segments column header — shows the filter segments
-                    each problem belongs to (chips). Not sortable
-                    (multi-value cell). Clicking a chip narrows the
-                    list via the `segmentFilter` state. */}
-                <span className="neo-tcell neo-tcell-segments-head" role="columnheader">
-                  <span className="neo-th-label">Segments</span>
-                </span>
+                {/* Segments column header — sortable via the
+                    same cycle the other headers use. Multi-value
+                    cell collapses to the alphabetically-first
+                    segment for ordering. Clicking a chip inside a
+                    cell still narrows the list via `segmentFilter`
+                    (independent action — chip click stopPropagates). */}
+                {(() => {
+                  const isActive = colSort?.key === "segments";
+                  const arrow = !isActive ? "" : colSort?.dir === "asc" ? "↑" : "↓";
+                  return (
+                    <button
+                      type="button"
+                      className={`neo-tcell neo-tcell-segments-head neo-th-sort${isActive ? " neo-th-sort-active" : ""}`}
+                      role="columnheader"
+                      aria-sort={!isActive ? "none" : colSort?.dir === "asc" ? "ascending" : "descending"}
+                      onClick={() => handleColumnSort("segments")}
+                      title={`Sort by Segments${isActive && colSort?.dir === "desc" ? " — click to clear" : ""}`}
+                    >
+                      <span className="neo-th-label">Segments</span>
+                      {arrow && <span className="neo-th-arrow" aria-hidden="true">{arrow}</span>}
+                    </button>
+                  );
+                })()}
               </div>
 
-              {filtered.slice(0, MAX_RENDER_ROWS).map((problem) => {
+              {(() => {
+                /* Section-divider helper for the "group by segment"
+                   mode. Closure state (a ref-equivalent via local let)
+                   tracks the previous problem's first-segment name so
+                   the renderer can inject a `<div class="neo-tgroup">`
+                   header whenever the value changes. Only active when:
+                     • Sort dropdown is "segment", OR
+                     • Column header sort key is "segments"
+                   Outside those modes the closure is dormant and the
+                   render is identical to the previous behaviour. */
+                const groupBySegment = sortMode === "segment" || colSort?.key === "segments";
+                let prevSegLabel: string | null = null;
+                const firstSegName = (p: Problem): string => {
+                  const s = segMembership.get(p.display_id);
+                  if (!s || s.size === 0) return "(no segment)";
+                  const names = Array.from(s).map((uid) => segNameByUid[uid] || uid).sort();
+                  return names[0];
+                };
+                const renderRow = (problem: Problem) => {
+                const segLabel = groupBySegment ? firstSegName(problem) : null;
+                const showDivider = groupBySegment && segLabel !== prevSegLabel;
+                if (groupBySegment) prevSegLabel = segLabel;
                 const isActive   = problem["event.status"] === "ACTIVE";
                 const catColor   = colorForGrouping(resolveGrouping(problem));
                 const sevLabel   = getSeverityLevel(problem);
@@ -2615,8 +2694,19 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
                 const showHighlight = !!highlightColor || isListTop;
                 const accent = highlightColor || (isListTop ? listModeAccent : catColor);
                 return (
+                  <React.Fragment key={problem.display_id}>
+                    {showDivider && segLabel != null && (
+                      /* Section divider — only emitted in group-by-
+                         segment mode. Spans the full table width via
+                         CSS `grid-column: 1 / -1`. Keeps the visual
+                         contract of the existing grid (sticky header,
+                         padding) intact. */
+                      <div className="neo-tgroup" role="rowgroup" aria-label={`Segment ${segLabel}`}>
+                        <span className="neo-tgroup-icon" aria-hidden="true">◆</span>
+                        <span className="neo-tgroup-label">{segLabel}</span>
+                      </div>
+                    )}
                   <article
-                    key={problem.display_id}
                     data-display-id={problem.display_id}
                     className={`neo-tcard${isExpanded ? " neo-tcard-open" : ""}${isActive ? "" : " neo-tcard-resolved"}${showHighlight ? " neo-tcard-highlighted" : ""}`}
                     style={{ "--neo-row-accent": accent } as React.CSSProperties}
@@ -3051,8 +3141,11 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
                       </div>
                     )}
                   </article>
+                  </React.Fragment>
                 );
-              })}
+                };
+                return filtered.slice(0, MAX_RENDER_ROWS).map(renderRow);
+              })()}
             </div>
           )}
           {/* Pagination — visible only in list mode, only when the DQL
