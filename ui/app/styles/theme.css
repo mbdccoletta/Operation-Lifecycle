@@ -2385,15 +2385,29 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
 }
 .neo-th-sort.neo-tcell-num { justify-content: center; }
 
-/* Wrapper that holds the row + the optional expansion body */
+/* Wrapper that holds the row + the optional expansion body.
+   Row separators run between every row so the user can tell where
+   one record ends and the next begins without relying on hover.
+   Was at 3% alpha — visually invisible on the dark surface. Bumped
+   to ~10% so the divider lands as a clear hair-line without
+   competing with the data above it. */
 .neo-tcard {
   --neo-row-accent: var(--neo-accent);
   position: relative;
   display: flex; flex-direction: column;
-  border-bottom: 1px solid rgba(255,255,255,0.03);
+  border-bottom: 1px solid rgba(255,255,255,0.10);
   animation: neo-list-in 0.26s var(--neo-transition) backwards;
 }
 .neo-tcard:last-child { border-bottom: none; }
+/* Subtle zebra striping — every other row gets a 4 % surface lift
+   so the eye locks onto a single record at a glance. Soft enough
+   that it doesn't compete with the highlighted-row wash for
+   top-tier / pinned problems, but visible enough that scanning
+   the list feels like reading distinct cards instead of one
+   uniform block. */
+.neo-tcard:nth-of-type(even) .neo-trow {
+  background: rgba(255, 255, 255, 0.025);
+}
 .neo-tcard-resolved { opacity: 0.65; }
 .neo-tcard-resolved:hover { opacity: 1; }
 
@@ -2456,15 +2470,16 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
 }
 .neo-tcard-open .neo-trow { background: var(--neo-surface-hover); }
 
-/* Left accent edge — discreet category marker. The vertical line
-   exists purely as identification; no glow so it doesn't compete
-   with the row data for attention. */
+/* Left accent edge — category marker. Bumped from 2 px / 50 %
+   alpha to 3 px / 70 % alpha + a slightly stronger glow so the
+   row's category colour reads at a glance without needing the user
+   to look at the chip in the Category cell. */
 .neo-tedge {
   position: absolute;
   left: 0; top: 0; bottom: 0;
-  width: 2px;
-  background: color-mix(in srgb, var(--neo-row-accent) 50%, transparent);
-  box-shadow: 0 0 3px color-mix(in srgb, var(--neo-row-accent) 18%, transparent);
+  width: 3px;
+  background: color-mix(in srgb, var(--neo-row-accent) 70%, transparent);
+  box-shadow: 0 0 4px color-mix(in srgb, var(--neo-row-accent) 28%, transparent);
 }
 
 /* Cells */
