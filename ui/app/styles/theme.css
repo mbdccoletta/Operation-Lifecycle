@@ -8997,6 +8997,48 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
 .neo-tgroup-kind-root .neo-tgroup-icon  { color: #F59E0B; }
 .neo-tgroup-kind-root .neo-tgroup-label { color: #FCD34D; }
 
+/* ── Mobile / tablet card-list group dividers ─────────────────────
+   Mirror of the desktop neo-tgroup styling but for the
+   .neo-mobile-list card stack. Inserted between cards by
+   MobileIncidentList when groupByColumns changes between successive
+   cards. Indented per nesting level via --neo-mgroup-depth, same
+   pattern as desktop. Per-kind colour matches desktop:
+   entity = purple, root = amber. */
+.neo-mgroup {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 0 6px;
+  padding: 8px 14px 6px calc(14px + 18px * var(--neo-mgroup-depth, 0));
+  border-radius: 8px;
+  font-family: var(--neo-mono);
+  letter-spacing: -0.1px;
+}
+.neo-mgroup:first-child {
+  margin-top: 0;
+}
+.neo-mgroup-icon {
+  font-size: 14px;
+}
+.neo-mgroup-label {
+  font-weight: 700;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.neo-mgroup-kind-entity {
+  background: linear-gradient(to right, rgba(168, 85, 247, 0.10), rgba(168, 85, 247, 0));
+  border-left: 3px solid rgba(168, 85, 247, 0.55);
+}
+.neo-mgroup-kind-entity .neo-mgroup-icon  { color: #A855F7; }
+.neo-mgroup-kind-entity .neo-mgroup-label { color: #D8B4FE; }
+.neo-mgroup-kind-root {
+  background: linear-gradient(to right, rgba(245, 158, 11, 0.10), rgba(245, 158, 11, 0));
+  border-left: 3px solid rgba(245, 158, 11, 0.55);
+}
+.neo-mgroup-kind-root .neo-mgroup-icon  { color: #F59E0B; }
+.neo-mgroup-kind-root .neo-mgroup-label { color: #FCD34D; }
+
 /* Group-By chip strip — replaces the "Has metric" strip from 0.0.80.
    Lives in the same horizontal slot, same chip-strip styling
    conventions, but toggles GROUPING instead of filtering. Active

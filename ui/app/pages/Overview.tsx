@@ -2620,6 +2620,7 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
               onToggleExpand={toggleRow}
               sortByProblem={sortByProblem}
               setActivitySort={setActivitySort}
+              groupByColumns={groupByColumns}
             />
           ) : (
             <div className={`neo-ttable${groupBy === "segment" ? " neo-ttable-segments" : ""}`} aria-label="Problems list">

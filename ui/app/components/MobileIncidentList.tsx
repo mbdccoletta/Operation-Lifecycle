@@ -26,6 +26,11 @@ import {
   getStatusLabel,
 } from "../utils/formatters";
 
+/** Which column to group by in the mobile card stack. Matches the
+ *  desktop table's `groupByColumns` shape so the parent can pass
+ *  exactly the same value to both surfaces. */
+export type MobileGroupByCol = "entity" | "root";
+
 interface Props {
   problems: Problem[];
   /** Per-problem metrics map keyed by `davis_problem_id`. Same
@@ -40,6 +45,33 @@ interface Props {
    *  Owned by the parent so desktop + mobile share the same state. */
   sortByProblem: Map<string, "asc" | "desc">;
   setActivitySort: (problemId: string, dir: "asc" | "desc") => void;
+  /** Group-by columns in nesting order. Empty array = flat list (the
+   *  previous behaviour). Same value the desktop table consumes; this
+   *  prop is what wires the mobile cards into the new (0.0.82)
+   *  Group By chip strip. The cards STILL render normally — we just
+   *  inject section-divider rows between cards whenever a group key
+   *  changes from the previous card. */
+  groupByColumns?: ReadonlyArray<MobileGroupByCol>;
+}
+
+/** Resolve the group label for a problem at a given column kind.
+ *  Mirrors the desktop renderer's `labelFor` so divider text matches
+ *  exactly between the two surfaces. Falls back to a localised
+ *  "(no …)" marker when the source field is empty so missing data
+ *  doesn't crash divider deduping. */
+function groupLabelFor(p: Problem, kind: MobileGroupByCol): string {
+  if (kind === "entity") {
+    const ids = p.affected_entity_ids;
+    if (!ids || ids.length === 0) return "(no affected entity)";
+    const names = p.affected_entity_names || [];
+    return names[0] || ids[0] || "(unknown)";
+  }
+  // root
+  const rcName = p.root_cause_entity_name?.trim();
+  const rcId   = p.root_cause_entity_id?.trim();
+  if (rcName) return rcName;
+  if (rcId)   return rcId;
+  return "(no root cause)";
 }
 
 export const MobileIncidentList: React.FC<Props> = ({
@@ -49,25 +81,73 @@ export const MobileIncidentList: React.FC<Props> = ({
   onToggleExpand,
   sortByProblem,
   setActivitySort,
+  groupByColumns,
 }) => {
   if (problems.length === 0) {
     return <div className="neo-empty">No incidents found</div>;
   }
+
+  // Track previous group labels across the .map iteration so we can
+  // decide WHERE to inject divider rows. Closure state (not React
+  // state) — re-derived on every render based on the current
+  // problems + groupByColumns, which is what we want.
+  const levels = groupByColumns ?? [];
+  const prevLabels: (string | null)[] = levels.map(() => null);
+
   return (
     <div className="neo-mobile-list" role="list">
-      {problems.map((p) => (
-        <MobileIncidentCard
-          key={p.display_id}
-          problem={p}
-          metrics={perProblem.get(
-            (p as unknown as { davis_problem_id?: string }).davis_problem_id || "",
-          )}
-          expanded={expandedIds.has(p.display_id)}
-          onToggle={() => onToggleExpand(p.display_id)}
-          sort={sortByProblem.get(p.display_id) ?? "asc"}
-          onSortChange={(dir) => setActivitySort(p.display_id, dir)}
-        />
-      ))}
+      {problems.map((p) => {
+        // Compute this card's labels at every active level and find
+        // the first changed level — every level FROM that index on
+        // gets a divider emitted (changing an outer group implicitly
+        // resets all inner groups).
+        const curLabels = levels.map((col) => groupLabelFor(p, col));
+        let changedFrom = -1;
+        for (let i = 0; i < levels.length; i++) {
+          if (curLabels[i] !== prevLabels[i]) { changedFrom = i; break; }
+        }
+        const dividers: { idx: number; label: string; kind: MobileGroupByCol; depth: number }[] = [];
+        if (changedFrom >= 0) {
+          for (let i = changedFrom; i < levels.length; i++) {
+            dividers.push({
+              idx: i,
+              label: curLabels[i],
+              kind: levels[i],
+              depth: i,
+            });
+            prevLabels[i] = curLabels[i];
+          }
+        }
+        return (
+          <React.Fragment key={p.display_id}>
+            {dividers.map((d) => {
+              const icon = d.kind === "entity" ? "◉" : "✺";
+              return (
+                <div
+                  key={`gh-${d.idx}-${d.label}`}
+                  className={`neo-mgroup neo-mgroup-kind-${d.kind} neo-mgroup-depth-${d.depth}`}
+                  role="separator"
+                  aria-label={`${d.kind === "entity" ? "Affected entity" : "Root cause"} ${d.label}`}
+                  style={{ ["--neo-mgroup-depth" as string]: d.depth }}
+                >
+                  <span className="neo-mgroup-icon" aria-hidden="true">{icon}</span>
+                  <span className="neo-mgroup-label">{d.label}</span>
+                </div>
+              );
+            })}
+            <MobileIncidentCard
+              problem={p}
+              metrics={perProblem.get(
+                (p as unknown as { davis_problem_id?: string }).davis_problem_id || "",
+              )}
+              expanded={expandedIds.has(p.display_id)}
+              onToggle={() => onToggleExpand(p.display_id)}
+              sort={sortByProblem.get(p.display_id) ?? "asc"}
+              onSortChange={(dir) => setActivitySort(p.display_id, dir)}
+            />
+          </React.Fragment>
+        );
+      })}
     </div>
   );
 };
