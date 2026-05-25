@@ -172,6 +172,13 @@ interface Props {
   /** Reset handler — clears whatever range the host is using to
    *  narrow the chart. Usually `clearRange` from useTimeRange. */
   onResetZoom?: () => void;
+  /** Optional drilldown — click a whole KPI card (the value /
+   *  sub / meta area, not the label text used for highlight) to
+   *  navigate into the underlying problems. Host receives the
+   *  metric key and decides where to send the user (typically
+   *  the Incidents list filtered to "has metric"). When omitted,
+   *  the card stays static and the value area is a plain div. */
+  onCardDrillDown?: (metric: "mtta" | "mttr" | "mtbf" | "mttf") => void;
 }
 
 export const TeamMetricsCard: React.FC<Props> = ({
@@ -183,6 +190,7 @@ export const TeamMetricsCard: React.FC<Props> = ({
   onZoomRangeSelect,
   zoomed,
   onResetZoom,
+  onCardDrillDown,
 }) => {
   // Only call the heavy hook when the parent didn't already feed
   // us pre-computed metrics. React rules of hooks require an
@@ -368,13 +376,44 @@ export const TeamMetricsCard: React.FC<Props> = ({
                   </span>
                 </Tooltip>
               </div>
-              <div className="neo-team-kpi-value">{fmtMs(s.avgMs)}</div>
-              <div className="neo-team-kpi-sub">{d.sub}</div>
-              <div className="neo-team-kpi-meta">
-                {s.count > 0
-                  ? `n=${s.count} · p50 ${fmtMs(s.medianMs)} · p95 ${fmtMs(s.p95Ms)}`
-                  : "no samples"}
-              </div>
+              {/* Drilldown surface — value / sub / meta as a button
+                  when the host wires `onCardDrillDown`. Disabled when
+                  there are no samples (n=0) since drilling into an
+                  empty set is dead-end UX. The label button above
+                  still toggles chart highlight independently. */}
+              {onCardDrillDown ? (
+                <button
+                  type="button"
+                  className="neo-team-kpi-drill"
+                  onClick={() => onCardDrillDown(d.key)}
+                  disabled={s.count === 0}
+                  title={s.count > 0
+                    ? `See the ${s.count} ${s.count === 1 ? "problem" : "problems"} contributing to ${d.label}`
+                    : `No problems contributing to ${d.label} in this window`
+                  }
+                >
+                  <div className="neo-team-kpi-value">{fmtMs(s.avgMs)}</div>
+                  <div className="neo-team-kpi-sub">{d.sub}</div>
+                  <div className="neo-team-kpi-meta">
+                    {s.count > 0
+                      ? `n=${s.count} · p50 ${fmtMs(s.medianMs)} · p95 ${fmtMs(s.p95Ms)}`
+                      : "no samples"}
+                  </div>
+                  {s.count > 0 && (
+                    <span className="neo-team-kpi-cta" aria-hidden="true">→</span>
+                  )}
+                </button>
+              ) : (
+                <>
+                  <div className="neo-team-kpi-value">{fmtMs(s.avgMs)}</div>
+                  <div className="neo-team-kpi-sub">{d.sub}</div>
+                  <div className="neo-team-kpi-meta">
+                    {s.count > 0
+                      ? `n=${s.count} · p50 ${fmtMs(s.medianMs)} · p95 ${fmtMs(s.p95Ms)}`
+                      : "no samples"}
+                  </div>
+                </>
+              )}
             </div>
           );
         })}

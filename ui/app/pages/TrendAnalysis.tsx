@@ -378,6 +378,14 @@ export const TrendAnalysis = () => {
         <TeamMetricsCard
           problems={problems}
           teamMetrics={teamMetrics}
+          /* Card drilldown — clicking any of the 4 KPI cards
+             (MTTA / MTTR / MTBF / MTTF) navigates to the Incidents
+             list filtered to "has metric: <key>" so the user can see
+             the actual problems that contributed to the figure.
+             Mirrors the AT A GLANCE drilldown pattern below — same
+             URL contract (`?metric=<key>`), parsed by Overview.tsx
+             at mount. */
+          onCardDrillDown={(metric) => navigate(`/?view=list&metric=${metric}`)}
           /* Brush-to-zoom: writes the selected window into the
              shared `selectedRange` (same context the drilldowns
              already use). `useTeamMetrics` re-runs through the
