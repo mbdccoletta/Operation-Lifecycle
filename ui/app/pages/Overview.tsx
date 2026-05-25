@@ -19,7 +19,6 @@ import {
 import { buildOfficialProblemUrl } from "../utils/dynatrace-links";
 import { ShareWhatsApp } from "../components/ShareWhatsApp";
 import { ProblemActivityFeed } from "../components/ProblemActivityFeed";
-import { MetricChip, METRIC_COLORS } from "../components/MetricChip";
 import { MetricFilterChip } from "../components/MetricFilterChip";
 import { MobileIncidentList } from "../components/MobileIncidentList";
 import { DisplaySettingsPanel } from "../components/DisplaySettingsPanel";
@@ -2651,12 +2650,6 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
                     </button>
                   );
                 })}
-                {/* Metrics column header — not sortable (sort by
-                    which metric?). Just a static label so the
-                    column aligns with the inline chips in each row. */}
-                <span className="neo-tcell neo-tcell-metrics-head" role="columnheader">
-                  <span className="neo-th-label">Metrics</span>
-                </span>
                 {/* Segments column header — sortable via the
                     same cycle the other headers use. Multi-value
                     cell collapses to the alphabetically-first
@@ -2877,35 +2870,6 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
                             {impact.extra > 0 && <span className="neo-tchip-more">+{impact.extra}</span>}
                           </span>
                         ) : <span className="neo-tempty">—</span>}
-                      </span>
-                      {/* Per-problem metric chips inline — only the
-                          metrics that are actually defined render;
-                          null slots are dropped so the row stays
-                          compact (no "—" placeholders mid-table).
-                          Matches the colour scheme of the Analytics
-                          TeamMetricsCard legend. */}
-                      <span className="neo-tcell neo-tcell-metrics" role="cell">
-                        {(() => {
-                          // perProblem is keyed by Davis composite
-                          // id (the long event.id), not display_id.
-                          const pid = (problem as unknown as { davis_problem_id?: string }).davis_problem_id;
-                          const m = pid ? perProblem.get(pid) : undefined;
-                          if (!m) return <span className="neo-tempty">—</span>;
-                          const defined = [
-                            { key: "mtta" as const, ms: m.mttaMs, label: "MTTA", color: METRIC_COLORS.mtta },
-                            { key: "mttr" as const, ms: m.mttrMs, label: "MTTR", color: METRIC_COLORS.mttr },
-                            { key: "mtbf" as const, ms: m.mtbfMs, label: "MTBF", color: METRIC_COLORS.mtbf },
-                            { key: "mttf" as const, ms: m.mttfMs, label: "MTTF", color: METRIC_COLORS.mttf },
-                          ].filter(({ ms }) => ms != null);
-                          if (defined.length === 0) return <span className="neo-tempty">—</span>;
-                          return (
-                            <span className="neo-row-metrics-inline">
-                              {defined.map(({ key, ms, label, color }) => (
-                                <MetricChip key={key} label={label} ms={ms} color={color} />
-                              ))}
-                            </span>
-                          );
-                        })()}
                       </span>
                       {/* Segments column cell — list of filter
                           segments the problem belongs to. Clicking

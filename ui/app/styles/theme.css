@@ -2307,8 +2307,12 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
     minmax(150px, 1fr)    /* End */
     96px                  /* Duration */
     minmax(120px, 1fr)    /* Impact */
-    minmax(220px, 280px)  /* Metrics (MTTA/MTTR/MTBF/MTTF chips) */
     minmax(160px, 220px); /* Segments (filter-segment chips) */
+  /* Note: the "Metrics" column (per-problem MTTA/MTTR/MTBF/MTTF
+     chips) was removed in 0.0.81. Per-problem MTTx applies the
+     "Mean" prefix to a single observation (semantically wrong),
+     and MTTR per-problem is identical to the Duration column.
+     Aggregates remain in the Trends-page KPI cards. */
 }
 /* Segments view appends an extra Segment column so the user can see
    which filter segment(s) each problem belongs to. */
@@ -2326,7 +2330,6 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
     minmax(150px, 1fr)    /* End */
     96px                  /* Duration */
     minmax(120px, 1fr)    /* Impact */
-    minmax(220px, 280px)  /* Metrics */
     minmax(160px, 220px); /* Segments (multi — chips for every membership) */
   display: flex; flex-direction: column;
   background: var(--neo-surface);
