@@ -235,34 +235,59 @@ export const ShareWhatsApp: React.FC<ShareWhatsAppProps> = ({ problem }) => {
  *  whole `text` payload to WhatsApp's Share Extension, which preserves
  *  multi-line content + the embedded URL intact.
  *
- *  Falls back to `whatsapp://send?text=…` for browsers that don't
- *  expose the API (or expose a stub that throws synchronously). The
- *  fallback may strip the body — but it's the best we can do without
- *  the OS-level share intent. */
+ *  But the Web Share API has a HARD requirement that bit us in 0.0.71:
+ *  it is gated by the `web-share` permission policy, and inside an
+ *  iframe (which is where Dynatrace AppEngine apps run) it only works
+ *  if the parent embedded us with `allow="web-share"`. The AppEngine
+ *  shell doesn't grant that permission, so `navigator.share` throws
+ *  `NotAllowedError` and the original 0.0.71 code swallowed the
+ *  error silently — clicking the button did nothing.
+ *
+ *  Fix: try Web Share, and on ANY error other than user-cancel, fall
+ *  back to the `whatsapp://send?text=…` URL scheme. The fallback may
+ *  truncate the body (WhatsApp iOS strips text around URLs in the
+ *  scheme handler), but at least the share intent fires and the
+ *  recipient receives the link. */
 const MobileShareButton: React.FC<{ messageText: string }> = ({ messageText }) => {
+  const encoded = encodeURIComponent(messageText);
+  const fallbackHref = `whatsapp://send?text=${encoded}`;
+
+  const openFallback = () => {
+    // Programmatic anchor click — equivalent to the user tapping the
+    // original `<a>`. Using window.location.href would navigate THIS
+    // iframe to the protocol scheme, which AppEngine's sandbox blocks
+    // (no top-level nav permission). A real anchor click bubbles to
+    // the browser's URL-scheme dispatcher and reliably opens WhatsApp.
+    const a = document.createElement("a");
+    a.href = fallbackHref;
+    a.target = "_blank";
+    a.rel = "noopener noreferrer";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  };
+
   const onClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
-    // Feature-detect the Web Share API. Older iOS Safari versions
-    // expose `navigator.share` but throw "NotAllowedError" if the
-    // call isn't directly inside a user-gesture handler — we ARE in
-    // one (button click), so we're fine.
-    if (typeof navigator !== "undefined" && typeof navigator.share === "function") {
-      e.preventDefault();
-      navigator.share({ text: messageText }).catch(() => {
-        /* User cancelled the share sheet, or the OS rejected it.
-           Both are non-errors — we just let the moment pass. We do
-           NOT fall back to the URL scheme here, because falling back
-           on cancel would re-open WhatsApp against the user's wish. */
-      });
+    // No Web Share API support → let the default <a> href fire.
+    if (typeof navigator === "undefined" || typeof navigator.share !== "function") {
+      return;
     }
-    // If navigator.share is unavailable, the default <a> navigation
-    // fires and opens WhatsApp via the URL scheme. The body may get
-    // truncated but the share still happens.
+    e.preventDefault();
+    navigator.share({ text: messageText }).catch((err: unknown) => {
+      // User cancelled the iOS share sheet → don't re-open WhatsApp
+      // behind their back.
+      const name = (err as { name?: string })?.name;
+      if (name === "AbortError") return;
+      // Iframe blocked us (NotAllowedError), or some other OS error.
+      // Fall back to the URL scheme so the user gets SOMETHING.
+      openFallback();
+    });
   };
 
   return (
     <a
       className="neo-row-act"
-      href={`whatsapp://send?text=${encodeURIComponent(messageText)}`}
+      href={fallbackHref}
       onClick={onClick}
       target="_blank"
       rel="noopener noreferrer"
