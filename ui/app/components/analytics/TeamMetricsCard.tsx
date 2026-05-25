@@ -44,9 +44,9 @@ const METRIC_DEFS: MetricDef[] = [
     color: "#818CF8",
     formula: "MTTA = avg(firstComment.timestamp − event.start)",
     rationale:
-      "Quanto tempo a equipe leva para reagir a um problema. Valores baixos indicam alta vigilância; valores altos sugerem alertas perdidos, ruído ou processo lento de triagem.",
+      "How long the team takes to react to a problem. Low values indicate high vigilance; high values suggest missed alerts, noise, or slow triage.",
     contributors:
-      "Cada problema que recebeu pelo menos um comentário humano (annotation.source = \"Problems App\") contribui com um valor.",
+      "Every problem that received at least one human comment (annotation.source = \"Problems App\") contributes one value.",
   },
   {
     key: "mttr",
@@ -56,9 +56,9 @@ const METRIC_DEFS: MetricDef[] = [
     color: "#FB923C",
     formula: "MTTR = avg(event.end − event.start)",
     rationale:
-      "Quanto tempo a equipe leva para resolver um problema do início ao fim. Quedas no MTTR indicam runbooks melhores, automação eficaz ou conhecimento institucional acumulado.",
+      "How long the team takes to resolve a problem from start to finish. Drops in MTTR indicate better runbooks, effective automation, or accumulated institutional knowledge.",
     contributors:
-      "Apenas problemas com status CLOSED (event.end populado) entram no cálculo. ACTIVE não tem MTTR ainda definido.",
+      "Only problems with CLOSED status (event.end populated) enter the calculation. ACTIVE problems don't have MTTR defined yet.",
   },
   {
     key: "mtbf",
@@ -68,9 +68,9 @@ const METRIC_DEFS: MetricDef[] = [
     color: "#34D399",
     formula: "MTBF = avg(start[i] − start[i−1])",
     rationale:
-      "Intervalo médio entre o início de problemas consecutivos. Mede a cadência de falhas do tenant; inclui o downtime de cada incidente. MTBF baixo = sistema instável.",
+      "Average interval between the starts of consecutive problems. Measures the tenant's failure cadence; includes the downtime of each incident. Low MTBF = unstable system.",
     contributors:
-      "Cada problema, exceto o primeiro da janela (que não tem predecessor), contribui com a diferença entre seu event.start e o do problema anterior.",
+      "Every problem except the first in the window (which has no predecessor) contributes the difference between its event.start and the previous problem's.",
   },
   {
     key: "mttf",
@@ -80,9 +80,9 @@ const METRIC_DEFS: MetricDef[] = [
     color: "#22D3EE",
     formula: "MTTF = avg(start[next] − end[prev_closed])",
     rationale:
-      "Tempo em que o sistema permaneceu saudável entre o fim de um problema e o início do próximo. Identidade clássica: MTBF ≈ MTTR + MTTF.",
+      "Time the system stayed healthy between the end of one problem and the start of the next. Classic identity: MTBF ≈ MTTR + MTTF.",
     contributors:
-      "Cada problema que tem um predecessor CLOSED contribui. Problemas que abriram enquanto outro ainda estava ACTIVE são ignorados (não há uptime real para medir).",
+      "Every problem with a CLOSED predecessor contributes. Problems that opened while another was still ACTIVE are ignored (no real uptime to measure).",
   },
 ];
 
@@ -353,19 +353,19 @@ export const TeamMetricsCard: React.FC<Props> = ({
                       </strong>
                       <code className="neo-team-kpi-info-formula">{d.formula}</code>
                       <span className="neo-team-kpi-info-section">
-                        <em>O que significa</em>
+                        <em>What it means</em>
                         <span>{d.rationale}</span>
                       </span>
                       <span className="neo-team-kpi-info-section">
-                        <em>Quais problemas contribuem</em>
+                        <em>Which problems contribute</em>
                         <span>{d.contributors}</span>
                       </span>
                       <span className="neo-team-kpi-info-section">
-                        <em>Como é agregado</em>
+                        <em>How it's aggregated</em>
                         <span>
-                          Avg = média aritmética. p50 = mediana. p95 = percentil 95
-                          (sob esse valor estão 95% dos casos). n = quantidade de
-                          amostras na janela atual.
+                          Avg = arithmetic mean. p50 = median. p95 = 95th
+                          percentile (95% of cases are below this value).
+                          n = number of samples in the current window.
                         </span>
                       </span>
                     </div>

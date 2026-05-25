@@ -356,9 +356,9 @@ export const ProblemTimeline: React.FC = () => {
         <div className="neo-analytics-section-title">
           Team metrics
           <span className="neo-analytics-section-sub">
-            MTTA · MTTR · MTBF · MTTF — calculadas sobre {metricsProblems.length} problema{metricsProblems.length === 1 ? "" : "s"} · {activeCount} ativos · {closedCount} fechados
+            MTTA · MTTR · MTBF · MTTF — computed across {metricsProblems.length} problem{metricsProblems.length === 1 ? "" : "s"} · {activeCount} active · {closedCount} closed
             {isFiltering && (
-              <span className="ptl-mtta-filter-pill"> · filtrado por {Array.from(categoryFilter).join(", ").toLowerCase()}</span>
+              <span className="ptl-mtta-filter-pill"> · filtered by {Array.from(categoryFilter).join(", ").toLowerCase()}</span>
             )}
           </span>
         </div>

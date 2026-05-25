@@ -89,7 +89,7 @@ export const TopSegmentsByCategory: React.FC<Props> = ({
   if (rows.length === 0) {
     return (
       <div className="neo-analytics-empty">
-        Nenhum segmento elegível com problemas neste período.
+        No eligible segment has problems in this window.
       </div>
     );
   }
@@ -121,14 +121,14 @@ export const TopSegmentsByCategory: React.FC<Props> = ({
                the number. URL contract `?segment=<uid>` is parsed
                at Overview mount (lazy useState). */
             onClick={() => navigate(`/?view=list&segment=${encodeURIComponent(r.uid)}`)}
-            title={`${r.name} · ${r.total} problemas (${r.active} ativos) — click to drill into the list`}
+            title={`${r.name} · ${r.total} problems (${r.active} active) — click to drill into the list`}
           >
             <span className="neo-topsegs-rank">{idx + 1}</span>
             <span className="neo-topsegs-icon" aria-hidden="true">◇</span>
             <span className="neo-topsegs-name">{r.name}</span>
             <span className="neo-topsegs-total">{r.total}</span>
             {r.active > 0 && (
-              <span className="neo-topsegs-active" title={`${r.active} ativos`}>● {r.active}</span>
+              <span className="neo-topsegs-active" title={`${r.active} active`}>● {r.active}</span>
             )}
 
             {/* Stacked bar — category mix proportional within the bar

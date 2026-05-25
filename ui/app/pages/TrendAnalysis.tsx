@@ -565,7 +565,7 @@ export const TrendAnalysis = () => {
       <section className="neo-analytics-section">
         <div className="neo-analytics-section-title">
           Where to look
-          <span className="neo-analytics-section-sub">entidades + causas raiz com mais problemas no período</span>
+          <span className="neo-analytics-section-sub">entities + root causes with the most problems in the window</span>
         </div>
         <div className="neo-analytics-grid-2">
           <div className="neo-analytics-subsection">
@@ -583,7 +583,7 @@ export const TrendAnalysis = () => {
       <section className="neo-analytics-section">
         <div className="neo-analytics-section-title">
           Operational pain
-          <span className="neo-analytics-section-sub">onde o tempo de resolução cresce e como os ativos envelhecem</span>
+          <span className="neo-analytics-section-sub">where resolution time grows and how active problems age</span>
         </div>
         <div className="neo-analytics-grid-2">
           <div className="neo-analytics-subsection">
@@ -601,7 +601,7 @@ export const TrendAnalysis = () => {
       <section className="neo-analytics-section">
         <div className="neo-analytics-section-title">
           Top segments
-          <span className="neo-analytics-section-sub">segmentos com mais problemas no período · mix por categoria</span>
+          <span className="neo-analytics-section-sub">segments with the most problems in the window · category mix</span>
         </div>
         <TopSegmentsByCategory
           problems={problems}

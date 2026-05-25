@@ -32,7 +32,7 @@ export const TopRootCauses: React.FC<{ problems: Problem[]; limit?: number }> = 
   }, [problems, limit]);
 
   if (rows.length === 0) {
-    return <div className="neo-analytics-empty">Davis não atribuiu causa raiz a nenhum problema neste período.</div>;
+    return <div className="neo-analytics-empty">Davis didn't assign a root cause to any problem in this window.</div>;
   }
 
   const maxCount = Math.max(...rows.map((r) => r.count), 1);
@@ -48,7 +48,7 @@ export const TopRootCauses: React.FC<{ problems: Problem[]; limit?: number }> = 
             className="neo-rootcause-row"
             role="listitem"
             onClick={() => navigate(`/?view=list&rce=${encodeURIComponent(r.id)}`)}
-            title={`Causa raiz: ${r.id} · ${r.count} problemas · ${r.activeCount} ativos · click to filter list`}
+            title={`Root cause: ${r.id} · ${r.count} problems · ${r.activeCount} active · click to filter list`}
           >
             <span className="neo-rootcause-rank">{idx + 1}</span>
             <span className="neo-rootcause-icon" aria-hidden="true">◉</span>
