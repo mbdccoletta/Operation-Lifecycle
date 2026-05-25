@@ -114,32 +114,12 @@ export function openOfficialProblem(problem: Problem | string): void {
 // `<a href={buildOfficialProblemUrl(problem)} target="_blank">`
 // instead, which the sandbox lets through via `allow-popups`.)
 
-/** App IDs for the two focussed Davis surfaces we link to on mobile
- *  (where the full native Davis Problems page renders with a broken
- *  layout — see ProblemActions.tsx mobile branch for the user
- *  rationale).
- *
- *  Both IDs are best-effort against the modern Davis app suite. If
- *  a tenant doesn't have one of these apps installed,
- *  buildXxxUrl below returns `null` and the caller skips rendering
- *  the corresponding button. */
-const PROBLEM_GRAPH_APP_ID = "dynatrace.davis.problems"; // graph view of Davis Problems (?view=graph)
-const DAVIS_COPILOT_APP_ID = "dynatrace.davis.copilot";  // AI explainer (Davis CoPilot)
-
-/** Build a deep-link to the "Problem graph" view inside the modern
- *  Davis Problems app. Same root URL as `buildOfficialProblemUrl`
- *  but appends `?view=graph` so the topology tab is selected on
- *  arrival. Works around the broken mobile layout of the default
- *  /problem/<id> entry point — the graph view renders cleanly on
- *  small viewports because it's mostly canvas, not text-heavy
- *  paragraphs. */
-export function buildProblemGraphUrl(problem: Problem | string): string | null {
-  const base = buildOfficialProblemUrl(problem);
-  if (!base) return null;
-  const u = new URL(base);
-  u.searchParams.set("view", "graph");
-  return u.toString();
-}
+/** Davis CoPilot app ID. AI explainer surface — when the user taps
+ *  "Explain Problem" on mobile we deep-link here with the problem
+ *  pre-loaded as context. Mobile-friendly chat UI, so it sidesteps
+ *  the broken text-layout the standard /problem/<id> page suffers
+ *  on small viewports. */
+const DAVIS_COPILOT_APP_ID = "dynatrace.davis.copilot";
 
 /** Build a deep-link to Davis CoPilot with the problem context
  *  pre-loaded. CoPilot's AI then explains the problem in plain
@@ -148,7 +128,14 @@ export function buildProblemGraphUrl(problem: Problem | string): string | null {
  *
  *  Returns `null` when the CoPilot app isn't installed in the
  *  tenant (e.g. lower DPS tiers where Davis CoPilot is gated by
- *  licence). Caller renders no button in that case. */
+ *  licence). Caller renders no button in that case.
+ *
+ *  History: 0.0.93 also shipped a `buildProblemGraphUrl()` helper
+ *  that appended `?view=graph` to the Davis Problems URL, but
+ *  empirically the native app ignores that param and lands the
+ *  user on the standard (broken-on-mobile) detail page. Removed
+ *  in 0.0.94. Only the CoPilot deep-link survives because it's
+ *  the only one that actually leads somewhere mobile-safe. */
 export function buildExplainProblemUrl(problem: Problem | string): string | null {
   const isObj = typeof problem !== "string";
   // Cast via `unknown` first — Problem's narrow shape doesn't index
@@ -179,6 +166,3 @@ export function buildExplainProblemUrl(problem: Problem | string): string | null
   u.searchParams.set("problem", id);
   return u.toString();
 }
-// Make sure unused imports stay live for tree-shaking sanity in
-// callers that pull the new helpers but not the old ones.
-export { PROBLEM_GRAPH_APP_ID, DAVIS_COPILOT_APP_ID };

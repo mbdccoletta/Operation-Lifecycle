@@ -12,7 +12,6 @@ import { CopyChip } from "./CopyChip";
 import { ShareWhatsApp } from "./ShareWhatsApp";
 import {
   buildOfficialProblemUrl,
-  buildProblemGraphUrl,
   buildExplainProblemUrl,
 } from "../utils/dynatrace-links";
 import { useDevice } from "../hooks/useDevice";
@@ -32,21 +31,20 @@ interface Props {
 export const ProblemActions: React.FC<Props> = ({ problem, sort, onSortChange, density = "default" }) => {
   const triggerRefresh = useTriggerRefresh();
   const { isMobileOrTablet } = useDevice();
-  // Desktop drill-down: native Davis Problems detail page (renders
-  // fine on wide viewports).
+  // Native Davis Problems detail page link — kept on every form
+  // factor (the mobile rendering is broken in the native app, but
+  // we tried bypassing it via a graph-view deep-link in 0.0.93 and
+  // the param was ignored; user reverted in 0.0.94. So we ship
+  // the same button on mobile and accept the broken native UX —
+  // it's still useful for users who want to drill into Davis's
+  // own data, even if the layout is rough).
   const officialUrl = buildOfficialProblemUrl(problem);
-  // Mobile drill-downs: avoid the native Davis Problems landing
-  // page entirely — its text-heavy header layout breaks on small
-  // viewports (the problem title renders vertically, letter by
-  // letter — confirmed by user screenshot 0.0.92). Instead, link
-  // directly to the two surfaces that DO render cleanly:
-  //   • Problem graph (canvas-heavy, mobile-safe)
-  //   • Davis CoPilot explainer (chat UI, also mobile-friendly)
-  // Falls back to `null` per helper when the target app isn't
-  // installed in the tenant — corresponding button just doesn't
-  // render then.
-  const graphUrl   = isMobileOrTablet ? buildProblemGraphUrl(problem)   : null;
-  const explainUrl = isMobileOrTablet ? buildExplainProblemUrl(problem) : null;
+  // Davis CoPilot deep-link (mobile only). The CoPilot chat UI is
+  // mobile-native by design — gives users a way to get problem
+  // context without having to fight the broken Davis Problems
+  // detail page on small viewports. Returns null when CoPilot
+  // isn't installed in the tenant; button just doesn't render.
+  const explainUrl  = isMobileOrTablet ? buildExplainProblemUrl(problem) : null;
   return (
     <div
       className={`neo-row-actions${density === "compact" ? " neo-row-actions-compact" : ""}`}
@@ -67,12 +65,7 @@ export const ProblemActions: React.FC<Props> = ({ problem, sort, onSortChange, d
         icon="⛓"
         title="Copy URL for this problem"
       />
-      {/* Desktop: single "Open Problem App" button that lands on the
-          native detail page. Mobile: two focused buttons that
-          sidestep the broken layout. The check on isMobileOrTablet
-          decides which set renders — there's no overlap, so the
-          row's chip count stays bounded on both surfaces. */}
-      {!isMobileOrTablet && officialUrl && (
+      {officialUrl && (
         <a
           href={officialUrl}
           target="_blank"
@@ -84,18 +77,13 @@ export const ProblemActions: React.FC<Props> = ({ problem, sort, onSortChange, d
           <span>Open Problem App</span>
         </a>
       )}
-      {isMobileOrTablet && graphUrl && (
-        <a
-          href={graphUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="neo-row-act"
-          title="Open the problem's topology graph in Davis Problems (mobile-safe view)"
-        >
-          <span className="neo-row-act-icon" aria-hidden="true">◈</span>
-          <span>Problem Graph</span>
-        </a>
-      )}
+      {/* Mobile-only: "Explain Problem" → Davis CoPilot. The CoPilot
+          chat UI scales cleanly on small viewports, so it's the
+          mobile-safe complement to the (rougher) native Davis
+          Problems link above. Hidden on desktop because there the
+          native page renders fine and one drill-down is plenty.
+          Skipped when the helper returns null (CoPilot not
+          installed in tenant). */}
       {isMobileOrTablet && explainUrl && (
         <a
           href={explainUrl}
