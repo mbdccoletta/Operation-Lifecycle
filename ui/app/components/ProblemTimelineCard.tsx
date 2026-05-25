@@ -136,7 +136,7 @@ export const ProblemTimelineCard: React.FC<Props> = ({
                 title={`Open → first comment. ${fmtTooltipFor("mtta", problem, metrics!.mttaMs!)}`} />
             ) : mtta ? (
               <MetricChip label="MTTA" value={mtta.formatted} color="#818CF8"
-                title={`First comment at ${new Date(mtta.ackAt).toLocaleString()}`} />
+                title={`First comment at ${new Date(mtta.ackAt).toLocaleString(undefined, { timeZone: "UTC" })} UTC`} />
             ) : null}
             {(metrics?.mttrMs ?? null) !== null ? (
               <MetricChip label="MTTR" value={formatDurationMs(metrics!.mttrMs!)} color="#FB923C"
@@ -157,7 +157,7 @@ export const ProblemTimelineCard: React.FC<Props> = ({
                    before, which read as "warning" rather than "open
                    incident" and broke the colour grammar. */
                 color="#ff4d6a"
-                title={`Problem is still ACTIVE — opened ${new Date(problem["event.start"]).toLocaleString()}. Final MTTR will be calculated once the problem is resolved (event.end populated by Davis).`}
+                title={`Problem is still ACTIVE — opened ${new Date(problem["event.start"]).toLocaleString(undefined, { timeZone: "UTC" })} UTC. Final MTTR will be calculated once the problem is resolved (event.end populated by Davis).`}
               />
             ) : null}
             {(metrics?.mtbfMs ?? null) !== null && (
@@ -244,9 +244,14 @@ const MetricChip: React.FC<{ label: string; value: string; color: string; title?
 };
 
 function fmtTooltipFor(kind: "mtta" | "mttr", problem: Problem, _ms: number): string {
-  if (kind === "mtta") return `Opened ${new Date(problem["event.start"]).toLocaleString()}`;
+  // UTC display matches native Davis Problems (see TIMEZONE CONVENTION
+  // docblock in utils/formatters.ts). The "UTC" suffix on tooltips
+  // disambiguates for users in other timezones who might assume local.
+  const fmt = (iso: string) =>
+    new Date(iso).toLocaleString(undefined, { timeZone: "UTC" }) + " UTC";
+  if (kind === "mtta") return `Opened ${fmt(problem["event.start"])}`;
   return problem["event.end"]
-    ? `Closed ${new Date(problem["event.end"]).toLocaleString()}`
+    ? `Closed ${fmt(problem["event.end"])}`
     : "";
 }
 

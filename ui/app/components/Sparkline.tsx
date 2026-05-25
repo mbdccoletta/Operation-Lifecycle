@@ -33,12 +33,19 @@ interface SparklineProps {
 
 function fmtBucketTime(ms: number, spanMs: number): string {
   const d = new Date(ms);
+  // UTC display — see TIMEZONE CONVENTION docblock in utils/formatters.ts.
+  // Sparkline tooltips and axis labels stay aligned with native Davis
+  // Problems chart axes (which also render in UTC) so on-call can
+  // cross-reference timestamps directly.
   if (spanMs < 48 * 3_600_000) {
     return d.toLocaleString(undefined, {
-      month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false,
+      month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
+      hour12: false, timeZone: "UTC",
     });
   }
-  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  return d.toLocaleDateString(undefined, {
+    month: "short", day: "numeric", timeZone: "UTC",
+  });
 }
 
 export const Sparkline: React.FC<SparklineProps> = ({

@@ -88,13 +88,22 @@ interface BucketEntry {
 
 function formatAxisTime(ms: number, rangeMs: number): string {
   const d = new Date(ms);
+  // UTC display — swimlane axis matches native Davis Problems
+  // (see TIMEZONE CONVENTION docblock in utils/formatters.ts).
   if (rangeMs < 6 * 3600_000) {
-    return d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", hour12: false });
+    return d.toLocaleTimeString(undefined, {
+      hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "UTC",
+    });
   }
   if (rangeMs < 7 * 86_400_000) {
-    return d.toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false });
+    return d.toLocaleString(undefined, {
+      month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
+      hour12: false, timeZone: "UTC",
+    });
   }
-  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  return d.toLocaleDateString(undefined, {
+    month: "short", day: "numeric", timeZone: "UTC",
+  });
 }
 
 interface Props {

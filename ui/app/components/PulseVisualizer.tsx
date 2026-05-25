@@ -232,9 +232,14 @@ const PulseVisualizerImpl: React.FC<PulseVisualizerProps> = ({
       const ts  = minTs + (i / labelCount) * tsRange;
       const x   = padL + (i / labelCount) * chartW;
       const d   = new Date(ts);
+      // UTC display matches native Davis Problems chart axis (see
+      // TIMEZONE CONVENTION in utils/formatters.ts). Using
+      // getUTCXxx instead of getXxx keeps cross-app parity for any
+      // user not in UTC — Brazil (UTC-3) was previously seeing the
+      // axis labelled 3 hours offset from the native chart.
       const lbl = tsRange > 86400000
-        ? `${d.getMonth()+1}/${d.getDate()}`
-        : `${d.getHours().toString().padStart(2,"0")}:${d.getMinutes().toString().padStart(2,"0")}`;
+        ? `${d.getUTCMonth()+1}/${d.getUTCDate()}`
+        : `${d.getUTCHours().toString().padStart(2,"0")}:${d.getUTCMinutes().toString().padStart(2,"0")}`;
       ctx.strokeStyle = dk ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.1)";
       ctx.lineWidth = 0.5;
       ctx.beginPath(); ctx.moveTo(x, baseY); ctx.lineTo(x, baseY + 3); ctx.stroke();
@@ -550,7 +555,8 @@ const PulseVisualizerImpl: React.FC<PulseVisualizerProps> = ({
       // onBarClick handler is wired up.
       const d = new Date(bar.ts);
       const captionLbl = "ACTIVE AT THIS TIME";
-      const timeLbl   = `${d.getDate().toString().padStart(2,"0")}/${(d.getMonth()+1).toString().padStart(2,"0")} ${d.getHours().toString().padStart(2,"0")}:${d.getMinutes().toString().padStart(2,"0")}`;
+      // UTC display — same rationale as the axis labels above.
+      const timeLbl   = `${d.getUTCDate().toString().padStart(2,"0")}/${(d.getUTCMonth()+1).toString().padStart(2,"0")} ${d.getUTCHours().toString().padStart(2,"0")}:${d.getUTCMinutes().toString().padStart(2,"0")} UTC`;
       const activeLbl = `● Active   ${bar.active}`;
       const closedLbl = `● Closed   ${bar.closed}`;
       const totalLbl  = `  Total    ${bar.total}`;
@@ -864,7 +870,9 @@ const PulseVisualizerImpl: React.FC<PulseVisualizerProps> = ({
     for (const b of visibleBars) { active += b.active; closed += b.closed; }
     const from = new Date(visibleBars[0].ts);
     const to   = new Date(visibleBars[visibleBars.length - 1].ts);
-    const fmt  = (d: Date) => `${d.getMonth() + 1}/${d.getDate()} ${d.getHours().toString().padStart(2, "0")}:${d.getMinutes().toString().padStart(2, "0")}`;
+    // UTC display in a11y label — keeps screen-reader output aligned
+    // with what sighted users see on the chart axis.
+    const fmt  = (d: Date) => `${d.getUTCMonth() + 1}/${d.getUTCDate()} ${d.getUTCHours().toString().padStart(2, "0")}:${d.getUTCMinutes().toString().padStart(2, "0")} UTC`;
     return `Activity chart from ${fmt(from)} to ${fmt(to)} — ${active} active, ${closed} closed across ${visibleBars.length} buckets.`;
   }, [visibleBars]);
 

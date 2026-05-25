@@ -2281,10 +2281,15 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
           problems={rawProblems}
         />
         {selectedRange && (
+          /* UTC display matches the rest of the app (see TIMEZONE
+             CONVENTION in utils/formatters.ts). The chart axis is
+             already UTC; rendering this drilldown label in local
+             would shift the displayed range by the user's offset
+             and confuse the brush relationship. */
           <div className="neo-pulse-label">
-            {selectedRange.from.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+            {selectedRange.from.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", timeZone: "UTC" })}
             {" → "}
-            {selectedRange.to.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+            {selectedRange.to.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", timeZone: "UTC" })}
           </div>
         )}
         {pulseExpanded && (

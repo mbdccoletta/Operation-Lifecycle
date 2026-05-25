@@ -305,7 +305,9 @@ export const TeamMetricsCard: React.FC<Props> = ({
         const ms = minX + t * (maxX - minX);
         return {
           x: xScale(ms, minX, maxX),
-          label: new Date(ms).toLocaleDateString(undefined, { month: "short", day: "numeric" }),
+          label: new Date(ms).toLocaleDateString(undefined, {
+            month: "short", day: "numeric", timeZone: "UTC",
+          }),
         };
       })
     : [];
@@ -977,7 +979,8 @@ export const TeamMetricsCard: React.FC<Props> = ({
                 <header className="neo-mtta-tooltip-header">
                   <div className="neo-mtta-tooltip-date">
                     {new Date(b.startMs).toLocaleDateString(undefined, {
-                      weekday: "short", month: "short", day: "numeric", year: "numeric",
+                      weekday: "short", month: "short", day: "numeric",
+                      year: "numeric", timeZone: "UTC",
                     })}
                   </div>
                   <div className="neo-mtta-tooltip-bucketcount">

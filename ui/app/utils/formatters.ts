@@ -1,6 +1,20 @@
+// ─── TIMEZONE CONVENTION ─────────────────────────────────────────
+// All timestamp displays render in **UTC**, not the browser's local
+// timezone. This is intentional: the native Davis Problems app uses
+// UTC for problem.start, event.end, comment timestamps, automation
+// timestamps, and chart axis labels. Showing them in the user's
+// local clock here would create a 3-hour discrepancy for a Brazil
+// (UTC-3) user cross-referencing our app against the native one —
+// which on-call engineers do constantly.
+//
+// If you ever need a "user-local" display for a NEW surface, pass
+// the timeZone explicitly (e.g. `timeZone: "America/Sao_Paulo"`).
+// Don't drop the `timeZone: "UTC"` default — that's what keeps every
+// timestamp in the app readable side-by-side with native Davis.
+// ─────────────────────────────────────────────────────────────────
 export function formatDate(isoString: string): string {
   if (!isoString) return "";
-  return new Date(isoString).toLocaleString();
+  return new Date(isoString).toLocaleString(undefined, { timeZone: "UTC" });
 }
 
 export function formatRelativeTime(isoString: string): string {
@@ -57,16 +71,20 @@ export function getCategoryIcon(category: string): string {
 }
 
 // Formats event.start into the same shape Dynatrace uses in the list
-// (locale-aware date + 24-hour time). Browser locale drives the language.
+// (locale-aware date + 24-hour time). Browser locale drives the
+// language; **timezone is forced to UTC** to match the native Davis
+// Problems app (see TIMEZONE CONVENTION comment at the top of this
+// file).
 export function formatStartedDate(isoString: string): string {
   if (!isoString) return "";
   const d = new Date(isoString);
   return d.toLocaleString(undefined, {
-    day:    "numeric",
-    month:  "short",
-    year:   "numeric",
-    hour:   "2-digit",
-    minute: "2-digit",
+    day:      "numeric",
+    month:    "short",
+    year:     "numeric",
+    hour:     "2-digit",
+    minute:   "2-digit",
+    timeZone: "UTC",
   });
 }
 
