@@ -73,10 +73,83 @@ describe("pickBucketMs", () => {
 });
 
 describe("floorToBucket", () => {
-  it("anchors a timestamp to bucket start", () => {
+  it("anchors a sub-day timestamp to bucket start via plain modular floor", () => {
     expect(floorToBucket(125, 10)).toBe(120);
     expect(floorToBucket(120, 10)).toBe(120);
     expect(floorToBucket(0, 10)).toBe(0);
+  });
+
+  // ── Day-and-larger buckets: LOCAL-midnight alignment ──────────────
+  // The next three tests verify the timezone fix where day buckets
+  // align to the user's local midnight rather than UTC midnight.
+  // We construct a known timestamp by going through the LOCAL Date
+  // constructor — then no matter what timezone vitest runs in, the
+  // "local midnight" we expect is computable consistently from the
+  // same constructor.
+  it("aligns a DAY bucket to LOCAL midnight of that timestamp's calendar day", () => {
+    // Build a local timestamp = May 18, 2026 at 14:30 local.
+    const t = new Date(2026, 4, 18, 14, 30, 0, 0).getTime();
+    // Expected: midnight of May 18 LOCAL, in ms.
+    const expected = new Date(2026, 4, 18, 0, 0, 0, 0).getTime();
+    expect(floorToBucket(t, DAY)).toBe(expected);
+  });
+
+  it("DAY bucket: timestamps just after local midnight floor to that same day, not the previous", () => {
+    // Catch the off-by-one bug a UTC-floor would introduce: a
+    // problem at 00:01 local on May 18 must stay in the "May 18"
+    // bucket, not migrate back to "May 17".
+    const t = new Date(2026, 4, 18, 0, 1, 0, 0).getTime();
+    const expected = new Date(2026, 4, 18, 0, 0, 0, 0).getTime();
+    expect(floorToBucket(t, DAY)).toBe(expected);
+  });
+
+  it("DAY bucket: timestamps just before local midnight floor to the previous local day", () => {
+    // Mirror of the above: 23:59 local May 17 stays in May 17 even
+    // if its UTC clock reads 02:59 May 18 (e.g. Brazil UTC-3).
+    const t = new Date(2026, 4, 17, 23, 59, 0, 0).getTime();
+    const expected = new Date(2026, 4, 17, 0, 0, 0, 0).getTime();
+    expect(floorToBucket(t, DAY)).toBe(expected);
+  });
+
+  it("multi-DAY (3d) bucket: floor lands on local midnight of some day", () => {
+    // The exact day depends on the local-epoch anchor (Jan 1 1970
+    // LOCAL), so we don't assert which day — we just assert that
+    // the floored value IS a local midnight (00:00:00.000 local).
+    const t = new Date(2026, 4, 18, 14, 0).getTime();
+    const flooredDate = new Date(floorToBucket(t, 3 * DAY));
+    expect(flooredDate.getHours()).toBe(0);
+    expect(flooredDate.getMinutes()).toBe(0);
+    expect(flooredDate.getSeconds()).toBe(0);
+    expect(flooredDate.getMilliseconds()).toBe(0);
+  });
+
+  it("multi-DAY (3d) bucket: floor is invariant within the bucket span", () => {
+    // Take any timestamp, floor it. Any timestamp strictly inside
+    // [floor, floor + 3*DAY) must produce the same floor.
+    const t = new Date(2026, 4, 18, 14, 0).getTime();
+    const f = floorToBucket(t, 3 * DAY);
+    // 1 ms after the floor → same bucket
+    expect(floorToBucket(f + 1, 3 * DAY)).toBe(f);
+    // 1 ms before the bucket ends → same bucket
+    expect(floorToBucket(f + 3 * DAY - 1, 3 * DAY)).toBe(f);
+    // Exactly at the next boundary → different bucket
+    expect(floorToBucket(f + 3 * DAY, 3 * DAY)).toBe(f + 3 * DAY);
+  });
+
+  it("WEEK (7d) bucket: floor lands on local midnight", () => {
+    const t = new Date(2026, 4, 18, 14, 0).getTime();
+    const flooredDate = new Date(floorToBucket(t, 7 * DAY));
+    expect(flooredDate.getHours()).toBe(0);
+    expect(flooredDate.getMinutes()).toBe(0);
+  });
+
+  it("WEEK (7d) bucket: floor invariant within a 7-day span", () => {
+    const t = new Date(2026, 4, 18, 14, 0).getTime();
+    const f = floorToBucket(t, 7 * DAY);
+    // 6.99 days into the bucket → same floor
+    expect(floorToBucket(f + Math.floor(6.99 * DAY), 7 * DAY)).toBe(f);
+    // Exactly 7 days later → next bucket
+    expect(floorToBucket(f + 7 * DAY, 7 * DAY)).toBe(f + 7 * DAY);
   });
 });
 

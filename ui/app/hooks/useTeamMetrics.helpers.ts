@@ -41,9 +41,54 @@ export function pickBucketMs(rangeMs: number): number {
 }
 
 /** Anchors a timestamp to the start of its bucket. Used to group
- *  events under identical bucket keys. */
+ *  events under identical bucket keys.
+ *
+ *  TIMEZONE BEHAVIOR
+ *  ─────────────────
+ *  For sub-day buckets (15 min, 30 min, 1 h, 4 h) we use plain
+ *  modular floor on the UTC ms timeline. That's fine because:
+ *    • A sub-day bucket length divides evenly across the day, so
+ *      its boundaries land on round UTC offsets that ALSO appear
+ *      as round offsets in any local timezone (modulo TZ offset).
+ *    • Chart labels render bucket starts via `new Date(ms).getHours()`
+ *      (local), so a UTC-aligned bucket "[14:00, 15:00) UTC" shows
+ *      up as a "[11:00, 12:00) local" bar in Brazil — internally
+ *      consistent: the label matches the bucket span in the user's
+ *      clock.
+ *
+ *  For DAY-and-larger buckets we MUST anchor to LOCAL midnight,
+ *  otherwise the bucket span and the chart label disagree. With
+ *  UTC alignment a Brazil user (UTC-3) sees a "May 18" bar whose
+ *  contents actually span [21:00 May 17 → 21:00 May 18] in their
+ *  clock — half of "May 17" data lands in the "May 18" column.
+ *
+ *  We anchor to a LOCAL Jan-1-1970 epoch reference so multi-day
+ *  buckets (3 d, 7 d) remain stable across DST transitions and
+ *  user sessions. */
+const DAY_MS_FLOOR  = 24 * 60 * 60 * 1000;
+const LOCAL_EPOCH   = new Date(1970, 0, 1, 0, 0, 0, 0).getTime();
+
 export function floorToBucket(ms: number, bucketMs: number): number {
-  return Math.floor(ms / bucketMs) * bucketMs;
+  // Sub-day buckets: cheap UTC floor (correct — see docblock).
+  if (bucketMs < DAY_MS_FLOOR) {
+    return Math.floor(ms / bucketMs) * bucketMs;
+  }
+  // Day-or-larger buckets: anchor to LOCAL midnight, then step back
+  // to a multi-day boundary if bucketMs > 1 day. The local-epoch
+  // anchor keeps multi-day buckets reproducible (bucket(t) only
+  // depends on t — never on "what day did the user start the app").
+  const d = new Date(ms);
+  const localMidnight = new Date(
+    d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0,
+  ).getTime();
+  if (bucketMs === DAY_MS_FLOOR) return localMidnight;
+  // Multi-day: count days since the local epoch, floor to a
+  // multiple of bucketDays, multiply back. Math.round handles the
+  // ±1 ms drift DST transitions can introduce.
+  const daysSince  = Math.round((localMidnight - LOCAL_EPOCH) / DAY_MS_FLOOR);
+  const bucketDays = Math.round(bucketMs / DAY_MS_FLOOR);
+  const flooredDays = Math.floor(daysSince / bucketDays) * bucketDays;
+  return LOCAL_EPOCH + flooredDays * DAY_MS_FLOOR;
 }
 
 /** Aggregates an array of (timestamp, value) pairs into a contiguous
