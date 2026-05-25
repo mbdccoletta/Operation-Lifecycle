@@ -8072,14 +8072,34 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
 .ptl-cell-dot {
   position: relative;
   z-index: 1;
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  margin-top: 4px;
+  /* Was a 10×10 colored circle. Now renders the ▼ glyph instead —
+     same per-category color (inline `color` from JSX), pointing down
+     to indicate the chronological flow of the feed (asc sort). The
+     box dimensions accommodate the wider arrow without disturbing
+     the rail vertical line that runs behind it. */
+  width: 14px;
+  height: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  line-height: 1;
+  margin-top: 2px;
+  /* Subtle glow keeps the arrow visible against the page background
+     and mirrors the visual weight of the previous dot's box-shadow. */
+  text-shadow: 0 0 4px currentColor;
+  /* Suppress browser text selection on the marker — it's decorative. */
+  user-select: none;
 }
 .ptl-cell-dot-skeleton {
+  /* Skeleton state keeps the dimmed circle look — no glyph rendered
+     during loading, so a small disc reads more clearly as "loading". */
   background: rgba(180,210,255,0.15);
   box-shadow: 0 0 0 3px rgba(180,210,255,0.05);
+  border-radius: 50%;
+  width: 10px;
+  height: 10px;
+  text-shadow: none;
 }
 
 .ptl-cell-body {

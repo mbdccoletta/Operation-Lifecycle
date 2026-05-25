@@ -284,7 +284,18 @@ const Cell: React.FC<{ event: TimelineEvent; highlighted?: boolean }> = ({
       data-event-key={event.key}
     >
       <div className="ptl-cell-rail">
-        <span className="ptl-cell-dot" style={{ background: style.color, boxShadow: `0 0 0 3px ${style.color}22` }} />
+        {/* ▼ marker — points down to indicate chronological flow
+            (events read top → bottom in asc sort, the feed's default).
+            Replaces the previous circular dot; same per-category
+            color coding via inline style. `aria-hidden` since the
+            category label below carries the semantic meaning. */}
+        <span
+          className="ptl-cell-dot"
+          style={{ color: style.color }}
+          aria-hidden="true"
+        >
+          ▼
+        </span>
       </div>
       <div className="ptl-cell-body">
         <div className="ptl-cell-head">
