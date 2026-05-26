@@ -176,12 +176,18 @@
   --intensity-pill-glow:    4px;
   --intensity-pill-weight:  750;
 }
-[data-intensity="medium"] [data-theme] {
+[data-intensity="medium"] .neo-app-routes {
   /* `saturate()` only — `contrast()` was crushing low-alpha
      elements (dotted dividers in the RESOLVED zone, subtle
      green wash on the canvas) toward pure black, making them
      vanish. Saturate alone gives the "more vibrant" feel
-     without flattening dim translucent strokes. */
+     without flattening dim translucent strokes.
+     Target is `.neo-app-routes` (the routed-pages wrapper)
+     NOT `[data-theme]`: `filter` creates a stacking context,
+     which would break the fixed-position `.neo-tabbar` if it
+     were applied to an ancestor of the tabbar. The tabbar
+     lives as a SIBLING of `.neo-app-routes`, so it escapes
+     the filter context and stays viewport-pinned. */
   filter: saturate(1.18);
 }
 [data-intensity="bold"] {
@@ -193,11 +199,11 @@
   --intensity-pill-glow:    8px;
   --intensity-pill-weight:  800;
 }
-[data-intensity="bold"] [data-theme] {
-  /* See `[data-intensity="medium"]` above — same reason for
-     dropping `contrast()`. Saturate boosts vibrancy of solid
-     colours (chips, status pills, charts) while leaving low-
-     alpha canvas strokes visible. */
+[data-intensity="bold"] .neo-app-routes {
+  /* See `[data-intensity="medium"] .neo-app-routes` above for
+     the rationale on (a) saturate-only and (b) why we target
+     the routes wrapper instead of `[data-theme]` (filter
+     stacking context would break the fixed tabbar). */
   filter: saturate(1.35);
 }
 

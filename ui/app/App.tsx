@@ -74,6 +74,22 @@ const AppContent = () => {
 
   return (
     <div data-theme={theme} style={{ minHeight: "100vh" }}>
+      {/* Inner wrapper around the routed pages exists ONLY so the
+          `[data-intensity="medium|bold"]` saturate filter (see
+          theme.css `@ around line 168`) can be scoped to the page
+          content — NOT the fixed-position `.neo-tabbar` that
+          renders as a sibling below.
+          Why this matters: CSS `filter` on an ancestor creates a
+          new STACKING CONTEXT, which turns descendant `position:
+          fixed` into effectively `position: absolute` relative to
+          that ancestor. The tabbar then pins to the BOTTOM of the
+          filtered element (which extends below the viewport when
+          page content scrolls) instead of the viewport, making it
+          disappear off-screen in medium/bold mode. Keeping the
+          filter on `.neo-app-routes` only — never on `[data-theme]`
+          or anything containing the tabbar — preserves the
+          viewport-relative fixed positioning. */}
+      <div className="neo-app-routes">
       <Suspense
         fallback={
           <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "70vh" }}>
@@ -102,6 +118,7 @@ const AppContent = () => {
           <Route path="/detail/:id" element={<RedirectToFocus />} />
         </Routes>
       </Suspense>
+      </div>
 
       {/* Tab icons sourced from the Strato icon set so they match
           the visual language of the rest of the Dynatrace platform.
