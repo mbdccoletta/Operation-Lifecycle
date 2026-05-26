@@ -203,6 +203,12 @@ export const EnlargedQuadrantCard = ({
                 disableMagnifierLens
                 disableAggregation
                 dotScale={1.6}
+                /* 0.0.108: opens already zoomed into the single
+                   grouping so the cell fills the whole modal canvas
+                   in one click (without this the user had to double-
+                   click the cell inside the modal to trigger the
+                   internal "Exit zoom" mode). */
+                initialExpandedQuadrant={quadrantId}
               />
               {restCount > 0 && (
                 /* "Rest of the cell" badge — non-matching active

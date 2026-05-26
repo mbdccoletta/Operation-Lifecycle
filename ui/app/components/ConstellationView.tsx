@@ -92,6 +92,11 @@ interface ConstellationViewProps {
    *  see individual dots, so the aggregation safety net would just
    *  hide the data they came to see. */
   disableAggregation?: boolean;
+  /** Pre-sets the internal `expandedQuadrant` state on mount so the
+   *  canvas opens already zoomed into a specific quadrant. The user
+   *  can still click "Exit zoom" / press ESC to leave the zoom; from
+   *  there the normal multi-quadrant view kicks in. */
+  initialExpandedQuadrant?: string;
   /** Authoritative TOTAL / ACTIVE / RESOLVED counts derived from a
    *  dedicated count query (`useStatusCategoryCounts`) — covers the
    *  ENTIRE tenant window even when the page-level `problems` prop is
@@ -160,6 +165,7 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
   countOverrides,
   dotScale = 1,
   disableAggregation = false,
+  initialExpandedQuadrant,
 }) => {
   // Read the user's font-scale pick so the canvas-rendered text
   // (TOTAL / ACTIVE / RESOLVED circles, per-category counts at
@@ -261,7 +267,12 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
   const cursorRef = useRef<{ x: number; y: number } | null>(null);
   // When set, that quadrant is rendered to fill the full canvas — double
   // click on a quadrant zooms in, ESC or close button exits.
-  const [expandedQuadrant, setExpandedQuadrant] = useState<string | null>(null);
+  // 0.0.108: `initialExpandedQuadrant` lets the host pre-set this state
+  // on mount (EnlargedQuadrantCard uses it so the modal opens already
+  // zoomed into the single cell, no extra click required).
+  const [expandedQuadrant, setExpandedQuadrant] = useState<string | null>(
+    initialExpandedQuadrant ?? null,
+  );
   /** Per-cell aggregation toggle. By default any cell whose problem
    *  count exceeds CROWD_THRESHOLD and spans more than one Davis
    *  category is shown AGGREGATED — one bubble per category with the
