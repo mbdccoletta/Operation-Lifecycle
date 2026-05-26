@@ -852,6 +852,47 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
     starsRef.current = stars;
   }, [stars]);
 
+  /** Single source of truth for the zoom-into-quadrant canvas
+   *  transform. Both the draw fn and `screenToWorld` (hit-test) read
+   *  from this memo so they can't drift out of sync — the previous
+   *  duplicated math caused tooltip leaks on empty areas (cursor on
+   *  one place, hit-test thinking it was somewhere else).
+   *
+   *  Two scaling modes:
+   *  • Locked (modal / EnlargedQuadrantCard): NON-UNIFORM scale —
+   *    independent X and Y factors so the cell fills the canvas
+   *    edge-to-edge regardless of aspect mismatch (cell ~1.4:1,
+   *    modal canvas ~1.67:1 → uniform scaling left black bands).
+   *  • Page (Overview): UNIFORM scale with 8 % safety padding so
+   *    adjacent cells don't bleed back at the borders. */
+  const viewTransform = useMemo<{ scaleX: number; scaleY: number; tx: number; ty: number } | null>(() => {
+    if (!expandedQuadrant) return null;
+    const QB = slotById[expandedQuadrant]?.bounds;
+    if (!QB) return null;
+    const MARGIN_X = 0.005;
+    const MARGIN_Y = 0.04; // bigger Y margin includes the label strip above the dots
+    const cellXMin = Math.max(0, QB.xMin - MARGIN_X);
+    const cellXMax = Math.min(1, QB.xMax + MARGIN_X);
+    const cellYMin = Math.max(0, QB.yMin - MARGIN_Y);
+    const cellYMax = Math.min(1, QB.yMax + MARGIN_Y);
+    const cellX = cellXMin * size.w;
+    const cellY = cellYMin * size.h;
+    const cellW = (cellXMax - cellXMin) * size.w;
+    const cellH = (cellYMax - cellYMin) * size.h;
+    if (lockExpandedQuadrant) {
+      const scaleX = size.w / cellW;
+      const scaleY = size.h / cellH;
+      const tx = -cellX * scaleX;
+      const ty = -cellY * scaleY;
+      return { scaleX, scaleY, tx, ty };
+    }
+    const PADDING = 0.92;
+    const scale = Math.min(size.w / cellW, size.h / cellH) * PADDING;
+    const tx = size.w / 2 - (cellX + cellW / 2) * scale;
+    const ty = size.h / 2 - (cellY + cellH / 2) * scale;
+    return { scaleX: scale, scaleY: scale, tx, ty };
+  }, [expandedQuadrant, slotById, size, lockExpandedQuadrant]);
+
   const draw = useCallback(() => {
     const c = canvasRef.current;
     if (!c) return;
@@ -885,44 +926,15 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
     }
 
     // ── Expanded-quadrant zoom: translate + scale so the chosen quadrant
-    //    fills the active canvas area. Click/hover coords are mapped back
-    //    in the handlers via mapToWorld() so hit detection stays accurate.
-    let viewScale = 1, viewTx = 0, viewTy = 0;
-    if (expandedQuadrant) {
-      const QB = slotById[expandedQuadrant]?.bounds;
-      if (QB) {
-        // Zoom target zone — include a small breathing-room margin so
-        // the cell border / label aren't right against the canvas edge.
-        // Used to hard-code `cellYMin/Max` to the 2×3 grid's row bounds
-        // (0.005-0.18 / 0.50-0.68), which only worked when the layout
-        // matched that exact grid. Single-grouping layouts (e.g. inside
-        // EnlargedQuadrantCard with `showHub={false}`) place the cell
-        // at 0.045-0.68 instead, and the hard-coded math ended up
-        // translating the cell off-screen with a 44 % black band on
-        // top (user-reported 0.0.108 "ficou com um espaço"). Using the
-        // ACTUAL layout bounds with a small inflation makes the zoom
-        // work for any layout that `computeQuadrantLayout` produces.
-        const MARGIN_X = 0.005;
-        const MARGIN_Y = 0.04;   // bigger Y margin includes the label strip above the dots
-        const cellXMin = Math.max(0, QB.xMin - MARGIN_X);
-        const cellXMax = Math.min(1, QB.xMax + MARGIN_X);
-        const cellYMin = Math.max(0, QB.yMin - MARGIN_Y);
-        const cellYMax = Math.min(1, QB.yMax + MARGIN_Y);
-        const cellX = cellXMin * w;
-        const cellY = cellYMin * h;
-        const cellW = (cellXMax - cellXMin) * w;
-        const cellH = (cellYMax - cellYMin) * h;
-        // Locked-zoom (modal) skips the safety padding so the cell
-        // fills the canvas edge-to-edge. The normal page-level zoom
-        // keeps the 8 % breathing room so adjacent cells don't bleed
-        // back in at the borders.
-        const PADDING = lockExpandedQuadrant ? 1.0 : 0.92;
-        viewScale = Math.min(w / cellW, h / cellH) * PADDING;
-        viewTx = w / 2 - (cellX + cellW / 2) * viewScale;
-        viewTy = h / 2 - (cellY + cellH / 2) * viewScale;
-        ctx.translate(viewTx, viewTy);
-        ctx.scale(viewScale, viewScale);
-      }
+    //    fills the active canvas area. Computed once via `viewTransform`
+    //    (memo below the draw fn) so the canvas paint AND
+    //    `screenToWorld` (hit-test) read the SAME numbers. Previously
+    //    each had its own copy of the math and they drifted out of
+    //    sync, producing tooltip leaks on empty areas (0.0.108 user
+    //    report).
+    if (viewTransform) {
+      ctx.translate(viewTransform.tx, viewTransform.ty);
+      ctx.scale(viewTransform.scaleX, viewTransform.scaleY);
     }
 
     // ═══ GRID DIVIDING LINES (dotted) + optional central hub band ═══
@@ -2436,7 +2448,7 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
   }, [size, dk, selectedId, problems, dataMode, stars, expandedQuadrant, hoveredLabel,
       groupings, resolveGrouping, layout, layoutBounds, slotById, colorOf, labelById, detectQuadrantAt, detectLabelAt, showHub,
       cellAggregations, cellActiveTotalAll, isCellAggregated, expandedCellCategory, isMobileOrTablet,
-      highlightedCategoriesPerCell, drilledSubsets, aggregatedTopByCell,
+      highlightedCategoriesPerCell, drilledSubsets, aggregatedTopByCell, viewTransform,
       // `fontScale` drives `fsMult` inside the draw fn — re-bind so
       // a change in the Display panel triggers a fresh closure on
       // the very next render.
@@ -2528,28 +2540,15 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
 
   // Maps screen-normalized coords (0..1) to world coords, inverting the
   // expanded-quadrant view transform when active. Used so click/hover work
-  // correctly when zoomed.
+  // correctly when zoomed. Reads `viewTransform` defined above the
+  // draw fn so both share one source of truth.
   const screenToWorld = useCallback((mxN: number, myN: number): { x: number; y: number } => {
-    if (!expandedQuadrant) return { x: mxN, y: myN };
-    const QB = slotById[expandedQuadrant]?.bounds;
-    if (!QB) return { x: mxN, y: myN };
-    const isTopRow = QB.yMin < 0.5;
-    const cellXMin = QB.xMin - 0.005;
-    const cellXMax = QB.xMax + 0.005;
-    const cellYMin = isTopRow ? 0.005 : 0.50;
-    const cellYMax = isTopRow ? 0.18  : 0.68;
-    const cellX = cellXMin * size.w;
-    const cellY = cellYMin * size.h;
-    const cellW = (cellXMax - cellXMin) * size.w;
-    const cellH = (cellYMax - cellYMin) * size.h;
-    const scale = Math.min(size.w / cellW, size.h / cellH) * 0.92;
-    const tx = size.w / 2 - (cellX + cellW / 2) * scale;
-    const ty = size.h / 2 - (cellY + cellH / 2) * scale;
+    if (!viewTransform) return { x: mxN, y: myN };
     return {
-      x: ((mxN * size.w) - tx) / scale / size.w,
-      y: ((myN * size.h) - ty) / scale / size.h,
+      x: ((mxN * size.w) - viewTransform.tx) / viewTransform.scaleX / size.w,
+      y: ((myN * size.h) - viewTransform.ty) / viewTransform.scaleY / size.h,
     };
-  }, [expandedQuadrant, size, slotById]);
+  }, [viewTransform, size]);
 
   const handleClick = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
