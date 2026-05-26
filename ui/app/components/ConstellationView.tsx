@@ -46,7 +46,12 @@ interface ConstellationViewProps {
    *  (no canvas transformations, the dots stay at their natural
    *  visual size). Falls back to the internal `setExpandedQuadrant`
    *  zoom only when no consumer wires this prop. */
-  onQuadrantEnlarge?: (groupingId: string) => void;
+  /** 0.0.109: second arg carries the subset mode the user clicked on
+   *  (Rising / Oldest Open / Criticality / Total). The modal uses
+   *  that to pre-filter to the matching subset instead of relying on
+   *  a global Show By chip. Omitted when the enlarge was triggered
+   *  by a non-bubble path (cell label, double-click). */
+  onQuadrantEnlarge?: (groupingId: string, subsetMode?: ConstellationDataMode) => void;
   /** Clicking on EMPTY canvas (no dot, no label) fires this so the parent
    *  can clear page-level state — pinned problem, expanded cards, etc. */
   onEmptyClick?: () => void;
@@ -300,7 +305,7 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
   /** Bubble positions captured during the canvas draw so the HTML
    *  click handler can hit-test them. Each entry stores the bubble's
    *  PIXEL position + radius. */
-  const bubbleHitsRef = useRef<Array<{ cellId: string; categoryId: string; cx: number; cy: number; r: number }>>([]);
+  const bubbleHitsRef = useRef<Array<{ cellId: string; subsetMode: ConstellationDataMode; cx: number; cy: number; r: number }>>([]);
   // Tracks the previous tap time/quadrant so we can detect a double-tap on
   // touch devices (where the synthetic dblclick event is unreliable).
   const lastTapRef = useRef<{ t: number; cat: string | null }>({ t: 0, cat: null });
@@ -674,6 +679,80 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
     }
     return out;
   }, [problems, resolveGrouping]);
+
+  /** Per-cell sub-bubbles — one per Show By mode. Replaces the old
+   *  per-category bubble (0.0.109): each dense cell now exposes the
+   *  same 4-way breakdown the global Show By chip used to expose,
+   *  but locally + clickable. Each bubble click opens the modal with
+   *  that subset filter pre-applied.
+   *
+   *  Counts come from the loaded `problems` (capped at first-paint
+   *  ~250 in real prd). To stay honest when the cell has thousands
+   *  of true active problems, we scale each subset count by the
+   *  ratio of `realCellTotal / loadedCellTotal`, drawing the real
+   *  total from `countOverrides.activeByCategory` when available.
+   *  Stress 3K demo: 100 % of problems load → no scaling needed,
+   *  counts are exact. */
+  const SUBSET_MODES = [
+    { mode: "rising" as const,      label: "Rising",   icon: "▲" },     // ▲
+    { mode: "open_time" as const,   label: "Stuck",    icon: "⏱" },     // ⏱
+    { mode: "criticality" as const, label: "Critical", icon: "⚡" },     // ⚡
+    { mode: "total" as const,       label: "Total",    icon: "Σ" },     // Σ
+  ];
+  type SubsetMode = (typeof SUBSET_MODES)[number]["mode"];
+  const cellSubsetBubbles: Record<string, Array<{
+    mode: SubsetMode;
+    count: number;
+    color: string;
+    label: string;
+    icon: string;
+  }>> = useMemo(() => {
+    const now = Date.now();
+    const matches = (mode: SubsetMode, p: Problem): boolean => {
+      if (p["event.status"] !== "ACTIVE") return false;
+      switch (mode) {
+        case "rising":
+          return new Date(p["event.start"]).getTime() >= now - 3_600_000;
+        case "open_time":
+          return new Date(p["event.start"]).getTime() <= now - 4 * 3_600_000;
+        case "criticality":
+          return Number((p as { "event.severity_level"?: number | string })["event.severity_level"] ?? 0) >= 4;
+        case "total":
+        default:
+          return true;
+      }
+    };
+    // First pass: loaded-subset counts per (cell, mode).
+    const loaded: Record<string, Record<SubsetMode, number>> = {};
+    for (const p of problems) {
+      const cell = resolveGrouping(p);
+      if (!cell) continue;
+      if (!loaded[cell]) {
+        loaded[cell] = { rising: 0, open_time: 0, criticality: 0, total: 0 };
+      }
+      for (const { mode } of SUBSET_MODES) {
+        if (matches(mode, p)) loaded[cell][mode]++;
+      }
+    }
+    // Second pass: scale to real cell totals where we have an override.
+    const out: Record<string, Array<{ mode: SubsetMode; count: number; color: string; label: string; icon: string }>> = {};
+    for (const [cellId, counts] of Object.entries(loaded)) {
+      const loadedTotal = counts.total;
+      const realTotal = countOverrides?.activeByCategory?.[cellId] ?? loadedTotal;
+      const scale = loadedTotal > 0 ? realTotal / loadedTotal : 1;
+      const cellColor = colorOf(cellId);
+      out[cellId] = SUBSET_MODES.map(({ mode, label, icon }) => ({
+        mode,
+        count: mode === "total"
+          ? realTotal
+          : Math.max(0, Math.round(counts[mode] * scale)),
+        color: cellColor,
+        label,
+        icon,
+      }));
+    }
+    return out;
+  }, [problems, resolveGrouping, countOverrides, colorOf]);
 
   /** Pixel area available per cell — derived from the layout's
    *  normalised bounds and the current canvas size. Drives the
@@ -1918,126 +1997,52 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
       }
     });
 
-    // ── Aggregated category bubbles (crowded multi-category cells) ─
-    // One bubble per Davis category present in the cell, with the
-    // count inside. Each bubble is CLICKABLE — clicking drills into
-    // that category (only its dots render in the cell, with a
-    // per-category top-tier highlight under the active Show By mode).
-    // When the cell is already category-drilled, the bubble pass is
-    // skipped so the user sees only the chosen category's dots.
-    const bubbleHits: Array<{ cellId: string; categoryId: string; cx: number; cy: number; r: number }> = [];
+    // ── Per-cell Show By sub-bubbles ───────────────────────────────
+    // 0.0.109: replaces the single-aggregation-bubble model with one
+    // sub-bubble PER Show By mode (Rising / Stuck / Critical / Total).
+    // Each sub-bubble is clickable; the click opens the modal pre-
+    // filtered to that subset. Drives the new design (no global Show
+    // By chip needed — the bubbles ARE the chip, scoped to one cell).
+    const bubbleHits: Array<{ cellId: string; subsetMode: ConstellationDataMode; cx: number; cy: number; r: number }> = [];
     for (const slot of layout) {
       if (!isCellAggregated(slot.id)) continue;
-      // 0.0.105: aggregated cells always show the bubble alongside
-      // the top-N leaders (regardless of drill state). The bubble
-      // carries the cell's full count so the user knows how big
-      // the category is even when only ~30 dots render. Drilled
-      // state still affects WHICH leaders show (filtered by
-      // category, see the dot pass + aggregatedTopByCell), just
-      // not the bubble's visibility.
-      //
-      // (No `continue` here — the bubble pass runs for every
-      // aggregated cell now.)
-      const cats = cellAggregations[slot.id];
-      if (!cats || cats.length === 0) continue;
+      const subsets = cellSubsetBubbles[slot.id];
+      if (!subsets || subsets.length === 0) continue;
       const cell = cellRects[slot.id];
       if (!cell) continue;
 
-      const highlightSet = highlightedCategoriesPerCell[slot.id] || new Set<string>();
-      const N = cats.length;
+      const N = subsets.length;
       const usableW = Math.max(0, cell.w - 24);
       const spacing = usableW / N;
       const bubbleY = cell.y + cell.h * 0.62; // sit below the title row
-      const maxR = Math.min(28, Math.max(14, spacing * 0.40));
-      const minR = 12;
-
-      // ── Display-count override ───────────────────────────────────
-      // `c.count` is built from the LOADED problems array (capped at
-      // ~250 by the first-paint budget), so on cells with 100+ true
-      // active problems the bubble understates the actual volume —
-      // user reported seeing "80" inside an ERROR cell labelled
-      // "935 active" (0.0.101). `countOverrides.activeByCategory`
-      // carries the count-query value (what the header label uses).
-      //
-      // Single-category cells (Incidents view): the override IS the
-      // cell total — use it directly.
-      // Multi-category cells (Segments view): we don't have a
-      // per-category override, so scale the loaded subset
-      // proportionally to the true cell total.
-      // No override available (loading / debug): fall back to the
-      // loaded count.
-      //
-      // 0.0.107 — Drilled bubble represents "the rest":
-      // When the cell is drilled, the dot pass renders `shownDots`
-      // individual leaders. The bubble then represents only the
-      // PROBLEMS NOT SHOWN as individual dots — `total − shownDots`.
-      // Matches the user's mental model: "show details of the
-      // leaders + keep the rest grouped."
-      const overrideCount = countOverrides?.activeByCategory?.[slot.id];
-      // 0.0.108: for the SINGLE-CATEGORY case (Incidents view), the
-      // bubble represents the cell's full active total. When no
-      // count-query override is available (demo scenarios), fall
-      // back to counting the loaded problems directly — INCLUDING
-      // top-tier (which `cellAggregations` excludes). Previously the
-      // bubble showed 1190 inside a "1200 active" cell because the
-      // 10 top-tier stars were missing from the fallback count.
-      const loadedCellTotalAll = cellActiveTotalAll[slot.id] ?? 0;
-      const loadedCellTotal = cats.reduce((s, x) => s + x.count, 0);
-      const isDrilled = !!expandedCellCategory[slot.id];
-      const shownDotsInCell = isDrilled ? (aggregatedTopByCell[slot.id]?.size ?? 0) : 0;
-      const getDisplayCount = (c: { count: number }): number => {
-        let base: number;
-        if (overrideCount != null) {
-          // count-query value — single-cat cell: full override; multi-
-          // cat cell: proportionally scaled by per-category share.
-          if (N === 1) base = overrideCount;
-          else if (loadedCellTotal <= 0) base = c.count;
-          else base = Math.max(1, Math.round(overrideCount * (c.count / loadedCellTotal)));
-        } else if (N === 1) {
-          // Single-cat fallback: use the all-inclusive count so the
-          // bubble matches the cell header (no off-by-top-tier).
-          base = loadedCellTotalAll || c.count;
-        } else {
-          // Multi-cat fallback: keep per-category loaded count (only
-          // way to split between categories without an override).
-          base = c.count;
-        }
-        // Drilled mode (single-cat only): subtract the leaders that
-        // render as individual dots so the bubble reads as "the rest."
-        if (isDrilled && N === 1) base = Math.max(0, base - shownDotsInCell);
-        return base;
-      };
-      // Radius scaling uses the display counts so the visual area
-      // matches the displayed numbers.
-      const displayCounts = cats.map(getDisplayCount);
-      const maxCount = Math.max(1, ...displayCounts);
+      const maxR = Math.min(26, Math.max(14, spacing * 0.36));
+      const minR = 14;
+      const maxCount = Math.max(1, ...subsets.map((s) => s.count));
 
       for (let i = 0; i < N; i++) {
-        const c = cats[i];
-        const displayCount = displayCounts[i];
+        const s = subsets[i];
         const bubbleX = cell.x + 12 + spacing * (i + 0.5);
-        // Log-based radius scaling keeps small differences visible
-        // without letting a single huge count dominate.
-        const lr = Math.log10(Math.max(1, displayCount)) / Math.max(1, Math.log10(maxCount));
+        // Log-based radius scaling — keeps small subsets readable
+        // when one (usually Total) dominates the cell.
+        const lr = Math.log10(Math.max(1, s.count)) / Math.max(1, Math.log10(maxCount));
         const r = minR + lr * (maxR - minR);
-        const isLeader = highlightSet.has(c.id);
 
-        bubbleHits.push({ cellId: slot.id, categoryId: c.id, cx: bubbleX, cy: bubbleY, r });
+        bubbleHits.push({ cellId: slot.id, subsetMode: s.mode, cx: bubbleX, cy: bubbleY, r });
 
         // Soft glow halo
         ctx.save();
         const halo = ctx.createRadialGradient(bubbleX, bubbleY, 0, bubbleX, bubbleY, r * 2);
-        halo.addColorStop(0, `${c.color}55`);
-        halo.addColorStop(1, `${c.color}00`);
+        halo.addColorStop(0, `${s.color}55`);
+        halo.addColorStop(1, `${s.color}00`);
         ctx.fillStyle = halo;
         ctx.fillRect(bubbleX - r * 2, bubbleY - r * 2, r * 4, r * 4);
         ctx.restore();
 
         // Bubble body
         ctx.save();
-        ctx.shadowColor = c.color;
-        ctx.shadowBlur = 12;
-        ctx.fillStyle = c.color;
+        ctx.shadowColor = s.color;
+        ctx.shadowBlur = 10;
+        ctx.fillStyle = s.color;
         ctx.beginPath();
         ctx.arc(bubbleX, bubbleY, r, 0, Math.PI * 2);
         ctx.fill();
@@ -2046,7 +2051,7 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
         // Inner darker disc to make the count more readable against
         // the saturated outer ring.
         ctx.save();
-        ctx.fillStyle = "rgba(8,12,22,0.55)";
+        ctx.fillStyle = "rgba(8,12,22,0.65)";
         ctx.beginPath();
         ctx.arc(bubbleX, bubbleY, r * 0.78, 0, Math.PI * 2);
         ctx.fill();
@@ -2054,47 +2059,26 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
 
         // Count text — sized to fit comfortably inside the bubble.
         ctx.save();
-        const fontSize = Math.max(10, Math.min(16, r * 0.85)) * fsMult;
+        const fontSize = Math.max(10, Math.min(15, r * 0.78)) * fsMult;
         ctx.font = `700 ${fontSize}px "Roboto Mono", "SF Mono", monospace`;
         ctx.fillStyle = "#ffffff";
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
-        ctx.fillText(String(displayCount), bubbleX, bubbleY);
+        ctx.fillText(String(s.count), bubbleX, bubbleY);
         ctx.restore();
 
-        // Leader emphasis — this category contains the cell's top
-        // problem(s) under the active Show By mode (or, in Total
-        // mode, has the highest count). Draw the same dashed pulsing
-        // focus ring the individual top-tier dots use, plus a small
-        // ★ glyph above the bubble so the cue reads at a glance.
-        if (isLeader) {
-          const ringPulse = (Math.sin(tc * 1.8) + 1) / 2;
-          const ringR     = r + 5 + ringPulse * 2.5;
-          ctx.save();
-          ctx.strokeStyle = c.color;
-          ctx.lineWidth = 1.4;
-          ctx.globalAlpha = 0.55 + ringPulse * 0.35;
-          ctx.setLineDash([3, 4]);
-          ctx.lineDashOffset = -tc * 12;
-          ctx.beginPath();
-          ctx.arc(bubbleX, bubbleY, ringR, 0, Math.PI * 2);
-          ctx.stroke();
-          ctx.setLineDash([]);
-          ctx.restore();
-
-          // ★ glyph just above the bubble — same colour as the
-          // bubble, pulses with the same breath.
-          ctx.save();
-          ctx.font = `700 ${(11 * fsMult).toFixed(2)}px "Roboto Mono", "SF Mono", monospace`;
-          ctx.textAlign    = "center";
-          ctx.textBaseline = "bottom";
-          ctx.shadowColor  = c.color;
-          ctx.shadowBlur   = 6 + ringPulse * 4;
-          ctx.fillStyle    = c.color;
-          ctx.globalAlpha  = 0.85 + ringPulse * 0.15;
-          ctx.fillText("★", bubbleX, bubbleY - r - 3);
-          ctx.restore();
-        }
+        // Mode icon above the bubble — ▲ (Rising), ⏱ (Stuck),
+        // ⚡ (Critical), Σ (Total). Distinguishes the bubbles at a
+        // glance without needing per-mode colour (we keep the cell's
+        // category colour so the visual identity stays consistent).
+        ctx.save();
+        ctx.font = `600 ${(10 * fsMult).toFixed(2)}px "Roboto Mono", "SF Mono", monospace`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "bottom";
+        ctx.fillStyle = s.color;
+        ctx.globalAlpha = 0.9;
+        ctx.fillText(s.icon, bubbleX, bubbleY - r - 2);
+        ctx.restore();
       }
     }
     bubbleHitsRef.current = bubbleHits;
@@ -2447,7 +2431,7 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
 
   }, [size, dk, selectedId, problems, dataMode, stars, expandedQuadrant, hoveredLabel,
       groupings, resolveGrouping, layout, layoutBounds, slotById, colorOf, labelById, detectQuadrantAt, detectLabelAt, showHub,
-      cellAggregations, cellActiveTotalAll, isCellAggregated, expandedCellCategory, isMobileOrTablet,
+      cellAggregations, cellActiveTotalAll, cellSubsetBubbles, isCellAggregated, expandedCellCategory, isMobileOrTablet,
       highlightedCategoriesPerCell, drilledSubsets, aggregatedTopByCell, viewTransform,
       // `fontScale` drives `fsMult` inside the draw fn — re-bind so
       // a change in the Display panel triggers a fresh closure on
@@ -2569,9 +2553,12 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
     for (const b of bubbleHitsRef.current) {
       if (Math.hypot(mxPx - b.cx, myPx - b.cy) <= b.r) {
         if (onQuadrantEnlarge) {
-          onQuadrantEnlarge(b.cellId);
+          onQuadrantEnlarge(b.cellId, b.subsetMode);
         } else {
-          setExpandedCellCategory((prev) => ({ ...prev, [b.cellId]: b.categoryId }));
+          // Fallback: drill inline. We don't have a per-mode inline
+          // representation any more, so just record the cell as
+          // drilled (no per-category narrowing).
+          setExpandedCellCategory((prev) => ({ ...prev, [b.cellId]: b.cellId }));
         }
         return;
       }

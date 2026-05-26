@@ -339,13 +339,23 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
   const [dataMode, setDataMode] = useState<"rising" | "open_time" | "criticality" | "total">("rising");
   /** Category whose quadrant the user clicked — shows the detail panel. */
   const [quadrantDetail, setQuadrantDetail] = useState<string | null>(null);
+  /** 0.0.109: Show-By subset the user clicked on in a sub-bubble.
+   *  Threaded through to EnlargedQuadrantCard so the modal pre-
+   *  filters to that subset (Rising / Stuck / Critical / Total)
+   *  instead of relying on the now-removed global Show By chip. */
+  const [enlargedQuadrantMode, setEnlargedQuadrantMode] = useState<
+    "rising" | "open_time" | "criticality" | "total" | undefined
+  >(undefined);
   /** Drives the centered HTML/SVG `<EnlargedQuadrantCard>` — a
    *  separate path from `quadrantDetail` (which opens the list-style
    *  drill-down) and from the canvas `expandedQuadrant` zoom (which
    *  the user explicitly rejected as "still zoom"). This one just
    *  shows the quadrant as a clean enlarged card. */
   const [enlargedQuadrant, setEnlargedQuadrant] = useState<string | null>(null);
-  const closeEnlargedQuadrant = useCallback(() => setEnlargedQuadrant(null), []);
+  const closeEnlargedQuadrant = useCallback(() => {
+    setEnlargedQuadrant(null);
+    setEnlargedQuadrantMode(undefined);
+  }, []);
   /** Double-clicking the Pulse chart expands it to take a much larger area. */
   const [pulseExpanded, setPulseExpanded] = useState(false);
   // Hoisted up so `handleEmptyClick` (defined further down) can call
@@ -2095,9 +2105,15 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
               real estate. Skip the entire block in mobile/tablet. */}
           {!isMobileOrTablet && (
             <>
-              {/* Compact segmented control — pill-shaped with a subtle
-                  indigo fill on the active segment; no bold label since
-                  the four options read clearly on their own. */}
+              {/* Show By segmented control (Rising / Oldest Open /
+                  Criticality / Total) — REMOVED in 0.0.109. Every
+                  dense cell now exposes its own per-mode sub-bubbles
+                  (▲ Rising, ⏱ Stuck, ⚡ Critical, Σ Total) so the
+                  global chip is redundant. The `dataMode` state is
+                  preserved as a fallback for the modal when no
+                  bubble click sets a subset; default "rising" stays
+                  reasonable. */}
+              {false && (
               <div className="neo-segctrl" role="group" aria-label="Visualization mode">
                 {[
                   { id: "rising",      label: "Rising",      hint: "Quadrants gaining new incidents in the last hour" },
@@ -2117,6 +2133,7 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
                   </button>
                 ))}
               </div>
+              )}
               {/* "View by" dimension toggle. Backed by `navigate()` so
                   the URL stays the source of truth (deeplinks to `/`
                   and `/segments` continue to work).
@@ -2407,7 +2424,10 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
             dataMode={dataMode}
             onQuadrantClick={onQuadrantClick}
             onCategoryLabelClick={onCategoryLabelClick}
-            onQuadrantEnlarge={setEnlargedQuadrant}
+            onQuadrantEnlarge={(cellId, mode) => {
+              setEnlargedQuadrant(cellId);
+              setEnlargedQuadrantMode(mode);
+            }}
             onEmptyClick={handleEmptyClick}
             groupings={groupings}
             resolveGrouping={resolveGrouping}
@@ -3290,7 +3310,7 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
           problems={problems}
           groupings={groupings}
           resolveGrouping={resolveGrouping}
-          dataMode={dataMode}
+          dataMode={enlargedQuadrantMode ?? dataMode}
           onClose={closeEnlargedQuadrant}
           onSelectProblem={onQuadrantProblemSelect}
         />
