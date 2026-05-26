@@ -346,6 +346,12 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
   const [enlargedQuadrantMode, setEnlargedQuadrantMode] = useState<
     "rising" | "open_time" | "criticality" | "total" | undefined
   >(undefined);
+  /** 0.0.109 follow-up: click on a legend chip (Rising / Stuck /
+   *  Critical) highlights the matching sub-bubble across every
+   *  cell. Single-select; click the same chip again to clear. */
+  const [highlightedSubsetMode, setHighlightedSubsetMode] = useState<
+    "rising" | "open_time" | "criticality" | null
+  >(null);
   /** Drives the centered HTML/SVG `<EnlargedQuadrantCard>` — a
    *  separate path from `quadrantDetail` (which opens the list-style
    *  drill-down) and from the canvas `expandedQuadrant` zoom (which
@@ -2445,31 +2451,42 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
               <span style={{ fontWeight: 700, color: "var(--neo-text)", letterSpacing: "0.04em" }}>
                 Each cell groups by:
               </span>
-              {[
-                { label: "Rising",   hint: "Problems opened in the last hour" },
-                { label: "Stuck",    hint: "Problems active for more than 4 hours" },
-                { label: "Critical", hint: "Problems with severity 4 or 5" },
-              ].map((m) => (
-                <span
-                  key={m.label}
-                  title={m.hint}
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    padding: "3px 8px",
-                    borderRadius: 999,
-                    background: "var(--neo-surface)",
-                    border: "1px solid var(--neo-border)",
-                    color: "var(--neo-text)",
-                    fontWeight: 600,
-                  }}
-                >
-                  {m.label}
-                  <span style={{ marginLeft: 6, fontSize: 9, opacity: 0.6, fontWeight: 500 }}>{m.hint}</span>
-                </span>
-              ))}
+              {([
+                { mode: "rising"      as const, label: "Rising",   hint: "Problems opened in the last hour" },
+                { mode: "open_time"   as const, label: "Stuck",    hint: "Problems active for more than 4 hours" },
+                { mode: "criticality" as const, label: "Critical", hint: "Problems with severity 4 or 5" },
+              ]).map((m) => {
+                const isActive = highlightedSubsetMode === m.mode;
+                return (
+                  <button
+                    key={m.label}
+                    type="button"
+                    title={`${m.hint}${isActive ? " — click to clear" : " — click to highlight in every cell"}`}
+                    onClick={() => setHighlightedSubsetMode((prev) => (prev === m.mode ? null : m.mode))}
+                    aria-pressed={isActive}
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      padding: "3px 10px",
+                      borderRadius: 999,
+                      background: isActive ? "rgba(99,102,241,0.20)" : "var(--neo-surface)",
+                      border: `1px solid ${isActive ? "#6366f1" : "var(--neo-border)"}`,
+                      color: isActive ? "#a5b4fc" : "var(--neo-text)",
+                      fontWeight: 600,
+                      font: 'inherit',
+                      cursor: "pointer",
+                      transition: "background 120ms, border-color 120ms, color 120ms",
+                    }}
+                  >
+                    {m.label}
+                    <span style={{ marginLeft: 6, fontSize: 9, opacity: 0.6, fontWeight: 500 }}>{m.hint}</span>
+                  </button>
+                );
+              })}
               <span style={{ marginLeft: "auto", opacity: 0.6 }}>
-                Click any bubble to see its problems.
+                {highlightedSubsetMode
+                  ? "Highlighted across all cells. Click chip again to clear."
+                  : "Click a chip to highlight that group across all cells."}
               </span>
             </div>
           )}
@@ -2488,6 +2505,7 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
             resolveGrouping={resolveGrouping}
             showHub={groupBy === "category"}
             countOverrides={constellationCountOverrides}
+            highlightedSubsetMode={highlightedSubsetMode}
           />
         </div>
       ) : (

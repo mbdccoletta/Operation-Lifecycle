@@ -102,6 +102,11 @@ interface ConstellationViewProps {
    *  can still click "Exit zoom" / press ESC to leave the zoom; from
    *  there the normal multi-quadrant view kicks in. */
   initialExpandedQuadrant?: string;
+  /** 0.0.109: when set, the matching sub-bubble in every cell is
+   *  drawn with extra emphasis (brighter glow, dashed ring) and the
+   *  other modes are dimmed. Driven by the host's interactive
+   *  legend chip strip. */
+  highlightedSubsetMode?: "rising" | "open_time" | "criticality" | null;
   /** Pin the canvas in `expandedQuadrant` mode — no Exit-zoom button,
    *  no ESC/double-click exit, and the zoom math drops its safety
    *  padding so the cell fills the entire canvas. Used by
@@ -180,6 +185,7 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
   disableAggregation = false,
   initialExpandedQuadrant,
   lockExpandedQuadrant = false,
+  highlightedSubsetMode = null,
 }) => {
   // Read the user's font-scale pick so the canvas-rendered text
   // (TOTAL / ACTIVE / RESOLVED circles, per-category counts at
@@ -2066,27 +2072,48 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
         // Each bubble pulses slightly out of phase so the row feels
         // alive without the four bubbles moving in lock-step.
         const phaseOffset = i * 0.5;
+        // Highlight state: this bubble matches the active legend
+        // chip → bigger + brighter, with a dashed pulsing ring around
+        // it (same cue the per-quadrant leader rings use). Others get
+        // dimmed so the eye latches onto the highlighted set across
+        // every cell at once.
+        const isHighlighted = highlightedSubsetMode !== null
+          && s.mode === highlightedSubsetMode;
+        const isDimmed = highlightedSubsetMode !== null && !isHighlighted;
+        const highlightBoost = isHighlighted ? 1.15 : 1;
         const r = (minR + lr * (maxR - minR))
-          * (1 + Math.sin(tc * 2.1 + phaseOffset) * 0.06);
+          * (1 + Math.sin(tc * 2.1 + phaseOffset) * 0.06)
+          * highlightBoost;
 
         // Hit area: use the AVERAGE radius (un-pulsed) so the click
         // target stays steady even when the bubble breathes.
-        const rHit = minR + lr * (maxR - minR);
+        const rHit = (minR + lr * (maxR - minR)) * highlightBoost;
         bubbleHits.push({ cellId: slot.id, subsetMode: s.mode, cx: bubbleX, cy: bubbleY, r: rHit });
 
-        // Soft glow halo — pulses with the bubble.
+        // Set up per-bubble alpha for the highlight cue. Drawn-with-
+        // ctx-globalAlpha at the layer level rather than baked into
+        // each color string so the highlighted set "pops" without
+        // re-mixing colors.
+        const bubbleAlpha = isDimmed ? 0.35 : 1.0;
+
+        // Soft glow halo — pulses with the bubble. Highlighted
+        // bubbles get a denser halo (more visible against the cell
+        // background); dimmed bubbles fade with `bubbleAlpha`.
         ctx.save();
-        const halo = ctx.createRadialGradient(bubbleX, bubbleY, 0, bubbleX, bubbleY, r * 2.2);
-        halo.addColorStop(0, `${s.color}66`);
+        ctx.globalAlpha = bubbleAlpha;
+        const haloIntensity = isHighlighted ? "99" : "66";
+        const halo = ctx.createRadialGradient(bubbleX, bubbleY, 0, bubbleX, bubbleY, r * 2.4);
+        halo.addColorStop(0, `${s.color}${haloIntensity}`);
         halo.addColorStop(1, `${s.color}00`);
         ctx.fillStyle = halo;
-        ctx.fillRect(bubbleX - r * 2.2, bubbleY - r * 2.2, r * 4.4, r * 4.4);
+        ctx.fillRect(bubbleX - r * 2.4, bubbleY - r * 2.4, r * 4.8, r * 4.8);
         ctx.restore();
 
         // Bubble body
         ctx.save();
+        ctx.globalAlpha = bubbleAlpha;
         ctx.shadowColor = s.color;
-        ctx.shadowBlur = 14;
+        ctx.shadowBlur = isHighlighted ? 20 : 14;
         ctx.fillStyle = s.color;
         ctx.beginPath();
         ctx.arc(bubbleX, bubbleY, r, 0, Math.PI * 2);
@@ -2096,14 +2123,35 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
         // Inner darker disc to make the count more readable against
         // the saturated outer ring.
         ctx.save();
+        ctx.globalAlpha = bubbleAlpha;
         ctx.fillStyle = "rgba(8,12,22,0.7)";
         ctx.beginPath();
         ctx.arc(bubbleX, bubbleY, r * 0.78, 0, Math.PI * 2);
         ctx.fill();
         ctx.restore();
 
+        // Highlighted-mode focus ring — animated dashed circle
+        // around the bubble, same cue the per-quadrant leader ring
+        // uses. Skipped when no mode is selected (no visual noise).
+        if (isHighlighted) {
+          const ringPulse = (Math.sin(tc * 1.8) + 1) / 2;
+          const ringR     = r + 4 + ringPulse * 3;
+          ctx.save();
+          ctx.strokeStyle = s.color;
+          ctx.lineWidth   = 1.8;
+          ctx.globalAlpha = 0.7 + ringPulse * 0.3;
+          ctx.setLineDash([3, 4]);
+          ctx.lineDashOffset = -tc * 12;
+          ctx.beginPath();
+          ctx.arc(bubbleX, bubbleY, ringR, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.setLineDash([]);
+          ctx.restore();
+        }
+
         // Count text — sized to fit comfortably inside the bubble.
         ctx.save();
+        ctx.globalAlpha = bubbleAlpha;
         const fontSize = Math.max(12, Math.min(20, r * 0.7)) * fsMult;
         ctx.font = `700 ${fontSize}px "Roboto Mono", "SF Mono", monospace`;
         ctx.fillStyle = "#ffffff";
@@ -2125,7 +2173,7 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
         ctx.shadowColor = "rgba(0,0,0,0.6)";
         ctx.shadowBlur = 4;
         ctx.fillStyle = s.color;
-        ctx.globalAlpha = 0.95;
+        ctx.globalAlpha = bubbleAlpha * 0.95;
         ctx.fillText(s.label, bubbleX, bubbleY + r + 4);
         ctx.restore();
       }
@@ -2414,7 +2462,7 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
   }, [size, dk, selectedId, problems, dataMode, stars, expandedQuadrant, hoveredLabel,
       groupings, resolveGrouping, layout, layoutBounds, slotById, colorOf, labelById, detectQuadrantAt, detectLabelAt, showHub,
       cellAggregations, cellActiveTotalAll, cellSubsetBubbles, isCellAggregated, expandedCellCategory, isMobileOrTablet,
-      highlightedCategoriesPerCell, drilledSubsets, aggregatedTopByCell, viewTransform,
+      highlightedCategoriesPerCell, drilledSubsets, aggregatedTopByCell, viewTransform, highlightedSubsetMode,
       // `fontScale` drives `fsMult` inside the draw fn — re-bind so
       // a change in the Display panel triggers a fresh closure on
       // the very next render.
