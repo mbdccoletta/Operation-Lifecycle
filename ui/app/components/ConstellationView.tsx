@@ -880,14 +880,23 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
     if (expandedQuadrant) {
       const QB = slotById[expandedQuadrant]?.bounds;
       if (QB) {
-        // Build the zone we want to fill the canvas (use cell bounds, not
-        // dot bounds — labels stay readable inside). Top-row cells have
-        // yMin < 0.5; bottom-row cells sit below the hub band.
-        const isTopRow = QB.yMin < 0.5;
-        const cellXMin = QB.xMin - 0.005;
-        const cellXMax = QB.xMax + 0.005;
-        const cellYMin = isTopRow ? 0.005 : 0.50;
-        const cellYMax = isTopRow ? 0.18  : 0.68;
+        // Zoom target zone — include a small breathing-room margin so
+        // the cell border / label aren't right against the canvas edge.
+        // Used to hard-code `cellYMin/Max` to the 2×3 grid's row bounds
+        // (0.005-0.18 / 0.50-0.68), which only worked when the layout
+        // matched that exact grid. Single-grouping layouts (e.g. inside
+        // EnlargedQuadrantCard with `showHub={false}`) place the cell
+        // at 0.045-0.68 instead, and the hard-coded math ended up
+        // translating the cell off-screen with a 44 % black band on
+        // top (user-reported 0.0.108 "ficou com um espaço"). Using the
+        // ACTUAL layout bounds with a small inflation makes the zoom
+        // work for any layout that `computeQuadrantLayout` produces.
+        const MARGIN_X = 0.005;
+        const MARGIN_Y = 0.04;   // bigger Y margin includes the label strip above the dots
+        const cellXMin = Math.max(0, QB.xMin - MARGIN_X);
+        const cellXMax = Math.min(1, QB.xMax + MARGIN_X);
+        const cellYMin = Math.max(0, QB.yMin - MARGIN_Y);
+        const cellYMax = Math.min(1, QB.yMax + MARGIN_Y);
         const cellX = cellXMin * w;
         const cellY = cellYMin * h;
         const cellW = (cellXMax - cellXMin) * w;
