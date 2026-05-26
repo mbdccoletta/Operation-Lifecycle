@@ -1296,7 +1296,12 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
     // Highlight ALL quadrants tied at globalMax — when multiple categories
     // are equally important under the active metric, all of them deserve
     // the visual emphasis.
-    if (leaderCats.length > 0 && globalMax > 0) {
+    // 0.0.109 follow-up: skip when the host has disabled aggregation
+    // (modal mode). Inside the modal there's only ONE grouping, so the
+    // "leader" set is always that single grouping — the wash just
+    // tints the whole canvas with the category colour and adds no
+    // information (user reported "remover este fundo verde").
+    if (leaderCats.length > 0 && globalMax > 0 && !disableAggregation) {
       const ringPulse = (Math.sin(tc * 1.6) + 1) / 2; // 0..1
       leaderCats.forEach((cat, idx) => {
         const z = highlightRects[cat];
