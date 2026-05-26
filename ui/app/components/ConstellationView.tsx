@@ -2083,29 +2083,12 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
       // centred rendering below.
       const subsets = allSubsets.filter((s) => s.count > 0);
 
-      // 0.0.109 follow-up: cells with NO active problems render a
-      // single big "0" in the centre instead of three 0/0/0
-      // bubbles. The three-bubble row implies "here's a breakdown"
-      // when there's nothing to break down — a single "0" reads
-      // cleaner ("Caso não tenha nenhum dado, mostrar 0 no centro
-      // da categoria").
-      const cellEmpty = subsets.length === 0;
-      if (cellEmpty) {
-        const cellColor = allSubsets[0].color;
-        const cx = cell.x + cell.w / 2;
-        const cy = cell.y + cell.h / 2;
-        ctx.save();
-        ctx.font = `700 ${(40 * fsMult).toFixed(2)}px "Roboto Mono", "SF Mono", monospace`;
-        // Vivid category colour (user 0.0.109 request "manter icones
-        // com cores vivas"). No shadowBlur — keep the "0" crisp.
-        ctx.fillStyle = cellColor;
-        ctx.globalAlpha = 0.85;
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        ctx.fillText("0", cx, cy);
-        ctx.restore();
-        continue;
-      }
+      // 0.0.109 follow-up: cells with NO active problems render
+      // NOTHING (no bubbles, no centred "0"). User: "deixar vazio
+      // quando não houver problemas." The empty cell title strip
+      // ("SLOWDOWN 0 active · neutral") already conveys the state
+      // — drawing a giant "0" on top of that was just visual noise.
+      if (subsets.length === 0) continue;
 
       const N = subsets.length;
       const usableW = Math.max(0, cell.w - 24);
