@@ -2084,12 +2084,33 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
       // centred rendering below.
       const subsets = allSubsets.filter((s) => s.count > 0);
 
-      // 0.0.109 follow-up: cells with NO active problems render
-      // NOTHING (no bubbles, no centred "0"). User: "deixar vazio
-      // quando não houver problemas." The empty cell title strip
-      // ("SLOWDOWN 0 active · neutral") already conveys the state
-      // — drawing a giant "0" on top of that was just visual noise.
-      if (subsets.length === 0) continue;
+      // Cells with NO active problems render NOTHING ("deixar
+      // vazio quando não houver problemas"). But when active > 0
+      // and the active problem(s) don't match any of the three
+      // modes (e.g. opened 1-4 h ago at severity ≤ 3 — not Rising,
+      // not Stuck, not Critical), the cell ends up with all
+      // subsets == 0. We DON'T want a silent empty body in that
+      // case (user reported "vejo 1 ativo e nenuma bolinha"). Show
+      // the active total in the centre using the cell's category
+      // colour so it still reads "this category has data."
+      if (subsets.length === 0) {
+        const realActive =
+          countOverrides?.activeByCategory?.[slot.id] ?? cellActiveTotalAll[slot.id] ?? 0;
+        if (realActive > 0) {
+          const cellColor = allSubsets[0].color;
+          const cx = cell.x + cell.w / 2;
+          const cy = cell.y + cell.h / 2;
+          ctx.save();
+          ctx.font = `700 ${(36 * fsMult).toFixed(2)}px "Roboto Mono", "SF Mono", monospace`;
+          ctx.fillStyle = cellColor;
+          ctx.globalAlpha = 0.9;
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.fillText(String(realActive), cx, cy);
+          ctx.restore();
+        }
+        continue;
+      }
 
       const N = subsets.length;
       const usableW = Math.max(0, cell.w - 24);
