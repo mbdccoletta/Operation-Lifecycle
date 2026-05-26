@@ -716,45 +716,6 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
     return out;
   }, [stars, expandedCellCategory]);
 
-  /** Per-cluster count of currently-rendered stars, with a flag for
-   *  "too dense to render as individual dots." Counts only stars
-   *  that WOULD be drawn if no cap applied (drilled cells: only the
-   *  matching category; aggregated-not-drilled cells: zero; otherwise:
-   *  all).
-   *
-   *  Why this exists:
-   *  0.0.102 — the magnifier lens scales every dot in the cursor's
-   *  quadrant by ~1.2–2.4×, stacking glows into one bright flare.
-   *  Above the threshold we skip the lens.
-   *  0.0.104 — even with the lens off, rendering 1 000+ dots in a
-   *  single cell produces an unreadable bokeh blur (every dot has
-   *  its own radial-gradient glow + drop-shadow; overlapping ~1 200
-   *  of those = solid orange smear). User reported "com mais de
-   *  1000 já não consigo ver nada" on a drilled ERROR cell with
-   *  1 200 active. Above the cap we ALSO render only the top-tier
-   *  subset of dots (`DENSE_DRILL_CAP` cap, see `aggregatedTopByCell`
-   *  below) and keep the aggregation bubble visible alongside, so
-   *  the cell reads as "bubble + a handful of leaders" instead of a
-   *  flare. */
-  const LENS_DENSITY_CAP = 50;
-  const denseClusters: Set<string> = useMemo(() => {
-    const counts: Record<string, number> = {};
-    for (const star of stars) {
-      const drillCat = expandedCellCategory[star.cluster];
-      if (drillCat) {
-        if (star.problem["event.category"] !== drillCat) continue;
-      } else if (isCellAggregated(star.cluster)) {
-        continue;
-      }
-      counts[star.cluster] = (counts[star.cluster] || 0) + 1;
-    }
-    const dense = new Set<string>();
-    for (const [cluster, n] of Object.entries(counts)) {
-      if (n > LENS_DENSITY_CAP) dense.add(cluster);
-    }
-    return dense;
-  }, [stars, expandedCellCategory, isCellAggregated]);
-
   /** For every AGGREGATED cell, pre-compute the top N stars ranked by
    *  the active Show By mode's score. The dot pass + hit-test only
    *  let these stars through; the bubble pass shows a count for the
@@ -1780,42 +1741,24 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
       const pulseScale = star.pulse > 0 ? 1 + Math.sin(t * 1.1 * star.pulse) * 0.12 : 1;
 
       // ── Magnifier lens area zoom ─────────────────────────────────────
-      // The lens covers the ENTIRE quadrant the cursor is over. Every dot
-      // inside that quadrant scales up by at least the baseline amount, so
-      // the user can comfortably aim at any of them — not just the ones
-      // immediately under the cursor. Dots closer to the cursor still get
-      // an extra boost (smoothstep falloff) so dense clusters can be
-      // picked apart visually. Skipped entirely when:
-      //   - the host disables the lens (enlarged-quadrant modal already
-      //     shows dots at a comfortable size), or
-      //   - the cursor's quadrant is in `denseClusters` (too many dots
-      //     for the lens to help — see the denseClusters memo for the
-      //     0.0.102 "clarão" report).
-      let proximityScale = 1;
-      const cursor = cursorRef.current;
-      const cursorQuad = cursor ? detectQuadrantAt(cursor.x, cursor.y) : null;
-      if (
-        !disableMagnifierLens
-        && cursor
-        && cursorQuad
-        && cursorQuad === star.cluster
-        && !denseClusters.has(cursorQuad)
-      ) {
-        const qb = slotById[cursorQuad]?.bounds;
-        if (qb) {
-        // Diagonal of the cell (px) — used to normalize distance so the
-        // ease curve spans the full quadrant regardless of its aspect ratio.
-        const qDiagPx = Math.hypot((qb.xMax - qb.xMin) * w, (qb.yMax - qb.yMin) * h);
-        const cdx = (cursor.x - star.x) * w;
-        const cdy = (cursor.y - star.y) * h;
-        const cdistPx = Math.sqrt(cdx * cdx + cdy * cdy);
-        const proximity = Math.max(0, 1 - cdistPx / qDiagPx);
-        const eased = proximity * proximity * (3 - 2 * proximity); // smoothstep
-        const minBoost = isStarTop ? 1.3  : 1.2;  // baseline for every dot in the quadrant
-        const maxScale = isStarTop ? 2.4  : 1.9;  // peak right under the cursor
-        proximityScale = minBoost + (maxScale - minBoost) * eased;
-        }
-      }
+      // REMOVED in 0.0.106 per user request ("remover opção de zoom").
+      //
+      // History: the lens scaled every dot in the cursor's quadrant by
+      // 1.2–2.4×, intended to make aim easier in dense clusters. In
+      // practice it stacked each dot's radial-gradient glow into a
+      // bright halo on hover, and the user reported the effect made
+      // dense cells unreadable. 0.0.102 added a density gate, 0.0.104
+      // capped the drilled-dot count to 30, 0.0.105 extended the cap to
+      // collapsed cells too. The flare PERSISTED at 30 dots because
+      // each lens-scaled dot still painted its glow at the larger
+      // radius, and 30 of those overlap into a bright row across the
+      // cell. User asked again to "remove the zoom option" — so the
+      // lens is now off everywhere; the `disableMagnifierLens` prop
+      // still exists for the modal but is effectively a no-op.
+      //
+      // Dots stay at their baseline radius on hover; the tooltip + hit-
+      // test handle aiming (the hit-test already widens via hoverAnim).
+      const proximityScale = 1;
       const r = starRadius * pulseScale * proximityScale * dotScale;
 
       // Rank-based dimming: top problems are full-bright; lower-ranked dots
@@ -2386,7 +2329,7 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
   }, [size, dk, selectedId, problems, dataMode, stars, expandedQuadrant, hoveredLabel,
       groupings, resolveGrouping, layout, layoutBounds, slotById, colorOf, labelById, detectQuadrantAt, detectLabelAt, showHub,
       cellAggregations, isCellAggregated, expandedCellCategory, isMobileOrTablet,
-      highlightedCategoriesPerCell, drilledSubsets, denseClusters, aggregatedTopByCell,
+      highlightedCategoriesPerCell, drilledSubsets, aggregatedTopByCell,
       // `fontScale` drives `fsMult` inside the draw fn — re-bind so
       // a change in the Display panel triggers a fresh closure on
       // the very next render.
