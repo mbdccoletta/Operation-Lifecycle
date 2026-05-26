@@ -741,8 +741,16 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
     // the cell's TOTAL active so we can scale the per-mode counts
     // to match the real (count-query) cell total when the loaded
     // subset is truncated by the first-paint cap.
+    // 0.0.109 follow-up — seed every known grouping with a zero row
+    // up front so cells with no current problems still surface as
+    // (0/0/0) bubbles. User asked: "todas as categorias devem
+    // possuir dados mesmo que zero".
     const loaded: Record<string, Record<SubsetMode, number>> = {};
     const loadedActiveTotals: Record<string, number> = {};
+    for (const g of groupings) {
+      loaded[g.id] = { rising: 0, open_time: 0, criticality: 0 };
+      loadedActiveTotals[g.id] = 0;
+    }
     for (const p of problems) {
       const cell = resolveGrouping(p);
       if (!cell) continue;
@@ -775,7 +783,7 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
       }));
     }
     return out;
-  }, [problems, resolveGrouping, countOverrides, colorOf]);
+  }, [problems, resolveGrouping, countOverrides, colorOf, groupings]);
 
   /** Pixel area available per cell — derived from the layout's
    *  normalised bounds and the current canvas size. Drives the
@@ -2049,8 +2057,10 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
       // modal.
       const subsets = cellSubsetBubbles[slot.id];
       if (!subsets || subsets.length === 0) continue;
-      // Skip totally empty cells (every subset == 0 means no active).
-      if (subsets.every((s) => s.count === 0)) continue;
+      // 0.0.109 follow-up: render the (0/0/0) bubble row even when
+      // the cell has no active problems — user asked all categories
+      // to "possuir dados mesmo que zero". Previously cells with
+      // every subset at 0 were skipped, leaving the row blank.
       const cell = cellRects[slot.id];
       if (!cell) continue;
 
@@ -2189,7 +2199,11 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
         ctx.shadowBlur = 4;
         ctx.fillStyle = s.color;
         ctx.globalAlpha = bubbleAlpha * 0.95;
-        ctx.fillText(s.label, bubbleX, bubbleY + r + 4);
+        // Label sits below the bubble. Extra 12px gap (was 4) keeps
+        // it clear of the highlighted-bubble dashed pulsing ring,
+        // which extends ~7px outside the bubble radius. User
+        // reported the ring overlapping "Stuck" / "Rising" / etc.
+        ctx.fillText(s.label, bubbleX, bubbleY + r + 12);
         ctx.restore();
       }
       // Silence unused-var warning for `pulse` — we now use the
