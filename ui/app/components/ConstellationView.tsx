@@ -2080,11 +2080,20 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
         const phaseOffset = i * 0.5;
         // Highlight state: this bubble matches the active legend
         // chip → bigger + brighter, with a dashed pulsing ring around
-        // it (same cue the per-quadrant leader rings use). Others get
-        // dimmed so the eye latches onto the highlighted set across
-        // every cell at once.
-        const isHighlighted = highlightedSubsetMode !== null
+        // it. Others get dimmed so the eye latches onto the
+        // highlighted set across every cell at once.
+        //
+        // 0.0.109 follow-up: only call out matching bubbles that
+        // actually have data (count > 0). User reported that with
+        // Rising selected as default, cells whose Rising count was 0
+        // STILL got the highlight ring — calling attention to a zero
+        // is the opposite of helpful ("nao entendi pq esta
+        // destacando categorias que nao estao tendo aumento"). When
+        // the match has zero, the bubble dims along with the
+        // non-matching ones so the user's eye skips it entirely.
+        const matchesMode = highlightedSubsetMode !== null
           && s.mode === highlightedSubsetMode;
+        const isHighlighted = matchesMode && s.count > 0;
         const isDimmed = highlightedSubsetMode !== null && !isHighlighted;
         const highlightBoost = isHighlighted ? 1.30 : 1;
         const r = baseR
