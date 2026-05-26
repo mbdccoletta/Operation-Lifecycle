@@ -693,11 +693,17 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
    *  total from `countOverrides.activeByCategory` when available.
    *  Stress 3K demo: 100 % of problems load → no scaling needed,
    *  counts are exact. */
+  // Total dropped (0.0.109 follow-up — "remover total"): the cell
+  // header already prints the active count, and the 3 remaining
+  // modes are non-overlapping signals worth highlighting in their
+  // own right. Problems that don't match any of the three (recent
+  // but low-severity, mid-aged, etc.) still surface via the Σ-less
+  // breakdown — the user can open the modal via the cell title to
+  // see the full active list.
   const SUBSET_MODES = [
     { mode: "rising" as const,      label: "Rising",   icon: "▲" },     // ▲
     { mode: "open_time" as const,   label: "Stuck",    icon: "⏱" },     // ⏱
     { mode: "criticality" as const, label: "Critical", icon: "⚡" },     // ⚡
-    { mode: "total" as const,       label: "Total",    icon: "Σ" },     // Σ
   ];
   type SubsetMode = (typeof SUBSET_MODES)[number]["mode"];
   const cellSubsetBubbles: Record<string, Array<{
@@ -717,18 +723,24 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
           return new Date(p["event.start"]).getTime() <= now - 4 * 3_600_000;
         case "criticality":
           return Number((p as { "event.severity_level"?: number | string })["event.severity_level"] ?? 0) >= 4;
-        case "total":
         default:
-          return true;
+          return false;
       }
     };
-    // First pass: loaded-subset counts per (cell, mode).
+    // First pass: loaded-subset counts per (cell, mode). Also tally
+    // the cell's TOTAL active so we can scale the per-mode counts
+    // to match the real (count-query) cell total when the loaded
+    // subset is truncated by the first-paint cap.
     const loaded: Record<string, Record<SubsetMode, number>> = {};
+    const loadedActiveTotals: Record<string, number> = {};
     for (const p of problems) {
       const cell = resolveGrouping(p);
       if (!cell) continue;
       if (!loaded[cell]) {
-        loaded[cell] = { rising: 0, open_time: 0, criticality: 0, total: 0 };
+        loaded[cell] = { rising: 0, open_time: 0, criticality: 0 };
+      }
+      if (p["event.status"] === "ACTIVE") {
+        loadedActiveTotals[cell] = (loadedActiveTotals[cell] || 0) + 1;
       }
       for (const { mode } of SUBSET_MODES) {
         if (matches(mode, p)) loaded[cell][mode]++;
@@ -737,15 +749,16 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
     // Second pass: scale to real cell totals where we have an override.
     const out: Record<string, Array<{ mode: SubsetMode; count: number; color: string; label: string; icon: string }>> = {};
     for (const [cellId, counts] of Object.entries(loaded)) {
-      const loadedTotal = counts.total;
+      const loadedTotal = loadedActiveTotals[cellId] ?? 0;
       const realTotal = countOverrides?.activeByCategory?.[cellId] ?? loadedTotal;
+      // Scale each subset count by realTotal / loadedTotal so the
+      // sub-bubbles match the cell's true active count even when
+      // the loaded subset is truncated by the first-paint cap.
       const scale = loadedTotal > 0 ? realTotal / loadedTotal : 1;
       const cellColor = colorOf(cellId);
       out[cellId] = SUBSET_MODES.map(({ mode, label, icon }) => ({
         mode,
-        count: mode === "total"
-          ? realTotal
-          : Math.max(0, Math.round(counts[mode] * scale)),
+        count: Math.max(0, Math.round(counts[mode] * scale)),
         color: cellColor,
         label,
         icon,

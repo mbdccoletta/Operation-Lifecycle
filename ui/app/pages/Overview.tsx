@@ -2449,7 +2449,6 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
                 { label: "Rising",   hint: "Problems opened in the last hour" },
                 { label: "Stuck",    hint: "Problems active for more than 4 hours" },
                 { label: "Critical", hint: "Problems with severity 4 or 5" },
-                { label: "Total",    hint: "Every active problem in the cell" },
               ].map((m) => (
                 <span
                   key={m.label}
