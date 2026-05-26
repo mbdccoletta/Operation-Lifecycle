@@ -321,6 +321,154 @@ npm run uninstall
 This command removes the current version from the tenant. The app
 disappears from every user's menu until a re-deploy happens.
 
+### Release process
+
+The deploy is mechanical; the RELEASE (deciding when to cut a new
+version, what to call it, how to communicate the change) follows a
+lightweight convention we've established commit-by-commit. This
+subsection codifies it so a new contributor knows the rules without
+having to reverse-engineer the git log.
+
+#### Versioning convention
+
+The app follows a simplified [semver](https://semver.org/)
+pre-release pattern: `0.MAJOR.PATCH` where the leading `0`
+acknowledges the app is still pre-1.0 (no public-API guarantees).
+Each segment moves for a specific reason:
+
+| Bump        | When                                                                           | Example                |
+|-------------|--------------------------------------------------------------------------------|------------------------|
+| **PATCH**   | Bug fix, copy tweak, dependency bump, icon change, internal refactor, doc edit | `0.0.99` → `0.0.100`   |
+| **MINOR**   | New user-visible feature, new column/page/chart, new permission, big rewrite   | `0.0.99` → `0.1.0`     |
+| **MAJOR**   | Reserved for the 1.0.0 cut when we declare the app feature-complete + stable   | `0.X.Y` → `1.0.0`      |
+
+Today we're deep in PATCH territory — most user-visible changes
+fit inside the existing surface (Incidents, Trends, list columns).
+A MINOR bump is justified for things like "add a new tab,"
+"expose a new data source," or "switch the underlying state
+model" — where existing deep-links could plausibly need a
+follow-up to keep working.
+
+When in doubt, bump PATCH. Over-bumping (treating a fix as a
+minor) is harmless; under-bumping (treating a feature as a patch)
+loses signal in the change history.
+
+#### Commit message convention
+
+Every commit that lands a new version has its **first line** in
+this exact shape:
+
+```
+0.0.99 — <short description in present-tense English>
+```
+
+Examples from the live history:
+
+- `0.0.79 — list: add "End" column showing problem resolution timestamp`
+- `0.0.91 — list: highlight the head row of an expanded incident`
+- `0.0.99 — fix: tabbar vanished in Medium / Bold display intensity`
+
+Three patterns to copy:
+
+1. **Always prefix with the version** so `git log --oneline` reads
+   as a release timeline.
+2. **Optional surface tag** before the colon (`list:`, `mobile:`,
+   `fix:`, `docs:`) when the area of impact is narrow and useful.
+3. **Body covers the WHY**, not the WHAT (the diff covers the
+   what). The long-form comments in `utils/dql-queries.ts` are
+   the gold standard for body style.
+
+Commits that DON'T bump the version (intermediate work, refactors
+that aren't going to prd yet) just use a normal subject without
+the version prefix — e.g. `test: validate MTTA/MTTR/MTBF/MTTF…`.
+
+#### Tagging releases (optional but recommended)
+
+After a successful `npm run deploy`, tag the commit so the
+deployed version is easy to find later:
+
+```bash
+git tag -a v0.0.99 -m "0.0.99 — fix: tabbar in Medium / Bold intensity"
+git push origin v0.0.99
+```
+
+Lists every release ever shipped:
+
+```bash
+git tag -l 'v0.*' --sort=-v:refname
+```
+
+Diff between two releases:
+
+```bash
+git log v0.0.95..v0.0.99 --oneline
+```
+
+#### GitHub Releases (optional)
+
+For releases worth highlighting (new feature, breaking change,
+notable fix), create a GitHub Release on top of the tag:
+
+```
+https://github.com/mbdccoletta/Problem-Lifecycle/releases/new
+```
+
+Pick the tag (`v0.0.99`), paste the commit body as the release
+notes, hit "Publish release." Each release gets a permalink that's
+easy to share in Slack / email when announcing the change to
+end users.
+
+Skipping this for PATCH releases is fine — the git log carries
+the same information. Reserve GitHub Releases for the changes
+end users will notice.
+
+#### Hot-fix workflow
+
+When prd has a bug that needs an immediate fix (no time to
+batch with other work):
+
+1. **Reproduce locally** with `npm start` so you don't deploy
+   blind.
+2. **Branch is optional** for hot-fixes — `main` is fine if the
+   fix is small and you'll deploy within the hour. For anything
+   that takes longer than a few commits to land, branch off
+   `main`, fix, merge back.
+3. **Bump PATCH** in `app.config.json` (not MINOR — a hot-fix is
+   always a patch).
+4. **Commit + push + deploy** in one tight loop:
+   ```bash
+   git add app.config.json <changed-files>
+   git commit -m "0.0.X — fix: <one-line description of the bug>"
+   git push origin main
+   npm run deploy
+   ```
+5. **Verify in prd within 5 minutes** of the deploy completing.
+   AppEngine cache propagates fast; if it's still broken after
+   5 min, rollback per the section above and investigate.
+6. **Tag if worth tracking** (often yes — hot-fixes are the
+   commits future-you wants to find quickly).
+
+### Checking the version currently in production
+
+Three ways, ordered by least to most reliable:
+
+1. **`npm run info`** — fastest. Calls `dt-app info` and prints
+   the version currently installed on the tenant configured in
+   `app.config.json`'s `environmentUrl`.
+2. **Visit the app in the Dynatrace UI** — open
+   `https://<tenant>.apps.dynatrace.com/ui/apps/my.problems.hub`
+   and check the version stamp Dynatrace renders in the sidebar
+   footer. Matches `app.version` from when that bundle was built.
+3. **Inspect the deployed bundle directly** — open DevTools,
+   Network tab, refresh the page, find the request for
+   `app.config.json` in the bundle, look at the `version` field.
+   Bulletproof but overkill for routine checks.
+
+If the three sources disagree (rare, only happens during the
+~1-minute bundle-cache window after a deploy), trust
+`npm run info` — it talks straight to the AppEngine control
+plane.
+
 ## Project layout
 
 ```
