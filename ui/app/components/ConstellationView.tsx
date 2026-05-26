@@ -1050,7 +1050,14 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
     // at the bottom (32 % of canvas) when that panel is enabled.
     // When the host hides RESOLVED, the active area expands to the
     // full canvas so the quadrant fills everything visible.
-    const activeAreaH = showResolvedZone ? h * 0.68 : h;
+    // 0.0.109 follow-up — was h*0.68, leaving the bottom row's
+    // cellRect ~5 % shorter than the top row (cellRect math: top
+    // row spans 0..midpoint, bottom spans midpoint..activeAreaH).
+    // 0.725 puts the activeArea ceiling at the symmetric distance
+    // from the row midpoint, so both rows get equal cellRect
+    // height. The RESOLVED HUD panel just below shrinks from 32 %
+    // to 27.5 % of canvas — still plenty for the four stat tiles.
+    const activeAreaH = showResolvedZone ? h * 0.725 : h;
     // Hub band coordinates — only used when showHub is true. Kept at
     // module scope so trend / spoke / satellite code below can reference
     // them; guarded against rendering when the hub is hidden.
@@ -2064,10 +2071,17 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
       // `isCellAggregated`). Both surfaces stay clickable in either
       // state — dot for the individual problem, bubble for the filtered
       // modal.
-      const subsets = cellSubsetBubbles[slot.id];
-      if (!subsets || subsets.length === 0) continue;
+      const allSubsets = cellSubsetBubbles[slot.id];
+      if (!allSubsets || allSubsets.length === 0) continue;
       const cell = cellRects[slot.id];
       if (!cell) continue;
+
+      // 0.0.109 follow-up: only render bubbles with count > 0
+      // ("mostrar apenas circulos do agrupamento que possuirem >= 1
+      // problema"). Zero-count modes don't get a bubble; if the
+      // whole cell is zero we fall through to the single-"0"
+      // centred rendering below.
+      const subsets = allSubsets.filter((s) => s.count > 0);
 
       // 0.0.109 follow-up: cells with NO active problems render a
       // single big "0" in the centre instead of three 0/0/0
@@ -2075,9 +2089,9 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
       // when there's nothing to break down — a single "0" reads
       // cleaner ("Caso não tenha nenhum dado, mostrar 0 no centro
       // da categoria").
-      const cellEmpty = subsets.every((s) => s.count === 0);
+      const cellEmpty = subsets.length === 0;
       if (cellEmpty) {
-        const cellColor = subsets[0].color;
+        const cellColor = allSubsets[0].color;
         const cx = cell.x + cell.w / 2;
         const cy = cell.y + cell.h / 2;
         ctx.save();
@@ -2131,7 +2145,13 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
         const matchesMode = highlightedSubsetMode !== null
           && s.mode === highlightedSubsetMode;
         const isHighlighted = matchesMode && s.count > 0;
-        const isDimmed = highlightedSubsetMode !== null && !isHighlighted;
+        // 0.0.109 follow-up — all bubbles with count > 0 are
+        // illuminated, no dimming ("Todos os circulo que tenham
+        // pelo menos 1 problema devem estar iluminado"). The active
+        // filter still stands out via highlightBoost + ring
+        // animation, but the visual hierarchy comes from animation,
+        // not from fading the others.
+        const isDimmed = false;
         const highlightBoost = isHighlighted ? HIGHLIGHT_BOOST : 1;
         // Breathing radius ONLY on highlighted bubbles. User
         // 0.0.109 follow-up: "ao destacar, manter animacao." Non-
@@ -2939,11 +2959,12 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
           loop back into itself. */}
       {!expandedQuadrant && size.w > 0 && groupings.length > 1 && (
         layout.map(({ id: cat, bounds: qb }) => {
-          // Anchor the button INSIDE the cell, just below the cell's
-          // top border (matches the canvas label which now also sits
-          // inside the cell). Works for any layout.
+          // Anchor the button INSIDE the cell, well below the cell's
+          // top divider line so the button doesn't visually cover the
+          // line ("botao para expandir cobrindo a linha" user
+          // report). Was +3; bumped to +8.
           const left = qb.xMin * size.w + 3;
-          const top  = Math.max(2, cellTopNById[cat] * size.h + 3);
+          const top  = Math.max(6, cellTopNById[cat] * size.h + 8);
           return (
             <button
               key={cat}
