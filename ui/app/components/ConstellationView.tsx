@@ -84,6 +84,14 @@ interface ConstellationViewProps {
    *  inside the enlarged canvas without needing a magnifier lens
    *  to bring them up to scale. */
   dotScale?: number;
+  /** When true, the per-cell aggregation rules (bubble + dot cap) are
+   *  bypassed entirely — `isCellAggregated` returns false for every
+   *  cell, the bubble pass is skipped, and every individual dot
+   *  renders. Used by `EnlargedQuadrantCard` where the modal already
+   *  shows ONE cell on a wide canvas: the user expanded explicitly to
+   *  see individual dots, so the aggregation safety net would just
+   *  hide the data they came to see. */
+  disableAggregation?: boolean;
   /** Authoritative TOTAL / ACTIVE / RESOLVED counts derived from a
    *  dedicated count query (`useStatusCategoryCounts`) — covers the
    *  ENTIRE tenant window even when the page-level `problems` prop is
@@ -151,6 +159,7 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
   disableMagnifierLens = false,
   countOverrides,
   dotScale = 1,
+  disableAggregation = false,
 }) => {
   // Read the user's font-scale pick so the canvas-rendered text
   // (TOTAL / ACTIVE / RESOLVED circles, per-category counts at
@@ -624,6 +633,26 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
     return out;
   }, [problems, stars, resolveGrouping]);
 
+  /** Per-cell count of ALL active problems (including top-tier).
+   *  `cellAggregations.count` deliberately excludes top-tier stars so
+   *  they don't double-count visually (top-tier is drawn separately).
+   *  But for the BUBBLE LABEL (the number inside the circle), we want
+   *  the full cell total — anything less mismatches the cell header
+   *  ("ERROR 1200 active" vs bubble "1190" — user-reported 0.0.108).
+   *  Used as the fallback when no `countOverrides` is provided
+   *  (demo scenarios). In real prd, `countOverrides.activeByCategory`
+   *  carries the count-query value and takes priority. */
+  const cellActiveTotalAll: Record<string, number> = useMemo(() => {
+    const out: Record<string, number> = {};
+    for (const p of problems) {
+      if (p["event.status"] !== "ACTIVE") continue;
+      const cell = resolveGrouping(p);
+      if (!cell) continue;
+      out[cell] = (out[cell] || 0) + 1;
+    }
+    return out;
+  }, [problems, resolveGrouping]);
+
   /** Pixel area available per cell — derived from the layout's
    *  normalised bounds and the current canvas size. Drives the
    *  capacity-based aggregation rule below. */
@@ -666,6 +695,9 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
    *  fraction of it happens to have loaded yet. */
   const AGG_COUNT_THRESHOLD = 100;
   const isCellAggregated = useCallback((cellId: string): boolean => {
+    // 0.0.108: short-circuit when the host explicitly opts out
+    // (EnlargedQuadrantCard modal — render every dot, no bubble).
+    if (disableAggregation) return false;
     const agg = cellAggregations[cellId];
     const overrideCount = countOverrides?.activeByCategory?.[cellId];
     const loadedTotal = agg ? agg.reduce((s, c) => s + c.count, 0) : 0;
@@ -683,7 +715,7 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
     const PER_DOT_AREA = isMobileOrTablet ? 520 : 400;
     const capacity = Math.max(20, Math.floor(area / PER_DOT_AREA));
     return total > capacity;
-  }, [cellAggregations, cellPixelAreas, isMobileOrTablet, countOverrides]);
+  }, [cellAggregations, cellPixelAreas, isMobileOrTablet, countOverrides, disableAggregation]);
 
   /** Per-drilled-cell subset-top info. For each cell that the user has
    *  drilled into a single category, compute the top-tier ordered list
@@ -1895,18 +1927,36 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
       // Matches the user's mental model: "show details of the
       // leaders + keep the rest grouped."
       const overrideCount = countOverrides?.activeByCategory?.[slot.id];
+      // 0.0.108: for the SINGLE-CATEGORY case (Incidents view), the
+      // bubble represents the cell's full active total. When no
+      // count-query override is available (demo scenarios), fall
+      // back to counting the loaded problems directly — INCLUDING
+      // top-tier (which `cellAggregations` excludes). Previously the
+      // bubble showed 1190 inside a "1200 active" cell because the
+      // 10 top-tier stars were missing from the fallback count.
+      const loadedCellTotalAll = cellActiveTotalAll[slot.id] ?? 0;
       const loadedCellTotal = cats.reduce((s, x) => s + x.count, 0);
       const isDrilled = !!expandedCellCategory[slot.id];
       const shownDotsInCell = isDrilled ? (aggregatedTopByCell[slot.id]?.size ?? 0) : 0;
       const getDisplayCount = (c: { count: number }): number => {
         let base: number;
-        if (overrideCount == null) base = c.count;
-        else if (N === 1) base = overrideCount;
-        else if (loadedCellTotal <= 0) base = c.count;
-        else base = Math.max(1, Math.round(overrideCount * (c.count / loadedCellTotal)));
-        // Subtract the leaders rendered as individual dots — single-
-        // category cells only (multi-category cells don't know how
-        // many of `shownDotsInCell` belong to each category).
+        if (overrideCount != null) {
+          // count-query value — single-cat cell: full override; multi-
+          // cat cell: proportionally scaled by per-category share.
+          if (N === 1) base = overrideCount;
+          else if (loadedCellTotal <= 0) base = c.count;
+          else base = Math.max(1, Math.round(overrideCount * (c.count / loadedCellTotal)));
+        } else if (N === 1) {
+          // Single-cat fallback: use the all-inclusive count so the
+          // bubble matches the cell header (no off-by-top-tier).
+          base = loadedCellTotalAll || c.count;
+        } else {
+          // Multi-cat fallback: keep per-category loaded count (only
+          // way to split between categories without an override).
+          base = c.count;
+        }
+        // Drilled mode (single-cat only): subtract the leaders that
+        // render as individual dots so the bubble reads as "the rest."
         if (isDrilled && N === 1) base = Math.max(0, base - shownDotsInCell);
         return base;
       };
@@ -2350,7 +2400,7 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
 
   }, [size, dk, selectedId, problems, dataMode, stars, expandedQuadrant, hoveredLabel,
       groupings, resolveGrouping, layout, layoutBounds, slotById, colorOf, labelById, detectQuadrantAt, detectLabelAt, showHub,
-      cellAggregations, isCellAggregated, expandedCellCategory, isMobileOrTablet,
+      cellAggregations, cellActiveTotalAll, isCellAggregated, expandedCellCategory, isMobileOrTablet,
       highlightedCategoriesPerCell, drilledSubsets, aggregatedTopByCell,
       // `fontScale` drives `fsMult` inside the draw fn — re-bind so
       // a change in the Display panel triggers a fresh closure on
@@ -2474,11 +2524,21 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
     const my = myPx / size.h;
     const world = screenToWorld(mx, my);
     // Priority: aggregated bubble > dot > label strip > quadrant background.
-    // (Bubble takes priority over dots so the click drills into the
-    // category rather than picking an invisible star underneath.)
+    //
+    // 0.0.108: bubble click now OPENS THE ENLARGED MODAL via
+    // `onQuadrantEnlarge` instead of drilling inline. The modal has
+    // room to render the individual problems matching the current
+    // Show By mode (e.g. the +264 newly-opened in last hour) without
+    // overcrowding the tiny inline cell — see EnlargedQuadrantCard
+    // for the per-mode filter logic. Falls back to the inline drill
+    // when no enlarge handler is wired (defensive).
     for (const b of bubbleHitsRef.current) {
       if (Math.hypot(mxPx - b.cx, myPx - b.cy) <= b.r) {
-        setExpandedCellCategory((prev) => ({ ...prev, [b.cellId]: b.categoryId }));
+        if (onQuadrantEnlarge) {
+          onQuadrantEnlarge(b.cellId);
+        } else {
+          setExpandedCellCategory((prev) => ({ ...prev, [b.cellId]: b.categoryId }));
+        }
         return;
       }
     }
@@ -2510,7 +2570,7 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
     // the parent so it can clear its own selection / expansion state.
     if (expandedQuadrant) setExpandedQuadrant(null);
     onEmptyClick?.();
-  }, [size, onSelect, findStarAt, screenToWorld, onCategoryLabelClick, expandedQuadrant, onEmptyClick, detectQuadrantAt, detectLabelAt, expandedCellCategory]);
+  }, [size, onSelect, findStarAt, screenToWorld, onCategoryLabelClick, expandedQuadrant, onEmptyClick, detectQuadrantAt, detectLabelAt, expandedCellCategory, onQuadrantEnlarge]);
 
   const handleDoubleClick = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();

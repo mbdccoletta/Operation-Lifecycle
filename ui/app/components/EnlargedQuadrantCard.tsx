@@ -89,6 +89,54 @@ export const EnlargedQuadrantCard = ({
   const activeProblems = quadProblems.filter((p) => p["event.status"] === "ACTIVE");
   const closedProblems = quadProblems.filter((p) => p["event.status"] === "CLOSED");
 
+  // ── Show By → subset filter ──────────────────────────────────────
+  // User asked (0.0.108) that opening the modal show ONLY the
+  // problems matching the current Show By chip (Rising = recent,
+  // Oldest = stale, Criticality = severe, Total = all). The rest go
+  // into a "+N others" bubble overlay (rendered below the canvas).
+  //
+  // Per-mode predicate on an active problem:
+  //   • rising      → opened in the last hour (matches the cell
+  //                   header's +N /1h badge semantically — "the new
+  //                   ones"). Slight numerical drift from the badge
+  //                   value is expected when problems both opened
+  //                   AND closed within the hour.
+  //   • open_time   → still active > 4h (the "stuck" threshold the
+  //                   AT-A-GLANCE card already uses).
+  //   • criticality → severity_level ≥ 4 (high or critical).
+  //   • total       → everyone (no filter).
+  const shownActive = useMemo(() => {
+    const now = Date.now();
+    return activeProblems.filter((p) => {
+      switch (dataMode) {
+        case "rising": {
+          const startTs = new Date(p["event.start"]).getTime();
+          return startTs >= now - 3_600_000;
+        }
+        case "open_time": {
+          const startTs = new Date(p["event.start"]).getTime();
+          return startTs <= now - 4 * 3_600_000;
+        }
+        case "criticality": {
+          const sev = Number((p as { "event.severity_level"?: number | string })["event.severity_level"] ?? 0);
+          return sev >= 4;
+        }
+        case "total":
+        default:
+          return true;
+      }
+    });
+  }, [activeProblems, dataMode]);
+
+  const restCount = activeProblems.length - shownActive.length;
+
+  // Inner ConstellationView receives the filtered active set + the
+  // closed tail (closed problems still feed `risingCats` etc.).
+  const shownProblems = useMemo(
+    () => [...shownActive, ...closedProblems],
+    [shownActive, closedProblems],
+  );
+
   // Single-grouping array we feed to the inner ConstellationView
   // so it lays out ONE quadrant filling the canvas.
   const singleGrouping: Grouping[] = useMemo(() => [grouping], [grouping]);
@@ -136,15 +184,16 @@ export const EnlargedQuadrantCard = ({
               No active problems in this {grouping.label.toLowerCase()}.
             </div>
           ) : (
-            <div className="neo-enlarged-quadrant-canvas">
-              {/* Pass the FULL quadrant problem set (active +
-                  closed) so ConstellationView's `risingCats` trend
-                  calc has the historical baseline it needs.
-                  Internally the canvas only paints ACTIVE dots; the
-                  closed ones just inform whether the category is
-                  "rising" right now (matches the inline cell). */}
+            <div className="neo-enlarged-quadrant-canvas" style={{ position: "relative" }}>
+              {/* 0.0.108: feed the inner ConstellationView only the
+                  Show-By-matching active problems + the closed
+                  tail. The matching set renders as individual dots;
+                  the remainder gets the "+N others" overlay below.
+                  `disableAggregation` skips the bubble/cap rules so
+                  the inner canvas doesn't re-aggregate the already-
+                  filtered subset. */}
               <ConstellationView
-                problems={quadProblems}
+                problems={shownProblems}
                 onSelect={(p) => onSelectProblem?.(p)}
                 dataMode={dataMode}
                 groupings={singleGrouping}
@@ -152,8 +201,35 @@ export const EnlargedQuadrantCard = ({
                 showHub={false}
                 showResolvedZone={false}
                 disableMagnifierLens
+                disableAggregation
                 dotScale={1.6}
               />
+              {restCount > 0 && (
+                /* "Rest of the cell" badge — non-matching active
+                   problems collapse here so the user can see at a
+                   glance how many were grouped vs how many are
+                   shown as individual dots. */
+                <div
+                  className="neo-enlarged-quadrant-rest-bubble"
+                  style={{
+                    position: "absolute",
+                    right: 16,
+                    bottom: 16,
+                    padding: "8px 14px",
+                    borderRadius: 999,
+                    background: "rgba(8,12,22,0.78)",
+                    border: `1px solid ${accent}`,
+                    color: "var(--neo-text)",
+                    font: '600 12px/1.2 "SF Mono","JetBrains Mono",monospace',
+                    boxShadow: "0 6px 18px rgba(0,0,0,0.32)",
+                    pointerEvents: "none",
+                    zIndex: 2,
+                  }}
+                  aria-label={`${restCount} other active problems grouped`}
+                >
+                  +{restCount.toLocaleString()} others
+                </div>
+              )}
             </div>
           )}
         </div>
