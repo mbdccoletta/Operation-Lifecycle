@@ -1552,9 +1552,10 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
     };
 
     // Each title is positioned INSIDE its cell, hugging the top-left
-    // corner — only enough inset to clear the cell's outer border
-    // and leave a sliver of room for the HTML expand-icon button.
-    const LABEL_X_INSET = 24;
+    // corner. The HTML expand-icon button that used to sit before
+    // the text was removed in 0.0.109, so the inset shrinks back
+    // to 8 px (just enough to clear the cell's outer border).
+    const LABEL_X_INSET = 8;
     const LABEL_Y_INSET = 3;
     // Per-slot rectangle of the rendered label text — used by the
     // rising-trail animation below so the comet starts AFTER the text.
@@ -2935,64 +2936,14 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
           ✕ Exit zoom
         </button>
       )}
-      {/* Per-quadrant expand affordances — explicit clickable buttons so
-          users (especially on touch) don't have to discover the double-
-          click gesture. Each button sits in the TOP-LEFT corner of its
-          cell, just before the category title text (which has been
-          shifted right to make room). This keeps it clear of the
-          top-right ▲ UP / ★ TOP / ▼ DOWN canvas-drawn badges that used
-          to overlap. Hidden while a quadrant is already expanded.
-          Also hidden when only one grouping is being shown — that's
-          the host page mounting us already inside an "enlarged
-          quadrant" modal, so the per-cell expand button would just
-          loop back into itself. */}
-      {!expandedQuadrant && size.w > 0 && groupings.length > 1 && (
-        layout.map(({ id: cat, bounds: qb }) => {
-          // Anchor the button well inside the cell — both x and y
-          // pushed in so it never visually overlaps the cell's top
-          // / left divider lines. User reported (twice) the button
-          // sitting "encima da linha." Now offset 10 px from both
-          // axes, with a 10 px floor so even row-0 cells (cellTopN
-          // = 0) put the button clear of the canvas top edge.
-          const left = qb.xMin * size.w + 10;
-          const top  = Math.max(10, cellTopNById[cat] * size.h + 16);
-          return (
-            <button
-              key={cat}
-              className="neo-quadrant-expand"
-              onClick={(e) => {
-                e.stopPropagation();
-                if (onQuadrantEnlarge) {
-                  // Host page renders the enlarged HTML/SVG modal
-                  // — no canvas zoom (intentional: feedback was
-                  // "ainda vejo um zoom, queremos ampliação").
-                  onQuadrantEnlarge(cat);
-                } else {
-                  setExpandedQuadrant(cat);
-                }
-              }}
-              title={`Expand ${cat.replace(/_/g, " ")}`}
-              aria-label={`Expand ${cat.replace(/_/g, " ")} quadrant`}
-              style={{
-                position: "absolute",
-                left,
-                top,
-                zIndex: 5,
-              }}
-            >
-              <svg width="11" height="11" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                <path
-                  d="M2 6V2h4M14 6V2h-4M2 10v4h4M14 10v4h-4"
-                  stroke="currentColor"
-                  strokeWidth="1.6"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-            </button>
-          );
-        })
-      )}
+      {/* Per-quadrant expand button REMOVED in 0.0.109. User
+          reported it overlapping the cell's top-left divider line;
+          repositioning multiple times didn't satisfy ("ainda ruim").
+          The button was always redundant: every other affordance —
+          click on the canvas title strip, click on any sub-bubble,
+          double-click anywhere in the cell — already triggers the
+          same modal. Drop the explicit icon button to give back the
+          cell corner. */}
       {/* Per-cell aggregation toggle removed — per-category drill-down
           via the bubble click is the primary way to explore a crowded
           cell. The whole-cell "+" was redundant and just added noise. */}
