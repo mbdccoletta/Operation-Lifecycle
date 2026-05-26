@@ -1865,27 +1865,25 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
     const RADIUS_BASE_DRAW = isMobileOrTablet ? 7   : 5.5;
     const RADIUS_TOP_DRAW  = isMobileOrTablet ? 11.5 : 10;
 
-    // Draw stars. Three rendering modes (0.0.107 — progressive disclosure):
-    //   • Aggregated cell, NOT drilled → render NOTHING. The cell
-    //     shows only the aggregation bubble (category total). The
-    //     user must drill in to see anything individual.
-    //   • Aggregated cell, drilled → render only the top
-    //     `DENSE_DRILL_CAP` stars ranked by the active Show By
-    //     score (the "Rising" / "Oldest" / "Critical" leaders).
-    //     The bubble pass below keeps showing a smaller bubble for
-    //     the REST (`total − shown`), preserving the "manter os
-    //     demais agrupados" cue.
-    //   • Sparse cell → render every star as usual (no cap, no
-    //     bubble — the cell already has room for all of its dots).
+    // Draw stars. Rendering modes (0.0.109 — bubbles own the page):
+    //   • Main page (not in modal) — skip ALL individual dots. The
+    //     per-cell sub-bubbles ARE the entry point now; floating
+    //     dots competed with them visually ("remover bolinhas
+    //     flutuantes" user report).
+    //   • Drilled cell (drill state set on the host) → still render
+    //     the top `DENSE_DRILL_CAP` stars ranked by Show By score —
+    //     this path is only reachable when no enlarge handler is
+    //     wired (legacy fallback).
+    //   • Modal (disableAggregation=true) → render every dot of the
+    //     filtered subset that EnlargedQuadrantCard passes in.
     currentStars.forEach((star) => {
       const drillCat = expandedCellCategory[star.cluster];
-      // Drilled state still filters by category, even for aggregated
-      // cells — the `aggregatedTopByCell` memo applies the same
-      // filter on the LEADER side, so the two stay in sync.
       if (drillCat && star.problem["event.category"] !== drillCat) return;
-      if (isCellAggregated(star.cluster)) {
-        // Collapsed aggregated cell = bubble-only (no individual dots).
-        if (!drillCat) return;
+      if (!disableAggregation && !drillCat) {
+        // Main page, no drill — bubbles handle this cell, no dots.
+        return;
+      }
+      if (drillCat) {
         const allowed = aggregatedTopByCell[star.cluster];
         if (!allowed || !allowed.has(star.id)) return;
       }
@@ -2024,16 +2022,16 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
       const N = subsets.length;
       const usableW = Math.max(0, cell.w - 24);
       const spacing = usableW / N;
-      // 0.0.109 follow-up: always centre the sub-bubbles in the cell
-      // body (was split between mid-cell for dense and footer-strip
-      // for sparse — user reported the inconsistent placement was
-      // confusing). Sparse cells now have their bubbles on top of /
-      // around the individual dots; the visual is still legible
-      // because dots are few when the cell is sparse.
+      // Bubble geometry — bumped up in 0.0.109 follow-up so the
+      // bubbles read clearly without zooming the browser.
       const bubbleY = cell.y + cell.h * 0.5;
-      const maxR = Math.min(26, Math.max(12, spacing * 0.32));
-      const minR = 12;
+      const maxR = Math.min(36, Math.max(18, spacing * 0.42));
+      const minR = 18;
       const maxCount = Math.max(1, ...subsets.map((s) => s.count));
+      // Gentle breathing pulse — one cycle every ~3 s, ±6 % radius.
+      // Adds a sense of liveness without distracting from the count
+      // ("colocar animação nos agrupamentos" user request).
+      const pulse = 1 + Math.sin(tc * 2.1) * 0.06;
 
       for (let i = 0; i < N; i++) {
         const s = subsets[i];
@@ -2041,23 +2039,30 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
         // Log-based radius scaling — keeps small subsets readable
         // when one (usually Total) dominates the cell.
         const lr = Math.log10(Math.max(1, s.count)) / Math.max(1, Math.log10(maxCount));
-        const r = minR + lr * (maxR - minR);
+        // Each bubble pulses slightly out of phase so the row feels
+        // alive without the four bubbles moving in lock-step.
+        const phaseOffset = i * 0.5;
+        const r = (minR + lr * (maxR - minR))
+          * (1 + Math.sin(tc * 2.1 + phaseOffset) * 0.06);
 
-        bubbleHits.push({ cellId: slot.id, subsetMode: s.mode, cx: bubbleX, cy: bubbleY, r });
+        // Hit area: use the AVERAGE radius (un-pulsed) so the click
+        // target stays steady even when the bubble breathes.
+        const rHit = minR + lr * (maxR - minR);
+        bubbleHits.push({ cellId: slot.id, subsetMode: s.mode, cx: bubbleX, cy: bubbleY, r: rHit });
 
-        // Soft glow halo
+        // Soft glow halo — pulses with the bubble.
         ctx.save();
-        const halo = ctx.createRadialGradient(bubbleX, bubbleY, 0, bubbleX, bubbleY, r * 2);
-        halo.addColorStop(0, `${s.color}55`);
+        const halo = ctx.createRadialGradient(bubbleX, bubbleY, 0, bubbleX, bubbleY, r * 2.2);
+        halo.addColorStop(0, `${s.color}66`);
         halo.addColorStop(1, `${s.color}00`);
         ctx.fillStyle = halo;
-        ctx.fillRect(bubbleX - r * 2, bubbleY - r * 2, r * 4, r * 4);
+        ctx.fillRect(bubbleX - r * 2.2, bubbleY - r * 2.2, r * 4.4, r * 4.4);
         ctx.restore();
 
         // Bubble body
         ctx.save();
         ctx.shadowColor = s.color;
-        ctx.shadowBlur = 10;
+        ctx.shadowBlur = 14;
         ctx.fillStyle = s.color;
         ctx.beginPath();
         ctx.arc(bubbleX, bubbleY, r, 0, Math.PI * 2);
@@ -2067,7 +2072,7 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
         // Inner darker disc to make the count more readable against
         // the saturated outer ring.
         ctx.save();
-        ctx.fillStyle = "rgba(8,12,22,0.65)";
+        ctx.fillStyle = "rgba(8,12,22,0.7)";
         ctx.beginPath();
         ctx.arc(bubbleX, bubbleY, r * 0.78, 0, Math.PI * 2);
         ctx.fill();
@@ -2075,7 +2080,7 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
 
         // Count text — sized to fit comfortably inside the bubble.
         ctx.save();
-        const fontSize = Math.max(10, Math.min(15, r * 0.78)) * fsMult;
+        const fontSize = Math.max(12, Math.min(20, r * 0.7)) * fsMult;
         ctx.font = `700 ${fontSize}px "Roboto Mono", "SF Mono", monospace`;
         ctx.fillStyle = "#ffffff";
         ctx.textAlign = "center";
@@ -2084,18 +2089,23 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
         ctx.restore();
 
         // Mode icon above the bubble — ▲ (Rising), ⏱ (Stuck),
-        // ⚡ (Critical), Σ (Total). Distinguishes the bubbles at a
-        // glance without needing per-mode colour (we keep the cell's
-        // category colour so the visual identity stays consistent).
+        // ⚡ (Critical), Σ (Total). Bumped to 14px so it reads at
+        // arm's length, with a subtle shadow so the glyph stays
+        // visible against any cell background.
         ctx.save();
-        ctx.font = `600 ${(10 * fsMult).toFixed(2)}px "Roboto Mono", "SF Mono", monospace`;
+        ctx.font = `700 ${(14 * fsMult).toFixed(2)}px "Roboto Mono", "SF Mono", monospace`;
         ctx.textAlign = "center";
         ctx.textBaseline = "bottom";
+        ctx.shadowColor = "rgba(0,0,0,0.6)";
+        ctx.shadowBlur = 4;
         ctx.fillStyle = s.color;
-        ctx.globalAlpha = 0.9;
-        ctx.fillText(s.icon, bubbleX, bubbleY - r - 2);
+        ctx.globalAlpha = 0.95;
+        ctx.fillText(s.icon, bubbleX, bubbleY - r - 4);
         ctx.restore();
       }
+      // Silence unused-var warning for `pulse` — we now use the
+      // per-bubble out-of-phase pulse inside the loop instead.
+      void pulse;
     }
     bubbleHitsRef.current = bubbleHits;
 
@@ -2437,16 +2447,14 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
     const minTouchHitPx = isTouch ? 22 : 12;
     starsRef.current.forEach((star) => {
       // Mirror the draw-loop skip rules so hover / click don't latch
-      // onto invisible dots in aggregated cells.
-      // 0.0.107: mirrors the draw-loop's progressive disclosure —
-      //   • aggregated + not drilled → no dots are drawn at all,
-      //     so every star in the cell is hit-test-invisible.
-      //   • aggregated + drilled → only leaders in
-      //     `aggregatedTopByCell` are visible / clickable.
+      // onto invisible dots.
+      // 0.0.109: main page renders NO individual dots — only the
+      // per-cell sub-bubbles. Hit-test mirrors that: dots are only
+      // interactive when in the modal or when drilled.
       const drillCat = expandedCellCategory[star.cluster];
       if (drillCat && star.problem["event.category"] !== drillCat) return;
-      if (isCellAggregated(star.cluster)) {
-        if (!drillCat) return;
+      if (!disableAggregation && !drillCat) return;
+      if (drillCat) {
         const allowed = aggregatedTopByCell[star.cluster];
         if (!allowed || !allowed.has(star.id)) return;
       }
@@ -2465,7 +2473,7 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
       }
     });
     return closest;
-  }, [size, isTouch, expandedCellCategory, isCellAggregated, aggregatedTopByCell]);
+  }, [size, isTouch, expandedCellCategory, isCellAggregated, aggregatedTopByCell, disableAggregation]);
 
   // Maps screen-normalized coords (0..1) to world coords, inverting the
   // expanded-quadrant view transform when active. Used so click/hover work

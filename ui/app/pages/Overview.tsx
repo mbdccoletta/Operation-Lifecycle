@@ -2418,6 +2418,50 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
               </div>
             </div>
           )}
+          {/* Sub-bubble legend — explains the four icons that show
+              up inside each cell (▲ Rising, ⏱ Stuck, ⚡ Critical, Σ
+              Total). Replaces the old "Show By" segmented control
+              that was removed in 0.0.109 (each cell exposes the
+              breakdown locally now). Hidden in mobile to save the
+              cramped header real estate. */}
+          {!isMobileOrTablet && (
+            <div
+              role="note"
+              aria-label="Cell sub-bubble legend"
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 14,
+                padding: "6px 14px",
+                margin: "0 0 8px",
+                borderRadius: 8,
+                background: "var(--neo-surface-2)",
+                border: "1px solid var(--neo-border)",
+                color: "var(--neo-text-2)",
+                font: '500 11px/1.2 "SF Mono","JetBrains Mono",monospace',
+                letterSpacing: "0.02em",
+                userSelect: "none",
+              }}
+            >
+              <span style={{ fontWeight: 700, color: "var(--neo-text)" }}>Each cell:</span>
+              {[
+                { icon: "▲", label: "Rising",   hint: "Opened in the last hour" },
+                { icon: "⏱", label: "Stuck",    hint: "Active for more than 4 hours" },
+                { icon: "⚡", label: "Critical", hint: "Severity 4 or 5" },
+                { icon: "Σ", label: "Total",    hint: "Every active problem in the cell" },
+              ].map((m) => (
+                <span
+                  key={m.label}
+                  title={m.hint}
+                  style={{ display: "inline-flex", alignItems: "center", gap: 4 }}
+                >
+                  <span style={{ fontWeight: 700, color: "var(--neo-text)" }}>{m.icon}</span>
+                  <span>{m.label}</span>
+                </span>
+              ))}
+              <span style={{ marginLeft: "auto", opacity: 0.6 }}>Click any bubble to see its problems.</span>
+            </div>
+          )}
           <ConstellationView
             problems={problems}
             onSelect={onConstellationSelect}
