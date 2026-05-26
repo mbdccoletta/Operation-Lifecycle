@@ -2390,10 +2390,12 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
       // Pull the comet's starting point a few extra pixels OUT past
       // the hub ring so the packet's glow doesn't bleed INSIDE the
       // central circle. User: "a animaçao nao pode penetrar o
-      // cirdulo. Ir até o aro apenas." 1 px was tight; bumped to
-      // `radius + COMET_OUTSET` where the outset is roughly the
-      // packet's peak radius + halo blur.
-      const COMET_OUTSET = 12;
+      // cirdulo. Ir até o aro apenas." 1 px → 12 px wasn't enough
+      // (glow + peak radius still grazed the ring). Bumped to 20 px;
+      // combined with a per-dot guard below that hard-rejects any
+      // point inside `radius + 4`, the comet is now strictly
+      // outside the hub at all times.
+      const COMET_OUTSET = 20;
       if (isCentralCol) {
         const sgnY  = dy < 0 ? -1 : 1;
         const sideX = dy < 0 ? 1 : -1; // top → right (ERROR), bottom → left (CUSTOM_ALERT)
@@ -2435,6 +2437,11 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
       const PEAK_SHARPNESS = 2.4;                // higher = narrower, comet-like
 
       const DOT_COUNT = 32;
+      // Per-dot exclusion radius around the hub — any dot whose
+      // CENTRE falls inside this circle is skipped. Combines the
+      // hub ring + peak radius + shadow blur with extra slack so
+      // even at peak brightness no glow renders inside the hub.
+      const HUB_SAFE_R = radius + peakR + 8;
       spokes.forEach((spoke, sIdx) => {
         const phaseOffset = sIdx * 0.08;
         for (let i = 0; i <= DOT_COUNT; i++) {
@@ -2442,6 +2449,11 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
           const u1 = 1 - p;
           const px = u1 * u1 * spoke.hubX + 2 * u1 * p * spoke.midX + p * p * spoke.tx;
           const py = u1 * u1 * spoke.hubY + 2 * u1 * p * spoke.midY + p * p * spoke.ty;
+
+          // Hard guard: never paint a dot whose centre is inside
+          // the hub circle (with a small safety margin). User:
+          // "a animaçao nao pode penetrar o cirdulo."
+          if ((px - cx) * (px - cx) + (py - cy) * (py - cy) < HUB_SAFE_R * HUB_SAFE_R) continue;
 
           const phase = p - t * waveSpeed - phaseOffset;
           // Power curve sharpens the peak → looks like a single moving packet
@@ -2454,7 +2466,9 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
           ctx.save();
           if (brightness > 0.12) {
             ctx.shadowColor = baseColor;
-            ctx.shadowBlur  = 5 + 5 * brightness; // softer halo
+            // Smaller blur so the halo can't extend across the hub
+            // safe-distance even when the peak sits right next to it.
+            ctx.shadowBlur  = 3 + 3 * brightness;
           }
           ctx.fillStyle = `rgba(${cR},${cG},${cB},${a})`;
           ctx.beginPath();
