@@ -282,9 +282,16 @@ export const EnlargedQuadrantCard = ({
                         gap: 6,
                         padding: isActive ? "8px 14px" : "6px 12px",
                         borderRadius: 999,
+                        // Fully opaque pill backgrounds + backdrop
+                        // blur so canvas animation behind the strip
+                        // (highlighted bubble's dashed ring) doesn't
+                        // bleed THROUGH the pill text. User reported
+                        // "animação não deve sobrepor texto".
                         background: isActive
                           ? accent
-                          : (count > 0 ? "rgba(8,12,22,0.78)" : "rgba(8,12,22,0.4)"),
+                          : (count > 0 ? "rgba(11,15,26,0.96)" : "rgba(11,15,26,0.85)"),
+                        backdropFilter: "blur(6px)",
+                        WebkitBackdropFilter: "blur(6px)",
                         border: `1px solid ${accent}`,
                         color: isActive
                           ? "#0b0f1a"
@@ -292,9 +299,12 @@ export const EnlargedQuadrantCard = ({
                         font: '600 12px/1.2 "Inter", system-ui, sans-serif',
                         cursor: isActive ? "default" : (count > 0 ? "pointer" : "default"),
                         opacity: count > 0 ? 1 : 0.55,
-                        boxShadow: isActive
-                          ? `0 0 16px ${accent}66`
-                          : "0 4px 12px rgba(0,0,0,0.25)",
+                        // No box-shadow glow on the active pill —
+                        // the glow extended ~16 px into the
+                        // neighbouring pills and overlapped their
+                        // text. The accent fill + thicker padding
+                        // already differentiate it.
+                        boxShadow: "none",
                         userSelect: "none",
                       }}
                       disabled={count === 0 && !isActive}
