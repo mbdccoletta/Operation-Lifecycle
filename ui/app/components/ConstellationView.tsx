@@ -2324,8 +2324,32 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
 
     type SpokeCurve = { hubX: number; hubY: number; tx: number; ty: number; midX: number; midY: number; len: number };
 
+    // 0.0.109 follow-up: when the comet animation targets a cell
+    // with rising trend, aim AT THE RISING SUB-BUBBLE (index 0 of
+    // the 3-bubble row), not the cell centre. User: "a animacao do
+    // circulo central deve apontar sempre para o Rising quando
+    // estiver aumentando o numero de problemas." Reinforces the
+    // semantic: new problems flowing FROM the hub INTO the Rising
+    // counter.
+    const risingBubblePos = (cat: string): { x: number; y: number } | null => {
+      const cell = cellRects[cat];
+      if (!cell) return null;
+      const N = 3; // SUBSET_MODES count
+      const usableW = Math.max(0, cell.w - 24);
+      const spacing = usableW / N;
+      const TITLE_PAD = 28;
+      const LABEL_PAD = 28;
+      const safeTop = cell.y + TITLE_PAD;
+      const safeBot = cell.y + cell.h - LABEL_PAD;
+      return { x: cell.x + 12 + spacing * 0.5, y: (safeTop + safeBot) / 2 };
+    };
+
     let spokeIdx = 0;
-    Object.entries(catCenter).forEach(([cat, pos]) => {
+    Object.entries(catCenter).forEach(([cat, _cellCenter]) => {
+      // Use the Rising bubble as the target whenever it exists,
+      // falling back to the cell centre for layouts (e.g. segments
+      // mode) where the bubble row isn't drawn.
+      const pos = risingBubblePos(cat) ?? _cellCenter;
       const dx   = pos.x - cx;
       const dy   = pos.y - cy;
       const dist = Math.hypot(dx, dy);
