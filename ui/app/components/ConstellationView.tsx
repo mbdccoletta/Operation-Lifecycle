@@ -1038,8 +1038,11 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
     // Hub band coordinates — only used when showHub is true. Kept at
     // module scope so trend / spoke / satellite code below can reference
     // them; guarded against rendering when the hub is hidden.
-    const hubBandTop    = h * 0.18;
-    const hubBandBottom = h * 0.50;
+    // 0.0.109 follow-up — shifted slightly down from 0.18/0.50 to
+    // 0.205/0.520 to stay clear of the new (taller) cell rows in
+    // computeQuadrantLayout (rows now 0.040-0.195 / 0.530-0.685).
+    const hubBandTop    = h * 0.205;
+    const hubBandBottom = h * 0.520;
     const hubCx = w / 2;
     const hubCy = (hubBandTop + hubBandBottom) / 2;
 

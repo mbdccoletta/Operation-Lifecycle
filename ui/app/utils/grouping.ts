@@ -81,9 +81,17 @@ export function computeQuadrantLayout(
       { xMin: 0.35, xMax: 0.65, cx: 0.50 },
       { xMin: 0.68, xMax: 0.98, cx: 0.83 },
     ];
+    // Row bounds bumped in 0.0.109 follow-up — bubbles + their text
+    // labels (Rising / Stuck / Critical) needed more vertical
+    // breathing room. Previous values (0.065-0.170 / 0.555-0.670)
+    // gave each row ~10 % of canvas height which left labels
+    // bumping into the cell dividers ("aumentar area para nao
+    // cortar"). New values give ~15.5 % per row. The hub band
+    // (hardcoded in ConstellationView at 0.205-0.520) stays at
+    // 31 % — barely affected.
     const ROWS: Array<{ yMin: number; yMax: number; cy: number }> = [
-      { yMin: 0.065, yMax: 0.170, cy: 0.105 },
-      { yMin: 0.555, yMax: 0.670, cy: 0.620 },
+      { yMin: 0.040, yMax: 0.195, cy: 0.118 },
+      { yMin: 0.530, yMax: 0.685, cy: 0.608 },
     ];
     const out: QuadrantSlot[] = [];
     const max = COLS.length * ROWS.length;
