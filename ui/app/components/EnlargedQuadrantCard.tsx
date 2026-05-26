@@ -220,21 +220,31 @@ export const EnlargedQuadrantCard = ({
                 /* "Rest of the cell" badge — non-matching active
                    problems collapse here so the user can see at a
                    glance how many were grouped vs how many are
-                   shown as individual dots. */
+                   shown as individual dots.
+                   Informational only (user feedback) — no click
+                   action. `pointerEvents: auto` lets it BLOCK hover
+                   events from reaching the dots underneath; without
+                   that the dot tooltip would peek through the badge
+                   ("5xx spike" report). Visual cues match the non-
+                   interactive role: no border, dimmer text, default
+                   cursor, lighter background. */
                 <div
                   className="neo-enlarged-quadrant-rest-bubble"
                   style={{
                     position: "absolute",
                     right: 16,
                     bottom: 16,
-                    padding: "8px 14px",
-                    borderRadius: 999,
-                    background: "rgba(8,12,22,0.78)",
-                    border: `1px solid ${accent}`,
-                    color: "var(--neo-text)",
-                    font: '600 12px/1.2 "SF Mono","JetBrains Mono",monospace',
-                    boxShadow: "0 6px 18px rgba(0,0,0,0.32)",
-                    pointerEvents: "none",
+                    padding: "6px 10px",
+                    borderRadius: 6,
+                    background: "rgba(8,12,22,0.55)",
+                    color: "var(--neo-text-2)",
+                    font: '500 11px/1.2 "SF Mono","JetBrains Mono",monospace',
+                    letterSpacing: "0.02em",
+                    backdropFilter: "blur(4px)",
+                    WebkitBackdropFilter: "blur(4px)",
+                    cursor: "default",
+                    pointerEvents: "auto",
+                    userSelect: "none",
                     zIndex: 2,
                   }}
                   aria-label={`${restCount} other active problems grouped`}
