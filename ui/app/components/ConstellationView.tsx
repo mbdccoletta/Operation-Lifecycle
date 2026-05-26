@@ -2135,7 +2135,10 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
       // baked into the cap so the boosted ring still fits.
       const HIGHLIGHT_BOOST = 1.25;
       const verticalCap = Math.max(10, (safeBot - safeTop) / 2 / HIGHLIGHT_BOOST - 6);
-      const baseR = Math.min(28, Math.max(14, Math.min(spacing * 0.32, verticalCap)));
+      // Caps bumped — user 0.0.109: "aumentar um pouco mais os
+      // circulos." Max 28 → 36, min 14 → 18, spacing factor
+      // 0.32 → 0.38. Vertical cap still bounds on tight rows.
+      const baseR = Math.min(36, Math.max(18, Math.min(spacing * 0.38, verticalCap)));
       // Bubble animation removed — user 0.0.109 follow-up: "porem
       // sem animacao". The earlier breathing pulse (±6 % radius)
       // and the dashed-rotating focus ring both made highlighted
