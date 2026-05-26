@@ -2057,12 +2057,32 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
       // modal.
       const subsets = cellSubsetBubbles[slot.id];
       if (!subsets || subsets.length === 0) continue;
-      // 0.0.109 follow-up: render the (0/0/0) bubble row even when
-      // the cell has no active problems — user asked all categories
-      // to "possuir dados mesmo que zero". Previously cells with
-      // every subset at 0 were skipped, leaving the row blank.
       const cell = cellRects[slot.id];
       if (!cell) continue;
+
+      // 0.0.109 follow-up: cells with NO active problems render a
+      // single big "0" in the centre instead of three 0/0/0
+      // bubbles. The three-bubble row implies "here's a breakdown"
+      // when there's nothing to break down — a single "0" reads
+      // cleaner ("Caso não tenha nenhum dado, mostrar 0 no centro
+      // da categoria").
+      const cellEmpty = subsets.every((s) => s.count === 0);
+      if (cellEmpty) {
+        const cellColor = subsets[0].color;
+        const cx = cell.x + cell.w / 2;
+        const cy = cell.y + cell.h / 2;
+        ctx.save();
+        ctx.font = `700 ${(36 * fsMult).toFixed(2)}px "Roboto Mono", "SF Mono", monospace`;
+        ctx.fillStyle = cellColor;
+        ctx.globalAlpha = 0.45;
+        ctx.shadowColor = cellColor;
+        ctx.shadowBlur = 16;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText("0", cx, cy);
+        ctx.restore();
+        continue;
+      }
 
       const N = subsets.length;
       const usableW = Math.max(0, cell.w - 24);
@@ -2119,7 +2139,11 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
         // ctx-globalAlpha at the layer level rather than baked into
         // each color string so the highlighted set "pops" without
         // re-mixing colors.
-        const bubbleAlpha = isDimmed ? 0.35 : 1.0;
+        // 0.35 was too aggressive — user reported the other modes
+        // looked completely faded ("Não ofuscar demais entidades ao
+        // destacar outra"). 0.6 leaves them clearly readable while
+        // still letting the highlighted bubble dominate.
+        const bubbleAlpha = isDimmed ? 0.6 : 1.0;
 
         // Soft glow halo — pulses with the bubble. Highlighted
         // bubbles get a denser halo (more visible against the cell
@@ -2199,11 +2223,11 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
         ctx.shadowBlur = 4;
         ctx.fillStyle = s.color;
         ctx.globalAlpha = bubbleAlpha * 0.95;
-        // Label sits below the bubble. Extra 12px gap (was 4) keeps
-        // it clear of the highlighted-bubble dashed pulsing ring,
-        // which extends ~7px outside the bubble radius. User
-        // reported the ring overlapping "Stuck" / "Rising" / etc.
-        ctx.fillText(s.label, bubbleX, bubbleY + r + 12);
+        // Label sits below the bubble. 18px gap keeps the label
+        // clear of the highlighted ring (extends ~7px past the
+        // bubble radius and pulses) under every phase. 12px was
+        // still tight at peak pulse — user reported overlap again.
+        ctx.fillText(s.label, bubbleX, bubbleY + r + 18);
         ctx.restore();
       }
       // Silence unused-var warning for `pulse` — we now use the
