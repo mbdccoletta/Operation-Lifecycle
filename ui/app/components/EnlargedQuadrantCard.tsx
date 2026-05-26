@@ -179,7 +179,6 @@ export const EnlargedQuadrantCard = ({
     () => [...drilldown.top, ...closedProblems],
     [drilldown.top, closedProblems],
   );
-  const currentModeLabel = ALL_MODES.find((m) => m.mode === currentMode)?.label ?? "";
 
   // Single-grouping array we feed to the inner ConstellationView
   // so it lays out ONE quadrant filling the canvas.
@@ -247,10 +246,12 @@ export const EnlargedQuadrantCard = ({
                 initialExpandedQuadrant={quadrantId}
                 lockExpandedQuadrant
               />
-              {/* Mode strip — "+N more <current>" badge + 2 clickable
-                  bubbles for the OTHER modes. The user reads:
-                    "Top 10 stuck shown · +830 more stuck · switch
-                     to Rising (264) or Critical (156)" */}
+              {/* Mode strip — ALL three mode pills shown, with the
+                  active one filled + labelled "TOP 10 of N" so the
+                  user can't miss what they're looking at (was just
+                  the other two modes + a "+N more" badge, which left
+                  the active mode implicit). Clicking any inactive
+                  pill switches focus. */}
               <div
                 style={{
                   position: "absolute",
@@ -263,53 +264,61 @@ export const EnlargedQuadrantCard = ({
                   zIndex: 2,
                 }}
               >
-                {drilldown.restOfCurrent > 0 && (
-                  <span
-                    style={{
-                      padding: "6px 10px",
-                      borderRadius: 6,
-                      background: "rgba(8,12,22,0.55)",
-                      color: "var(--neo-text-2)",
-                      font: '500 11px/1.2 "SF Mono","JetBrains Mono",monospace',
-                      letterSpacing: "0.02em",
-                      backdropFilter: "blur(4px)",
-                      WebkitBackdropFilter: "blur(4px)",
-                      cursor: "default",
-                      userSelect: "none",
-                    }}
-                    aria-label={`${drilldown.restOfCurrent} more ${currentModeLabel.toLowerCase()} problems not shown`}
-                  >
-                    +{drilldown.restOfCurrent.toLocaleString()} more {currentModeLabel.toLowerCase()}
-                  </span>
-                )}
-                {ALL_MODES.filter((m) => m.mode !== currentMode).map((m) => {
+                {ALL_MODES.map((m) => {
                   const count = drilldown.counts[m.mode];
+                  const isActive = m.mode === currentMode;
+                  const shownTop = isActive ? Math.min(TOP_N, count) : 0;
                   return (
                     <button
                       key={m.mode}
                       type="button"
-                      onClick={() => setCurrentMode(m.mode)}
-                      title={`${m.hint} — switch to ${m.label}`}
+                      onClick={() => !isActive && count > 0 && setCurrentMode(m.mode)}
+                      title={isActive
+                        ? `Currently showing top ${shownTop} of ${count} ${m.label.toLowerCase()}`
+                        : (count > 0 ? `${m.hint} — switch to ${m.label}` : `No ${m.label.toLowerCase()} problems`)}
                       style={{
                         display: "inline-flex",
                         alignItems: "center",
                         gap: 6,
-                        padding: "6px 12px",
+                        padding: isActive ? "8px 14px" : "6px 12px",
                         borderRadius: 999,
-                        background: count > 0 ? "rgba(8,12,22,0.78)" : "rgba(8,12,22,0.4)",
+                        background: isActive
+                          ? accent
+                          : (count > 0 ? "rgba(8,12,22,0.78)" : "rgba(8,12,22,0.4)"),
                         border: `1px solid ${accent}`,
-                        color: count > 0 ? "var(--neo-text)" : "var(--neo-text-3)",
+                        color: isActive
+                          ? "#0b0f1a"
+                          : (count > 0 ? "var(--neo-text)" : "var(--neo-text-3)"),
                         font: '600 12px/1.2 "Inter", system-ui, sans-serif',
-                        cursor: count > 0 ? "pointer" : "default",
+                        cursor: isActive ? "default" : (count > 0 ? "pointer" : "default"),
                         opacity: count > 0 ? 1 : 0.55,
-                        boxShadow: "0 4px 12px rgba(0,0,0,0.25)",
+                        boxShadow: isActive
+                          ? `0 0 16px ${accent}66`
+                          : "0 4px 12px rgba(0,0,0,0.25)",
                         userSelect: "none",
                       }}
-                      disabled={count === 0}
+                      disabled={count === 0 && !isActive}
+                      aria-pressed={isActive}
                     >
-                      <span>{m.label}</span>
-                      <span style={{ fontFamily: '"SF Mono","JetBrains Mono",monospace', fontWeight: 700 }}>
-                        {count.toLocaleString()}
+                      {isActive && (
+                        <span style={{
+                          font: '700 10px/1 "SF Mono","JetBrains Mono",monospace',
+                          padding: "2px 6px",
+                          borderRadius: 4,
+                          background: "rgba(0,0,0,0.18)",
+                          letterSpacing: "0.04em",
+                        }}>
+                          TOP {shownTop}
+                        </span>
+                      )}
+                      <span style={{ fontWeight: isActive ? 700 : 600 }}>{m.label}</span>
+                      <span style={{
+                        fontFamily: '"SF Mono","JetBrains Mono",monospace',
+                        fontWeight: 700,
+                      }}>
+                        {isActive
+                          ? `of ${count.toLocaleString()}`
+                          : count.toLocaleString()}
                       </span>
                     </button>
                   );
