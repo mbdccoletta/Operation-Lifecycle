@@ -348,10 +348,12 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
   >(undefined);
   /** 0.0.109 follow-up: click on a legend chip (Rising / Stuck /
    *  Critical) highlights the matching sub-bubble across every
-   *  cell. Single-select; click the same chip again to clear. */
+   *  cell. Single-select; click the same chip again to clear.
+   *  Defaults to "rising" — the most actionable lens on a triage
+   *  page (recent additions deserve attention first). */
   const [highlightedSubsetMode, setHighlightedSubsetMode] = useState<
     "rising" | "open_time" | "criticality" | null
-  >(null);
+  >("rising");
   /** Drives the centered HTML/SVG `<EnlargedQuadrantCard>` — a
    *  separate path from `quadrantDetail` (which opens the list-style
    *  drill-down) and from the canvas `expandedQuadrant` zoom (which
