@@ -2380,14 +2380,16 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
       // Central column targets sit directly above/below the hub — a straight
       // spoke would plow through the quadrant's dots. Route a single spoke
       // from one side of the hub, curving outward to clear the dot cluster.
-      // Top-center quadrant exits LEFT; bottom-center exits RIGHT — creates
-      // a subtle rotational flow and keeps the two streams visually distinct.
+      // 0.0.109 user request: ERROR (top-centre) exits RIGHT and CUSTOM_ALERT
+      // (bottom-centre) exits LEFT — swap of the earlier "top→left,
+      // bottom→right" convention so the two streams pass on opposite
+      // sides cleanly.
       const isCentralCol = Math.abs(dx) < radius * 0.6;
       const spokes: SpokeCurve[] = [];
 
       if (isCentralCol) {
         const sgnY  = dy < 0 ? -1 : 1;
-        const sideX = dy < 0 ? -1 : 1; // top → left, bottom → right
+        const sideX = dy < 0 ? 1 : -1; // top → right (ERROR), bottom → left (CUSTOM_ALERT)
         const hubX  = cx + sideX * (radius + 1);
         const hubY  = cy;
         const tx    = pos.x;
