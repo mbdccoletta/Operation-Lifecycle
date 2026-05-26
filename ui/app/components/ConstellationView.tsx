@@ -2022,6 +2022,12 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
     // filtered to that subset. Drives the new design (no global Show
     // By chip needed — the bubbles ARE the chip, scoped to one cell).
     const bubbleHits: Array<{ cellId: string; subsetMode: ConstellationDataMode; cx: number; cy: number; r: number }> = [];
+    // Skip the whole bubble pass when the host has disabled
+    // aggregation (modal mode — EnlargedQuadrantCard wants pure dots
+    // + its own HTML overlay). Without this gate, the modal canvas
+    // ends up with TWO sets of bubbles stacked on each other (the
+    // canvas-drawn ones AND the HTML mode-switch chips).
+    if (!disableAggregation) {
     for (const slot of layout) {
       // 0.0.109 follow-up: render sub-bubbles in EVERY cell that has at
       // least one ACTIVE problem (was gated on `isCellAggregated`, i.e.
@@ -2129,6 +2135,7 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
       // per-bubble out-of-phase pulse inside the loop instead.
       void pulse;
     }
+    } // close `if (!disableAggregation)` bubble-pass gate
     bubbleHitsRef.current = bubbleHits;
 
     // ── Magnifier lens cursor REMOVED in 0.0.109 ────────────────────
