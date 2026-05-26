@@ -2024,17 +2024,15 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
       const N = subsets.length;
       const usableW = Math.max(0, cell.w - 24);
       const spacing = usableW / N;
-      // Sparse cells (≤ 100 active) coexist with their individual
-      // dots scattered across the cell body — put the bubbles in a
-      // footer strip and shrink them so they don't crowd the dots.
-      // Dense cells own the whole cell (dot pass returns early), so
-      // the bubbles can sit centrally at full size.
-      const dense = isCellAggregated(slot.id);
-      const bubbleY = dense ? cell.y + cell.h * 0.62 : cell.y + cell.h * 0.85;
-      const maxR = dense
-        ? Math.min(26, Math.max(14, spacing * 0.36))
-        : Math.min(14, Math.max(9,  spacing * 0.22));
-      const minR = dense ? 14 : 9;
+      // 0.0.109 follow-up: always centre the sub-bubbles in the cell
+      // body (was split between mid-cell for dense and footer-strip
+      // for sparse — user reported the inconsistent placement was
+      // confusing). Sparse cells now have their bubbles on top of /
+      // around the individual dots; the visual is still legible
+      // because dots are few when the cell is sparse.
+      const bubbleY = cell.y + cell.h * 0.5;
+      const maxR = Math.min(26, Math.max(12, spacing * 0.32));
+      const minR = 12;
       const maxCount = Math.max(1, ...subsets.map((s) => s.count));
 
       for (let i = 0; i < N; i++) {
@@ -2101,85 +2099,14 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
     }
     bubbleHitsRef.current = bubbleHits;
 
-    // ── Magnifier lens cursor — circular lens that follows the pointer ──
-    // The dot magnification still applies to the WHOLE quadrant (proximity
-    // falloff), but the visual cursor is a clean magnifier circle so the
-    // user immediately reads it as "this is zoom, not select". Only renders
-    // when the cursor sits inside a quadrant body AND not over a dot or
-    // the clickable label strip (those swap the OS cursor to "pointer").
-    {
-      const cursor = cursorRef.current;
-      const cursorQuad = cursor ? detectQuadrantAt(cursor.x, cursor.y) : null;
-      // Derive interactivity from refs so the lens visibility stays in
-      // sync without forcing the draw callback to recompile every tick.
-      const overDot   = cursor ? !!findStarAt(cursor.x, cursor.y) : false;
-      const overLabel = cursor && onCategoryLabelClick ? !!detectLabelAt(cursor.x, cursor.y) : false;
-      if (!disableMagnifierLens && cursor && cursorQuad && !expandedQuadrant && !overDot && !overLabel) {
-        const cx = cursor.x * w;
-        const cy = cursor.y * h;
-        const LENS_R = isTouch ? 38 : 30;
-
-        ctx.save();
-        // Soft inner wash — gives the lens body a subtle "magnified" tint
-        const wash = ctx.createRadialGradient(cx, cy, 0, cx, cy, LENS_R);
-        wash.addColorStop(0, dk ? "rgba(180,210,255,0.10)" : "rgba(60,90,160,0.10)");
-        wash.addColorStop(1, dk ? "rgba(180,210,255,0)"    : "rgba(60,90,160,0)");
-        ctx.fillStyle = wash;
-        ctx.beginPath();
-        ctx.arc(cx, cy, LENS_R, 0, Math.PI * 2);
-        ctx.fill();
-
-        // Outer glow ring — neon halo
-        ctx.shadowColor = dk ? "rgba(180,210,255,0.55)" : "rgba(60,90,160,0.55)";
-        ctx.shadowBlur  = 8;
-        ctx.strokeStyle = dk ? "rgba(180,210,255,0.85)" : "rgba(60,90,160,0.8)";
-        ctx.lineWidth   = 1.4;
-        ctx.beginPath();
-        ctx.arc(cx, cy, LENS_R, 0, Math.PI * 2);
-        ctx.stroke();
-        ctx.shadowBlur = 0;
-
-        // Animated dashed inner ring — communicates "live zoom area"
-        ctx.strokeStyle = dk ? "rgba(180,210,255,0.55)" : "rgba(60,90,160,0.6)";
-        ctx.lineWidth = 1;
-        ctx.setLineDash([4, 5]);
-        ctx.lineDashOffset = -t * 8;
-        ctx.beginPath();
-        ctx.arc(cx, cy, LENS_R - 5, 0, Math.PI * 2);
-        ctx.stroke();
-        ctx.setLineDash([]);
-
-        // Magnifier handle — short diagonal stroke at the bottom-right
-        // edge of the lens, the universally recognised search/zoom glyph.
-        const handleAngle = Math.PI / 4;       // 45° (bottom-right)
-        const hx0 = cx + Math.cos(handleAngle) * LENS_R;
-        const hy0 = cy + Math.sin(handleAngle) * LENS_R;
-        const hx1 = cx + Math.cos(handleAngle) * (LENS_R + 9);
-        const hy1 = cy + Math.sin(handleAngle) * (LENS_R + 9);
-        ctx.strokeStyle = dk ? "rgba(180,210,255,0.9)" : "rgba(60,90,160,0.85)";
-        ctx.lineWidth   = 2.2;
-        ctx.lineCap     = "round";
-        ctx.shadowColor = dk ? "rgba(180,210,255,0.45)" : "rgba(60,90,160,0.45)";
-        ctx.shadowBlur  = 4;
-        ctx.beginPath();
-        ctx.moveTo(hx0, hy0);
-        ctx.lineTo(hx1, hy1);
-        ctx.stroke();
-        ctx.shadowBlur = 0;
-        ctx.lineCap    = "butt";
-
-        // Small "+" inside the lens — reinforces the zoom semantic
-        ctx.strokeStyle = dk ? "rgba(180,210,255,0.7)" : "rgba(60,90,160,0.7)";
-        ctx.lineWidth = 1.2;
-        const plusR = 4;
-        ctx.beginPath();
-        ctx.moveTo(cx - plusR, cy); ctx.lineTo(cx + plusR, cy);
-        ctx.moveTo(cx, cy - plusR); ctx.lineTo(cx, cy + plusR);
-        ctx.stroke();
-
-        ctx.restore();
-      }
-    }
+    // ── Magnifier lens cursor REMOVED in 0.0.109 ────────────────────
+    // The lens cursor was a circular "magnifier glyph" that followed
+    // the pointer to advertise the dot-zoom feature. The dot-zoom
+    // was already removed in 0.0.106 (user request) but the visual
+    // cursor stayed. Removed now per user feedback: "remover icone
+    // de lupa ao clicar". Click semantics unchanged — bubbles open
+    // the modal, dots open the problem panel, empty space clears
+    // selection.
 
     // ── CENTER BADGE: total active count + trend ─────────────────────────
     // Entire hub block (counts, spokes, satellites) is gated behind
