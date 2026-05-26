@@ -21,6 +21,7 @@ export type Scenario =
   | "focused"       // single quadrant in cascading-failure meltdown
   | "stress"        // every quadrant +15 recent (max-intensity spokes)
   | "xlarge"        // enterprise-scale environment · thousands of problems
+  | "stress-3k"     // 3 000 ACTIVE problems · validates dense-cell UX (lens + bubble)
   // ── Segments-page test scenarios. Override both the synthetic
   // problem set AND the synthetic filter-segment catalog + membership
   // so the /segments view can be exercised without a tenant that
@@ -375,6 +376,49 @@ export function getSimulatedProblems(scenario: Scenario, real: Problem[]): Probl
         pushOlderActive(out, cat, idx, 3, now);
         pushRecentlyClosed(out, cat, idx, 1, now);
         pushHistorical(out, cat, idx, 8, now);
+      });
+      break;
+    }
+
+    case "stress-3k": {
+      // 3 000 ACTIVE problems distributed to mirror the prd shape that
+      // motivated the 0.0.101 + 0.0.102 fixes (ERROR + RESOURCE_CONTENTION
+      // each above the 100-active aggregation threshold; ERROR ≫ 1 000
+      // dots so the magnifier-lens density gate kicks in). The split
+      // also leaves the smaller categories above zero so every quadrant
+      // renders (helps validate cross-cell parity).
+      //
+      // Active distribution (sum = 3 000):
+      //   AVAILABILITY            200  (≈ 7 %)
+      //   ERROR                  1200  (≈ 40 %)
+      //   SLOWDOWN                300  (≈ 10 %)
+      //   RESOURCE_CONTENTION     900  (≈ 30 %)
+      //   CUSTOM_ALERT            250  (≈ 8 %)
+      //   MONITORING_UNAVAILABLE  150  (≈ 5 %)
+      //
+      // Each category mixes fresh + older actives so the pulse chart
+      // and chart drill-down have something to chew on, and gets a
+      // small CLOSED tail for context (recent + historical).
+      const ACTIVE_BY_CAT: Record<string, number> = {
+        AVAILABILITY:           200,
+        ERROR:                 1200,
+        SLOWDOWN:               300,
+        RESOURCE_CONTENTION:    900,
+        CUSTOM_ALERT:           250,
+        MONITORING_UNAVAILABLE: 150,
+      };
+      SIM_CATEGORIES.forEach((cat, idx) => {
+        const totalActive = ACTIVE_BY_CAT[cat] ?? 0;
+        // ~30 % fresh (recent timestamps, drive the histogram peak),
+        // ~70 % older (1–5 h spread for chart distribution).
+        const fresh = Math.round(totalActive * 0.3);
+        const older = totalActive - fresh;
+        pushActive(out, cat, idx, fresh, now, { ageBias: "fresh" });
+        pushOlderActive(out, cat, idx, older, now);
+        // CLOSED tail — light enough to not dominate, heavy enough
+        // that the RESOLVED panel + Trends KPIs have signal.
+        pushRecentlyClosed(out, cat, idx, Math.round(totalActive * 0.08), now);
+        pushHistorical(out, cat, idx, Math.round(totalActive * 0.15), now);
       });
       break;
     }

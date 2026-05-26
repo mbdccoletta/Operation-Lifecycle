@@ -25,6 +25,7 @@ const SECTIONS: OptionSection[] = [
       { id: "focused",      label: "Focused",      hint: "ERROR saturated (~200) · dense scatter + top-tier" },
       { id: "stress",       label: "Stress",       hint: "Every quadrant at +15 · heavy load" },
       { id: "xlarge",       label: "XLarge",       hint: "Enterprise scale · ~3.6 K problems · stresses everything" },
+      { id: "stress-3k",    label: "Stress 3 K",   hint: "3 000 ACTIVE · ERROR + RES_CONT heavy · validates dense-cell UX" },
     ],
   },
   // Segments section retired in lockstep with `SHOW_SEGMENT_VIEW =
