@@ -1557,8 +1557,18 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
       const cell   = cellRects[s.id];
       const labelX = s.bounds.xMin * w + LABEL_X_INSET;
       const labelY = (cell ? cell.y : s.bounds.yMin * h) + LABEL_Y_INSET;
-      const endX   = drawQuadrantLabel(labelById[s.id] || s.id, s.id, colorOf(s.id), labelX, labelY);
-      labelEnd[s.id] = { x: endX, y: labelY };
+      // 0.0.109 follow-up: skip the canvas-drawn cell title when
+      // we're inside the modal (`disableAggregation`). The modal's
+      // own HTML header already prints the category + counts; the
+      // canvas label was duplicate text. We still record `labelEnd`
+      // (zero-width at labelX) so the rising-trail comets below have
+      // a starting point.
+      if (!disableAggregation) {
+        const endX = drawQuadrantLabel(labelById[s.id] || s.id, s.id, colorOf(s.id), labelX, labelY);
+        labelEnd[s.id] = { x: endX, y: labelY };
+      } else {
+        labelEnd[s.id] = { x: labelX, y: labelY };
+      }
     }
 
     // ═══ RESOLVED ZONE — HUD stat panels ═══ (entire block gated
