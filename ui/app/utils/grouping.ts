@@ -20,7 +20,12 @@ export const CATEGORY_GROUPINGS: Grouping[] = [
   { id: "ERROR",                  label: "ERROR",                color: "#ff8b3e" },
   { id: "SLOWDOWN",               label: "SLOWDOWN",             color: "#4da6ff" },
   { id: "RESOURCE_CONTENTION",    label: "RESOURCE CONTENTION",  color: "#a855f7" },
-  { id: "CUSTOM_ALERT",           label: "CUSTOM ALERT",         color: "#6ee7b7" },
+  // CUSTOM_ALERT was mint-green (#6ee7b7), too close to the
+  // RESOLVED ring's emerald — user 0.0.109: "Verde e vermelho
+  // devem ser exclusivos de resolucao e problemas." Swapped to
+  // cyan, distinct from every other category colour AND from the
+  // active/resolved semantic palette.
+  { id: "CUSTOM_ALERT",           label: "CUSTOM ALERT",         color: "#22d3ee" },
   { id: "MONITORING_UNAVAILABLE", label: "MONITORING UNAVAIL.",  color: "#f59e0b" },
 ];
 
