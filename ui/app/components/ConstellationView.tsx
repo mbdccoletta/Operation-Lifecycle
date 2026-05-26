@@ -2343,24 +2343,30 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
 
     type SpokeCurve = { hubX: number; hubY: number; tx: number; ty: number; midX: number; midY: number; len: number };
 
-    // 0.0.109 follow-up: when the comet animation targets a cell
-    // with rising trend, aim AT THE RISING SUB-BUBBLE (index 0 of
-    // the 3-bubble row), not the cell centre. User: "a animacao do
-    // circulo central deve apontar sempre para o Rising quando
-    // estiver aumentando o numero de problemas." Reinforces the
-    // semantic: new problems flowing FROM the hub INTO the Rising
-    // counter.
+    // Comet target = the actual Rising sub-bubble position in the
+    // cell, taking into account that zero-count bubbles are now
+    // filtered out and the visible ones recentre (0.0.109 follow-up
+    // "animaçao nao acompanhou o grupo Rising"). Earlier code
+    // assumed Rising sat at index 0 of a 3-bubble row, which broke
+    // when Stuck/Critical were 0 and Rising ended up centred.
     const risingBubblePos = (cat: string): { x: number; y: number } | null => {
       const cell = cellRects[cat];
       if (!cell) return null;
-      const N = 3; // SUBSET_MODES count
+      const all = cellSubsetBubbles[cat];
+      if (!all) return null;
+      const visible = all.filter((s) => s.count > 0);
+      const risingIdx = visible.findIndex((s) => s.mode === "rising");
+      if (risingIdx < 0 || visible.length === 0) return null;
       const usableW = Math.max(0, cell.w - 24);
-      const spacing = usableW / N;
+      const spacing = usableW / visible.length;
       const TITLE_PAD = 28;
       const LABEL_PAD = 28;
       const safeTop = cell.y + TITLE_PAD;
       const safeBot = cell.y + cell.h - LABEL_PAD;
-      return { x: cell.x + 12 + spacing * 0.5, y: (safeTop + safeBot) / 2 };
+      return {
+        x: cell.x + 12 + spacing * (risingIdx + 0.5),
+        y: (safeTop + safeBot) / 2,
+      };
     };
 
     let spokeIdx = 0;
