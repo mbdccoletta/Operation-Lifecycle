@@ -2948,12 +2948,14 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
           loop back into itself. */}
       {!expandedQuadrant && size.w > 0 && groupings.length > 1 && (
         layout.map(({ id: cat, bounds: qb }) => {
-          // Anchor the button INSIDE the cell, well below the cell's
-          // top divider line so the button doesn't visually cover the
-          // line ("botao para expandir cobrindo a linha" user
-          // report). Was +3; bumped to +8.
-          const left = qb.xMin * size.w + 3;
-          const top  = Math.max(6, cellTopNById[cat] * size.h + 8);
+          // Anchor the button well inside the cell — both x and y
+          // pushed in so it never visually overlaps the cell's top
+          // / left divider lines. User reported (twice) the button
+          // sitting "encima da linha." Now offset 10 px from both
+          // axes, with a 10 px floor so even row-0 cells (cellTopN
+          // = 0) put the button clear of the canvas top edge.
+          const left = qb.xMin * size.w + 10;
+          const top  = Math.max(10, cellTopNById[cat] * size.h + 16);
           return (
             <button
               key={cat}
