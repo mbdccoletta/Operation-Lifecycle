@@ -2072,11 +2072,11 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
         const cx = cell.x + cell.w / 2;
         const cy = cell.y + cell.h / 2;
         ctx.save();
-        ctx.font = `700 ${(36 * fsMult).toFixed(2)}px "Roboto Mono", "SF Mono", monospace`;
+        ctx.font = `700 ${(40 * fsMult).toFixed(2)}px "Roboto Mono", "SF Mono", monospace`;
+        // Vivid category colour (user 0.0.109 request "manter icones
+        // com cores vivas"). No shadowBlur — keep the "0" crisp.
         ctx.fillStyle = cellColor;
-        ctx.globalAlpha = 0.45;
-        ctx.shadowColor = cellColor;
-        ctx.shadowBlur = 16;
+        ctx.globalAlpha = 0.85;
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
         ctx.fillText("0", cx, cy);
@@ -2221,13 +2221,16 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
           ctx.restore();
         }
 
-        // Count text — bright white, CRISP (no shadow blur). The
-        // backplate above already gives enough contrast.
+        // Count text — VIVID category colour (user request: "manter
+        // icones com cores vivas"). Stays CRISP — no shadowBlur.
+        // High contrast comes from the dark backplate above (in
+        // light theme: light backplate); the category colour sits
+        // cleanly on top.
         ctx.save();
         ctx.globalAlpha = bubbleAlpha;
         const fontSize = Math.max(13, Math.min(22, r * 0.85)) * fsMult;
         ctx.font = `700 ${fontSize}px "Roboto Mono", "SF Mono", monospace`;
-        ctx.fillStyle = dk ? "#ffffff" : "#0b1220";
+        ctx.fillStyle = s.color;
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
         ctx.fillText(String(s.count), bubbleX, bubbleY);
@@ -2243,10 +2246,11 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
         ctx.font = `600 ${(11 * fsMult).toFixed(2)}px "Inter", system-ui, sans-serif`;
         ctx.textAlign = "center";
         ctx.textBaseline = "top";
-        ctx.shadowColor = "rgba(0,0,0,0.6)";
-        ctx.shadowBlur = 4;
+        // Vivid category colour, CRISP (no shadowBlur). The
+        // labels were faint and slightly blurry — now full alpha
+        // (modulated only by the dim/active state) and no shadow.
         ctx.fillStyle = s.color;
-        ctx.globalAlpha = bubbleAlpha * 0.95;
+        ctx.globalAlpha = bubbleAlpha;
         // Label sits below the bubble at a fixed offset from the
         // SAFE-BOTTOM position so it always lands inside LABEL_PAD
         // (defined above as 28 px) — clear of the cell divider line.
