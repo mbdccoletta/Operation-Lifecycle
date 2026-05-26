@@ -2156,32 +2156,47 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
         // still letting the highlighted bubble dominate.
         const bubbleAlpha = isDimmed ? 0.6 : 1.0;
 
-        // 0.0.109 follow-up — "remover fundo das colinhas para
-        // melhorar visibilidade." The bubble used to be a solid
-        // colour disc with a dark inner disc + white count on top
-        // (three stacked fills). Now it's drawn as a coloured RING
-        // with a transparent interior + count text in the ring's
-        // colour. Cleaner read, no "fundo".
+        // 0.0.109 follow-up #2 — cleaner / crisper rendering.
+        // Earlier pass dropped the solid bubble fill but left
+        // shadowBlur on the ring + count, which blurred the whole
+        // thing ("parece embaçado pra mim").
         //
-        // Soft glow halo behind the ring — still there so the eye
-        // can find the bubble across cells; lighter than before.
+        // Three layers, all SHARP (no shadowBlur on strokes /
+        // text):
+        //   1. Subtle dark backplate — semi-transparent disc that
+        //      gives the count text crisp contrast against the
+        //      cell background, without saturating the way the old
+        //      solid colour fill did.
+        //   2. Coloured ring stroke (crisp, no shadow blur)
+        //   3. Bright white count text (crisp, no shadow blur)
+        // The soft glow halo behind everything stays — it's a
+        // FILL gradient, not a shadow, so it doesn't blur the
+        // shapes on top.
         ctx.save();
         ctx.globalAlpha = bubbleAlpha;
-        const haloIntensity = isHighlighted ? "77" : "44";
-        const halo = ctx.createRadialGradient(bubbleX, bubbleY, 0, bubbleX, bubbleY, r * 2.2);
+        const haloIntensity = isHighlighted ? "55" : "2e";
+        const halo = ctx.createRadialGradient(bubbleX, bubbleY, 0, bubbleX, bubbleY, r * 2.0);
         halo.addColorStop(0, `${s.color}${haloIntensity}`);
         halo.addColorStop(1, `${s.color}00`);
         ctx.fillStyle = halo;
-        ctx.fillRect(bubbleX - r * 2.2, bubbleY - r * 2.2, r * 4.4, r * 4.4);
+        ctx.fillRect(bubbleX - r * 2.0, bubbleY - r * 2.0, r * 4.0, r * 4.0);
         ctx.restore();
 
-        // Bubble ring (outline only, no fill).
+        // Subtle dark backplate inside the ring — keeps the white
+        // count fully legible without making the bubble look filled.
+        ctx.save();
+        ctx.globalAlpha = bubbleAlpha;
+        ctx.fillStyle = dk ? "rgba(8,12,22,0.55)" : "rgba(255,255,255,0.7)";
+        ctx.beginPath();
+        ctx.arc(bubbleX, bubbleY, r - 1, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+
+        // Bubble ring — CRISP outline, no shadow blur.
         ctx.save();
         ctx.globalAlpha = bubbleAlpha;
         ctx.strokeStyle = s.color;
         ctx.lineWidth = isHighlighted ? 3 : 2.2;
-        ctx.shadowColor = s.color;
-        ctx.shadowBlur = isHighlighted ? 14 : 8;
         ctx.beginPath();
         ctx.arc(bubbleX, bubbleY, r, 0, Math.PI * 2);
         ctx.stroke();
@@ -2196,7 +2211,7 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
           ctx.save();
           ctx.strokeStyle = s.color;
           ctx.lineWidth   = 1.6;
-          ctx.globalAlpha = 0.6 + ringPulse * 0.3;
+          ctx.globalAlpha = 0.65 + ringPulse * 0.3;
           ctx.setLineDash([3, 4]);
           ctx.lineDashOffset = -tc * 12;
           ctx.beginPath();
@@ -2206,17 +2221,13 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
           ctx.restore();
         }
 
-        // Count text — sized to fit comfortably inside the bubble.
-        // Now coloured (matches the ring) since the dark inner disc
-        // is gone and a white number would float on top of the
-        // halo glow without a clear background.
+        // Count text — bright white, CRISP (no shadow blur). The
+        // backplate above already gives enough contrast.
         ctx.save();
         ctx.globalAlpha = bubbleAlpha;
         const fontSize = Math.max(13, Math.min(22, r * 0.85)) * fsMult;
         ctx.font = `700 ${fontSize}px "Roboto Mono", "SF Mono", monospace`;
-        ctx.fillStyle = s.color;
-        ctx.shadowColor = "rgba(0,0,0,0.55)";
-        ctx.shadowBlur = 6;
+        ctx.fillStyle = dk ? "#ffffff" : "#0b1220";
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
         ctx.fillText(String(s.count), bubbleX, bubbleY);
