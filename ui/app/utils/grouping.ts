@@ -108,13 +108,23 @@ export function computeQuadrantLayout(
   }
 
   // Hub-free layout — pick (rows, cols) for the grouping count and fill
-  // the full active area (y = 0 → 0.68). Each row has a thin header
-  // strip above the dot region where the quadrant title is drawn.
+  // the full active area. Each row has a thin header strip above the
+  // dot region where the quadrant title is drawn.
+  //
+  // 0.0.109 follow-up — ACTIVE_Y_MAX bumped from 0.68 to 0.95. The
+  // 0.68 ceiling was a holdover from the hub-band layout that
+  // reserved the bottom 32 % for the RESOLVED HUD panel. In hub-free
+  // mode the panel doesn't render, but the cells stayed cramped at
+  // the top, leaving a fat empty band underneath (user reported
+  // black space when switching modes inside the modal — only ~60 %
+  // of canvas was used). 0.95 leaves a small breathing strip at the
+  // bottom and lets the modal's single-cell layout fill the canvas
+  // edge-to-edge.
   const N = Math.min(groupings.length, 12);
   if (N === 0) return [];
   const grid = pickGridShape(N);
   const ACTIVE_Y_MIN = 0.0;
-  const ACTIVE_Y_MAX = 0.68;
+  const ACTIVE_Y_MAX = 0.95;
   const HEADER_H     = 0.045;
   const ROW_GAP      = 0.018;
   const COL_GAP      = 0.015;
