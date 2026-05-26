@@ -15,7 +15,7 @@
 //     `onSelectProblem`, which closes the modal and pins the row).
 //   • Backdrop click → close.
 //   • ESC → close.
-import React, { useEffect, useMemo } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Problem } from "../hooks/useProblems";
 import { getCategoryIcon } from "../utils/formatters";
 import { CATEGORY_GROUPINGS, resolveByCategory, type Grouping } from "../utils/grouping";
@@ -89,63 +89,97 @@ export const EnlargedQuadrantCard = ({
   const activeProblems = quadProblems.filter((p) => p["event.status"] === "ACTIVE");
   const closedProblems = quadProblems.filter((p) => p["event.status"] === "CLOSED");
 
-  // ── Show By → subset filter ──────────────────────────────────────
-  // User asked (0.0.108) that opening the modal show ONLY the
-  // problems matching the current Show By chip (Rising = recent,
-  // Oldest = stale, Criticality = severe, Total = all). The rest go
-  // into a "+N others" bubble overlay (rendered below the canvas).
-  //
-  // Only applied when the cell is dense enough that showing all
-  // dots would be unreadable — for sparse cells (≤ 100 active, the
-  // same threshold that triggers the aggregation bubble) we render
-  // every problem as an individual dot. User reported a 4-active
-  // AVAILABILITY cell where the Rising filter showed "0 active"
-  // and pushed all 4 into "+4 others" — pointless for that volume.
-  //
-  // Per-mode predicate on an active problem:
-  //   • rising      → opened in the last hour (matches the cell
-  //                   header's +N /1h badge semantically — "the new
-  //                   ones"). Slight numerical drift from the badge
-  //                   value is expected when problems both opened
-  //                   AND closed within the hour.
-  //   • open_time   → still active > 4h (the "stuck" threshold the
-  //                   AT-A-GLANCE card already uses).
-  //   • criticality → severity_level ≥ 4 (high or critical).
-  //   • total       → everyone (no filter).
-  const ACTIVE_COUNT_THRESHOLD = 100; // matches AGG_COUNT_THRESHOLD in ConstellationView
-  const shouldFilterByMode = activeProblems.length > ACTIVE_COUNT_THRESHOLD;
-  const shownActive = useMemo(() => {
-    if (!shouldFilterByMode) return activeProblems;
+  // ── Drill-down: explode top 10 + keep other modes as bubbles ────
+  // 0.0.109 follow-up. User asked: "Ao fazer drill down, explodir
+  // problemas da categoria selecionada destacando top 10 e manter
+  // demais agrupamentos." The modal becomes a focused explorer for
+  // ONE subset at a time:
+  //   • Top 10 of the active subset render as individual dots in
+  //     the canvas, sorted by the subset's own criterion (Rising =
+  //     newest, Stuck = oldest, Critical = highest severity).
+  //   • The OTHER 2 subset modes stay as small HTML bubbles
+  //     overlaid on the canvas. Click one to switch the modal's
+  //     focus to that mode (no re-open needed).
+  //   • A "+N more <mode>" badge sits next to the bubbles when the
+  //     active subset has more than 10 matching problems — the
+  //     user knows how much they're not seeing.
+  type SubsetMode = "rising" | "open_time" | "criticality";
+  const ALL_MODES: Array<{ mode: SubsetMode; label: string; hint: string }> = [
+    { mode: "rising",      label: "Rising",   hint: "Opened in the last hour" },
+    { mode: "open_time",   label: "Stuck",    hint: "Active for more than 4 hours" },
+    { mode: "criticality", label: "Critical", hint: "Severity 4 or 5" },
+  ];
+  // Active subset starts from the prop (the bubble the user clicked
+  // on the main-page cell) and the user can switch it via the
+  // overlay bubbles inside the modal.
+  const initialMode: SubsetMode = ALL_MODES.some((m) => m.mode === dataMode)
+    ? (dataMode as SubsetMode)
+    : "rising";
+  const [currentMode, setCurrentMode] = useState<SubsetMode>(initialMode);
+  useEffect(() => { setCurrentMode(initialMode); }, [initialMode]);
+
+  const matchesMode = (mode: SubsetMode, p: Problem, now: number): boolean => {
+    switch (mode) {
+      case "rising":
+        return new Date(p["event.start"]).getTime() >= now - 3_600_000;
+      case "open_time":
+        return new Date(p["event.start"]).getTime() <= now - 4 * 3_600_000;
+      case "criticality":
+        return Number((p as { "event.severity_level"?: number | string })["event.severity_level"] ?? 0) >= 4;
+    }
+  };
+  const sortForMode = (mode: SubsetMode, list: Problem[]): Problem[] => {
+    const arr = [...list];
+    switch (mode) {
+      case "rising":
+        return arr.sort(
+          (a, b) =>
+            new Date(b["event.start"]).getTime() - new Date(a["event.start"]).getTime(),
+        );
+      case "open_time":
+        return arr.sort(
+          (a, b) =>
+            new Date(a["event.start"]).getTime() - new Date(b["event.start"]).getTime(),
+        );
+      case "criticality":
+        return arr.sort((a, b) => {
+          const sa = Number((a as { "event.severity_level"?: number | string })["event.severity_level"] ?? 0);
+          const sb = Number((b as { "event.severity_level"?: number | string })["event.severity_level"] ?? 0);
+          return sb - sa;
+        });
+    }
+  };
+
+  const TOP_N = 10;
+  const drilldown = useMemo(() => {
     const now = Date.now();
-    return activeProblems.filter((p) => {
-      switch (dataMode) {
-        case "rising": {
-          const startTs = new Date(p["event.start"]).getTime();
-          return startTs >= now - 3_600_000;
-        }
-        case "open_time": {
-          const startTs = new Date(p["event.start"]).getTime();
-          return startTs <= now - 4 * 3_600_000;
-        }
-        case "criticality": {
-          const sev = Number((p as { "event.severity_level"?: number | string })["event.severity_level"] ?? 0);
-          return sev >= 4;
-        }
-        case "total":
-        default:
-          return true;
+    const matchingByMode: Record<SubsetMode, Problem[]> = { rising: [], open_time: [], criticality: [] };
+    for (const p of activeProblems) {
+      for (const { mode } of ALL_MODES) {
+        if (matchesMode(mode, p, now)) matchingByMode[mode].push(p);
       }
-    });
-  }, [activeProblems, dataMode, shouldFilterByMode]);
+    }
+    const matchingForCurrent = sortForMode(currentMode, matchingByMode[currentMode]);
+    const top = matchingForCurrent.slice(0, TOP_N);
+    const restOfCurrent = Math.max(0, matchingForCurrent.length - TOP_N);
+    return {
+      top,
+      restOfCurrent,
+      counts: {
+        rising:      matchingByMode.rising.length,
+        open_time:   matchingByMode.open_time.length,
+        criticality: matchingByMode.criticality.length,
+      } as Record<SubsetMode, number>,
+    };
+  }, [activeProblems, currentMode]);
 
-  const restCount = activeProblems.length - shownActive.length;
-
-  // Inner ConstellationView receives the filtered active set + the
-  // closed tail (closed problems still feed `risingCats` etc.).
+  // Inner ConstellationView receives the top 10 of the current mode
+  // + the closed tail (still feeds `risingCats` / trend bookkeeping).
   const shownProblems = useMemo(
-    () => [...shownActive, ...closedProblems],
-    [shownActive, closedProblems],
+    () => [...drilldown.top, ...closedProblems],
+    [drilldown.top, closedProblems],
   );
+  const currentModeLabel = ALL_MODES.find((m) => m.mode === currentMode)?.label ?? "";
 
   // Single-grouping array we feed to the inner ConstellationView
   // so it lays out ONE quadrant filling the canvas.
@@ -195,17 +229,14 @@ export const EnlargedQuadrantCard = ({
             </div>
           ) : (
             <div className="neo-enlarged-quadrant-canvas" style={{ position: "relative" }}>
-              {/* 0.0.108: feed the inner ConstellationView only the
-                  Show-By-matching active problems + the closed
-                  tail. The matching set renders as individual dots;
-                  the remainder gets the "+N others" overlay below.
-                  `disableAggregation` skips the bubble/cap rules so
-                  the inner canvas doesn't re-aggregate the already-
-                  filtered subset. */}
+              {/* 0.0.109 drill-down: inner ConstellationView gets the
+                  top 10 of the CURRENT subset mode plus the closed
+                  tail. The OTHER two modes stay aggregated as small
+                  clickable bubbles in the overlay below. */}
               <ConstellationView
                 problems={shownProblems}
                 onSelect={(p) => onSelectProblem?.(p)}
-                dataMode={dataMode}
+                dataMode={currentMode}
                 groupings={singleGrouping}
                 resolveGrouping={resolveGrouping}
                 showHub={false}
@@ -213,55 +244,77 @@ export const EnlargedQuadrantCard = ({
                 disableMagnifierLens
                 disableAggregation
                 dotScale={1.6}
-                /* 0.0.108: opens already zoomed into the single
-                   grouping so the cell fills the whole modal canvas
-                   in one click (without this the user had to double-
-                   click the cell inside the modal to trigger the
-                   internal "Exit zoom" mode). `lockExpandedQuadrant`
-                   pins the zoom — hides the Exit-zoom button, blocks
-                   ESC/double-click from leaving the zoom, and drops
-                   the zoom padding so the cell fills the canvas
-                   edge-to-edge. The modal's own ✕ button stays the
-                   only way out. */
                 initialExpandedQuadrant={quadrantId}
                 lockExpandedQuadrant
               />
-              {restCount > 0 && (
-                /* "Rest of the cell" badge — non-matching active
-                   problems collapse here so the user can see at a
-                   glance how many were grouped vs how many are
-                   shown as individual dots.
-                   Informational only (user feedback) — no click
-                   action. `pointerEvents: auto` lets it BLOCK hover
-                   events from reaching the dots underneath; without
-                   that the dot tooltip would peek through the badge
-                   ("5xx spike" report). Visual cues match the non-
-                   interactive role: no border, dimmer text, default
-                   cursor, lighter background. */
-                <div
-                  className="neo-enlarged-quadrant-rest-bubble"
-                  style={{
-                    position: "absolute",
-                    right: 16,
-                    bottom: 16,
-                    padding: "6px 10px",
-                    borderRadius: 6,
-                    background: "rgba(8,12,22,0.55)",
-                    color: "var(--neo-text-2)",
-                    font: '500 11px/1.2 "SF Mono","JetBrains Mono",monospace',
-                    letterSpacing: "0.02em",
-                    backdropFilter: "blur(4px)",
-                    WebkitBackdropFilter: "blur(4px)",
-                    cursor: "default",
-                    pointerEvents: "auto",
-                    userSelect: "none",
-                    zIndex: 2,
-                  }}
-                  aria-label={`${restCount} other active problems grouped`}
-                >
-                  +{restCount.toLocaleString()} others
-                </div>
-              )}
+              {/* Mode strip — "+N more <current>" badge + 2 clickable
+                  bubbles for the OTHER modes. The user reads:
+                    "Top 10 stuck shown · +830 more stuck · switch
+                     to Rising (264) or Critical (156)" */}
+              <div
+                style={{
+                  position: "absolute",
+                  right: 16,
+                  bottom: 16,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  pointerEvents: "auto",
+                  zIndex: 2,
+                }}
+              >
+                {drilldown.restOfCurrent > 0 && (
+                  <span
+                    style={{
+                      padding: "6px 10px",
+                      borderRadius: 6,
+                      background: "rgba(8,12,22,0.55)",
+                      color: "var(--neo-text-2)",
+                      font: '500 11px/1.2 "SF Mono","JetBrains Mono",monospace',
+                      letterSpacing: "0.02em",
+                      backdropFilter: "blur(4px)",
+                      WebkitBackdropFilter: "blur(4px)",
+                      cursor: "default",
+                      userSelect: "none",
+                    }}
+                    aria-label={`${drilldown.restOfCurrent} more ${currentModeLabel.toLowerCase()} problems not shown`}
+                  >
+                    +{drilldown.restOfCurrent.toLocaleString()} more {currentModeLabel.toLowerCase()}
+                  </span>
+                )}
+                {ALL_MODES.filter((m) => m.mode !== currentMode).map((m) => {
+                  const count = drilldown.counts[m.mode];
+                  return (
+                    <button
+                      key={m.mode}
+                      type="button"
+                      onClick={() => setCurrentMode(m.mode)}
+                      title={`${m.hint} — switch to ${m.label}`}
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 6,
+                        padding: "6px 12px",
+                        borderRadius: 999,
+                        background: count > 0 ? "rgba(8,12,22,0.78)" : "rgba(8,12,22,0.4)",
+                        border: `1px solid ${accent}`,
+                        color: count > 0 ? "var(--neo-text)" : "var(--neo-text-3)",
+                        font: '600 12px/1.2 "Inter", system-ui, sans-serif',
+                        cursor: count > 0 ? "pointer" : "default",
+                        opacity: count > 0 ? 1 : 0.55,
+                        boxShadow: "0 4px 12px rgba(0,0,0,0.25)",
+                        userSelect: "none",
+                      }}
+                      disabled={count === 0}
+                    >
+                      <span>{m.label}</span>
+                      <span style={{ fontFamily: '"SF Mono","JetBrains Mono",monospace', fontWeight: 700 }}>
+                        {count.toLocaleString()}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           )}
         </div>
