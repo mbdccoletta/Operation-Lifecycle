@@ -2117,17 +2117,19 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
         const s = subsets[i];
         const bubbleX = cell.x + 12 + spacing * (i + 0.5);
         // Highlight state: this bubble matches the active legend
-        // chip → bigger + brighter outline. Others get dimmed.
-        // 0.0.109 follow-up: only highlight when count > 0 (calling
-        // attention to zero is the opposite of helpful).
+        // chip → bigger + brighter outline + animated. Others get
+        // dimmed + static. Only highlight when count > 0.
         const matchesMode = highlightedSubsetMode !== null
           && s.mode === highlightedSubsetMode;
         const isHighlighted = matchesMode && s.count > 0;
         const isDimmed = highlightedSubsetMode !== null && !isHighlighted;
         const highlightBoost = isHighlighted ? HIGHLIGHT_BOOST : 1;
-        // Static radius — no breathing pulse. User asked for the
-        // highlighted look without animation ("porem sem animacao").
-        const r = baseR * highlightBoost;
+        // Breathing radius ONLY on highlighted bubbles. User
+        // 0.0.109 follow-up: "ao destacar, manter animacao." Non-
+        // highlighted bubbles stay perfectly still so the eye
+        // latches onto the active one.
+        const breathe = isHighlighted ? (1 + Math.sin(tc * 1.8) * 0.05) : 1;
+        const r = baseR * highlightBoost * breathe;
 
         // Hit area: use the un-pulsed radius so the click target stays
         // steady even when the bubble breathes.
@@ -2190,20 +2192,25 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
         ctx.stroke();
         ctx.restore();
 
-        // Highlighted-mode focus ring — STATIC outline (no longer
-        // animated). User: "manter mesmo tom do circulo destacado,
-        // porem sem animacao". The dashed ring rotated and pulsed
-        // by tc, drawing more attention than the highlight itself
-        // deserved. Replaced with a solid outer ring at fixed
-        // radius + alpha so the visual cue stays clean.
+        // Highlighted-mode focus ring — animated dashed circle
+        // OUTSIDE the bubble ring. User 0.0.109 follow-up restored
+        // the animation but only on the HIGHLIGHTED bubble (was
+        // removed across the board earlier; user re-asked "ao
+        // destacar, manter animacao"). Non-highlighted bubbles stay
+        // static (no ring at all).
         if (isHighlighted) {
+          const ringPulse = (Math.sin(tc * 1.8) + 1) / 2;
+          const ringR     = r + 5 + ringPulse * 3;
           ctx.save();
           ctx.strokeStyle = s.color;
           ctx.lineWidth   = 1.6;
-          ctx.globalAlpha = 0.85;
+          ctx.globalAlpha = 0.65 + ringPulse * 0.3;
+          ctx.setLineDash([3, 4]);
+          ctx.lineDashOffset = -tc * 12;
           ctx.beginPath();
-          ctx.arc(bubbleX, bubbleY, r + 6, 0, Math.PI * 2);
+          ctx.arc(bubbleX, bubbleY, ringR, 0, Math.PI * 2);
           ctx.stroke();
+          ctx.setLineDash([]);
           ctx.restore();
         }
 
