@@ -97,6 +97,14 @@ interface ConstellationViewProps {
    *  can still click "Exit zoom" / press ESC to leave the zoom; from
    *  there the normal multi-quadrant view kicks in. */
   initialExpandedQuadrant?: string;
+  /** Pin the canvas in `expandedQuadrant` mode — no Exit-zoom button,
+   *  no ESC/double-click exit, and the zoom math drops its safety
+   *  padding so the cell fills the entire canvas. Used by
+   *  EnlargedQuadrantCard where the host modal IS the expanded view:
+   *  exiting the zoom would just reveal an empty multi-quadrant grid
+   *  with one cell, which adds no value over the modal-already-open
+   *  state. The modal's ✕ button stays the only way out. */
+  lockExpandedQuadrant?: boolean;
   /** Authoritative TOTAL / ACTIVE / RESOLVED counts derived from a
    *  dedicated count query (`useStatusCategoryCounts`) — covers the
    *  ENTIRE tenant window even when the page-level `problems` prop is
@@ -166,6 +174,7 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
   dotScale = 1,
   disableAggregation = false,
   initialExpandedQuadrant,
+  lockExpandedQuadrant = false,
 }) => {
   // Read the user's font-scale pick so the canvas-rendered text
   // (TOTAL / ACTIVE / RESOLVED circles, per-category counts at
@@ -311,15 +320,17 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
     return () => obs.disconnect();
   }, []);
 
-  // ESC exits the expanded quadrant view
+  // ESC exits the expanded quadrant view (no-op when the host has
+  // pinned the zoom — modal-mode users dismiss via the modal's own
+  // close affordance).
   useEffect(() => {
-    if (!expandedQuadrant) return;
+    if (!expandedQuadrant || lockExpandedQuadrant) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") setExpandedQuadrant(null);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [expandedQuadrant]);
+  }, [expandedQuadrant, lockExpandedQuadrant]);
 
   // Build star positions — cluster by category (each category gets its own quadrant).
   // NOTE: only ACTIVE problems become stars. Falling state is visualized via a
@@ -901,7 +912,11 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
         const cellY = cellYMin * h;
         const cellW = (cellXMax - cellXMin) * w;
         const cellH = (cellYMax - cellYMin) * h;
-        const PADDING = 0.92;
+        // Locked-zoom (modal) skips the safety padding so the cell
+        // fills the canvas edge-to-edge. The normal page-level zoom
+        // keeps the 8 % breathing room so adjacent cells don't bleed
+        // back in at the borders.
+        const PADDING = lockExpandedQuadrant ? 1.0 : 0.92;
         viewScale = Math.min(w / cellW, h / cellH) * PADDING;
         viewTx = w / 2 - (cellX + cellW / 2) * viewScale;
         viewTy = h / 2 - (cellY + cellH / 2) * viewScale;
@@ -2588,11 +2603,16 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
     }
     // Empty-area click — collapse any zoomed quadrant and bubble up to
     // the parent so it can clear its own selection / expansion state.
-    if (expandedQuadrant) setExpandedQuadrant(null);
+    // No-op for `lockExpandedQuadrant` hosts (the modal owns dismissal).
+    if (expandedQuadrant && !lockExpandedQuadrant) setExpandedQuadrant(null);
     onEmptyClick?.();
-  }, [size, onSelect, findStarAt, screenToWorld, onCategoryLabelClick, expandedQuadrant, onEmptyClick, detectQuadrantAt, detectLabelAt, expandedCellCategory, onQuadrantEnlarge]);
+  }, [size, onSelect, findStarAt, screenToWorld, onCategoryLabelClick, expandedQuadrant, onEmptyClick, detectQuadrantAt, detectLabelAt, expandedCellCategory, onQuadrantEnlarge, lockExpandedQuadrant]);
 
   const handleDoubleClick = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    // Pinned-zoom mode (modal): swallow the double-click — we don't
+    // want a stray double-tap inside the modal to drop the zoom and
+    // reveal the empty multi-quadrant grid behind it.
+    if (lockExpandedQuadrant) return;
     const rect = e.currentTarget.getBoundingClientRect();
     const mx = (e.clientX - rect.left) / size.w;
     const my = (e.clientY - rect.top) / size.h;
@@ -2610,7 +2630,7 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
     } else {
       setExpandedQuadrant(cat);
     }
-  }, [size, expandedQuadrant, screenToWorld, onQuadrantEnlarge, detectQuadrantAt]);
+  }, [size, expandedQuadrant, screenToWorld, onQuadrantEnlarge, detectQuadrantAt, lockExpandedQuadrant]);
 
   const handleMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
@@ -2770,7 +2790,7 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
           touchAction: "manipulation", // disables double-tap zoom on the canvas
         }}
       />
-      {expandedQuadrant && (
+      {expandedQuadrant && !lockExpandedQuadrant && (
         <button
           className="neo-constellation-exit-zoom"
           onClick={() => setExpandedQuadrant(null)}

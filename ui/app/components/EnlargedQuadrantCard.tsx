@@ -207,8 +207,14 @@ export const EnlargedQuadrantCard = ({
                    grouping so the cell fills the whole modal canvas
                    in one click (without this the user had to double-
                    click the cell inside the modal to trigger the
-                   internal "Exit zoom" mode). */
+                   internal "Exit zoom" mode). `lockExpandedQuadrant`
+                   pins the zoom — hides the Exit-zoom button, blocks
+                   ESC/double-click from leaving the zoom, and drops
+                   the zoom padding so the cell fills the canvas
+                   edge-to-edge. The modal's own ✕ button stays the
+                   only way out. */
                 initialExpandedQuadrant={quadrantId}
+                lockExpandedQuadrant
               />
               {restCount > 0 && (
                 /* "Rest of the cell" badge — non-matching active
