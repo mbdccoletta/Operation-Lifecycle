@@ -2156,50 +2156,47 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
         // still letting the highlighted bubble dominate.
         const bubbleAlpha = isDimmed ? 0.6 : 1.0;
 
-        // Soft glow halo — pulses with the bubble. Highlighted
-        // bubbles get a denser halo (more visible against the cell
-        // background); dimmed bubbles fade with `bubbleAlpha`.
+        // 0.0.109 follow-up — "remover fundo das colinhas para
+        // melhorar visibilidade." The bubble used to be a solid
+        // colour disc with a dark inner disc + white count on top
+        // (three stacked fills). Now it's drawn as a coloured RING
+        // with a transparent interior + count text in the ring's
+        // colour. Cleaner read, no "fundo".
+        //
+        // Soft glow halo behind the ring — still there so the eye
+        // can find the bubble across cells; lighter than before.
         ctx.save();
         ctx.globalAlpha = bubbleAlpha;
-        const haloIntensity = isHighlighted ? "99" : "66";
-        const halo = ctx.createRadialGradient(bubbleX, bubbleY, 0, bubbleX, bubbleY, r * 2.4);
+        const haloIntensity = isHighlighted ? "77" : "44";
+        const halo = ctx.createRadialGradient(bubbleX, bubbleY, 0, bubbleX, bubbleY, r * 2.2);
         halo.addColorStop(0, `${s.color}${haloIntensity}`);
         halo.addColorStop(1, `${s.color}00`);
         ctx.fillStyle = halo;
-        ctx.fillRect(bubbleX - r * 2.4, bubbleY - r * 2.4, r * 4.8, r * 4.8);
+        ctx.fillRect(bubbleX - r * 2.2, bubbleY - r * 2.2, r * 4.4, r * 4.4);
         ctx.restore();
 
-        // Bubble body
+        // Bubble ring (outline only, no fill).
         ctx.save();
         ctx.globalAlpha = bubbleAlpha;
+        ctx.strokeStyle = s.color;
+        ctx.lineWidth = isHighlighted ? 3 : 2.2;
         ctx.shadowColor = s.color;
-        ctx.shadowBlur = isHighlighted ? 20 : 14;
-        ctx.fillStyle = s.color;
+        ctx.shadowBlur = isHighlighted ? 14 : 8;
         ctx.beginPath();
         ctx.arc(bubbleX, bubbleY, r, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.restore();
-
-        // Inner darker disc to make the count more readable against
-        // the saturated outer ring.
-        ctx.save();
-        ctx.globalAlpha = bubbleAlpha;
-        ctx.fillStyle = "rgba(8,12,22,0.7)";
-        ctx.beginPath();
-        ctx.arc(bubbleX, bubbleY, r * 0.78, 0, Math.PI * 2);
-        ctx.fill();
+        ctx.stroke();
         ctx.restore();
 
         // Highlighted-mode focus ring — animated dashed circle
-        // around the bubble, same cue the per-quadrant leader ring
-        // uses. Skipped when no mode is selected (no visual noise).
+        // OUTSIDE the bubble ring. Skipped when no mode is
+        // selected so dimmed/un-selected bubbles stay clean.
         if (isHighlighted) {
           const ringPulse = (Math.sin(tc * 1.8) + 1) / 2;
-          const ringR     = r + 4 + ringPulse * 3;
+          const ringR     = r + 5 + ringPulse * 3;
           ctx.save();
           ctx.strokeStyle = s.color;
-          ctx.lineWidth   = 1.8;
-          ctx.globalAlpha = 0.7 + ringPulse * 0.3;
+          ctx.lineWidth   = 1.6;
+          ctx.globalAlpha = 0.6 + ringPulse * 0.3;
           ctx.setLineDash([3, 4]);
           ctx.lineDashOffset = -tc * 12;
           ctx.beginPath();
@@ -2210,11 +2207,16 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
         }
 
         // Count text — sized to fit comfortably inside the bubble.
+        // Now coloured (matches the ring) since the dark inner disc
+        // is gone and a white number would float on top of the
+        // halo glow without a clear background.
         ctx.save();
         ctx.globalAlpha = bubbleAlpha;
-        const fontSize = Math.max(12, Math.min(20, r * 0.7)) * fsMult;
+        const fontSize = Math.max(13, Math.min(22, r * 0.85)) * fsMult;
         ctx.font = `700 ${fontSize}px "Roboto Mono", "SF Mono", monospace`;
-        ctx.fillStyle = "#ffffff";
+        ctx.fillStyle = s.color;
+        ctx.shadowColor = "rgba(0,0,0,0.55)";
+        ctx.shadowBlur = 6;
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
         ctx.fillText(String(s.count), bubbleX, bubbleY);
