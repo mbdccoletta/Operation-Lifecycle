@@ -46,3 +46,14 @@ Thumbs.db
 *.swo
 .idea/
 .vscode/
+
+# ── Icon source / working files ──────────────────────────────────
+# Gemini-generated source images (PNG + JPEG) used to produce the
+# final `icon.png` that AppEngine consumes. The source files are
+# kept locally for re-cropping / re-export iteration but don't need
+# to live in git — every git-tracked icon revision is preserved
+# as `icon-v0.0.XX-backup.png`, so reversions are trivial.
+Icone*.jpeg
+Icone*.png
+Icon*.jpeg
+Gemini_Generated_Image_*.png

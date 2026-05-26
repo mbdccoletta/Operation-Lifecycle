@@ -190,8 +190,8 @@ is refreshed automatically.
 ## Installation and local setup
 
 ```bash
-git clone git@github.com:mbdccoletta/Operation-Lifecycle.git
-cd Operation-Lifecycle
+git clone git@github.com:mbdccoletta/Problem-Lifecycle.git
+cd Problem-Lifecycle
 npm install
 ```
 
@@ -630,7 +630,7 @@ See `LICENSE.txt` (Apache-2.0 or as updated by the maintainer).
 ## Useful links
 
 - Production app: https://bwm98081.apps.dynatrace.com/ui/apps/my.problems.hub
-- Repository: https://github.com/mbdccoletta/Operation-Lifecycle
+- Repository: https://github.com/mbdccoletta/Problem-Lifecycle
 - dt-app docs: https://developer.dynatrace.com/
 - Strato design system: https://developer.dynatrace.com/develop/design-system/
 - DQL reference: https://docs.dynatrace.com/docs/discover-dynatrace/references/dynatrace-query-language
