@@ -2005,18 +2005,36 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
     // By chip needed — the bubbles ARE the chip, scoped to one cell).
     const bubbleHits: Array<{ cellId: string; subsetMode: ConstellationDataMode; cx: number; cy: number; r: number }> = [];
     for (const slot of layout) {
-      if (!isCellAggregated(slot.id)) continue;
+      // 0.0.109 follow-up: render sub-bubbles in EVERY cell that has at
+      // least one ACTIVE problem (was gated on `isCellAggregated`, i.e.
+      // > 100 active — but real-prd tenants are usually much quieter
+      // than that and showed no bubbles at all). On sparse cells the
+      // bubbles overlay the individual dots; on dense cells they
+      // replace them (dot pass already early-returns when
+      // `isCellAggregated`). Both surfaces stay clickable in either
+      // state — dot for the individual problem, bubble for the filtered
+      // modal.
       const subsets = cellSubsetBubbles[slot.id];
       if (!subsets || subsets.length === 0) continue;
+      // Skip totally empty cells (every subset == 0 means no active).
+      if (subsets.every((s) => s.count === 0)) continue;
       const cell = cellRects[slot.id];
       if (!cell) continue;
 
       const N = subsets.length;
       const usableW = Math.max(0, cell.w - 24);
       const spacing = usableW / N;
-      const bubbleY = cell.y + cell.h * 0.62; // sit below the title row
-      const maxR = Math.min(26, Math.max(14, spacing * 0.36));
-      const minR = 14;
+      // Sparse cells (≤ 100 active) coexist with their individual
+      // dots scattered across the cell body — put the bubbles in a
+      // footer strip and shrink them so they don't crowd the dots.
+      // Dense cells own the whole cell (dot pass returns early), so
+      // the bubbles can sit centrally at full size.
+      const dense = isCellAggregated(slot.id);
+      const bubbleY = dense ? cell.y + cell.h * 0.62 : cell.y + cell.h * 0.85;
+      const maxR = dense
+        ? Math.min(26, Math.max(14, spacing * 0.36))
+        : Math.min(14, Math.max(9,  spacing * 0.22));
+      const minR = dense ? 14 : 9;
       const maxCount = Math.max(1, ...subsets.map((s) => s.count));
 
       for (let i = 0; i < N; i++) {
