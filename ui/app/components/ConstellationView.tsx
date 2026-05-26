@@ -2088,19 +2088,21 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
         ctx.fillText(String(s.count), bubbleX, bubbleY);
         ctx.restore();
 
-        // Mode icon above the bubble — ▲ (Rising), ⏱ (Stuck),
-        // ⚡ (Critical), Σ (Total). Bumped to 14px so it reads at
-        // arm's length, with a subtle shadow so the glyph stays
-        // visible against any cell background.
+        // Mode label BELOW the bubble — "Rising", "Stuck",
+        // "Critical", "Total". 0.0.109 follow-up: the previous
+        // ▲/⏱/⚡/Σ glyphs ABOVE the bubble were both unclear
+        // ("não sei o que significam os emojis") and overlapping
+        // the cell title strip. Plain English labels under the
+        // bubble fix both.
         ctx.save();
-        ctx.font = `700 ${(14 * fsMult).toFixed(2)}px "Roboto Mono", "SF Mono", monospace`;
+        ctx.font = `600 ${(11 * fsMult).toFixed(2)}px "Inter", system-ui, sans-serif`;
         ctx.textAlign = "center";
-        ctx.textBaseline = "bottom";
+        ctx.textBaseline = "top";
         ctx.shadowColor = "rgba(0,0,0,0.6)";
         ctx.shadowBlur = 4;
         ctx.fillStyle = s.color;
         ctx.globalAlpha = 0.95;
-        ctx.fillText(s.icon, bubbleX, bubbleY - r - 4);
+        ctx.fillText(s.label, bubbleX, bubbleY + r + 4);
         ctx.restore();
       }
       // Silence unused-var warning for `pulse` — we now use the

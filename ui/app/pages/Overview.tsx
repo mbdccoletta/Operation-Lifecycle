@@ -2418,12 +2418,11 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
               </div>
             </div>
           )}
-          {/* Sub-bubble legend — explains the four icons that show
-              up inside each cell (▲ Rising, ⏱ Stuck, ⚡ Critical, Σ
+          {/* Sub-bubble legend — explains the four labels that show
+              up under each cell's bubbles (Rising, Stuck, Critical,
               Total). Replaces the old "Show By" segmented control
-              that was removed in 0.0.109 (each cell exposes the
-              breakdown locally now). Hidden in mobile to save the
-              cramped header real estate. */}
+              that was removed in 0.0.109. Hidden in mobile to save
+              the cramped header real estate. */}
           {!isMobileOrTablet && (
             <div
               role="note"
@@ -2431,35 +2430,48 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
               style={{
                 display: "flex",
                 alignItems: "center",
-                gap: 14,
-                padding: "6px 14px",
-                margin: "0 0 8px",
+                flexWrap: "wrap",
+                gap: 12,
+                padding: "8px 14px",
+                margin: "0 0 10px",
                 borderRadius: 8,
                 background: "var(--neo-surface-2)",
                 border: "1px solid var(--neo-border)",
                 color: "var(--neo-text-2)",
-                font: '500 11px/1.2 "SF Mono","JetBrains Mono",monospace',
-                letterSpacing: "0.02em",
+                font: '500 11px/1.3 "Inter", system-ui, sans-serif',
                 userSelect: "none",
               }}
             >
-              <span style={{ fontWeight: 700, color: "var(--neo-text)" }}>Each cell:</span>
+              <span style={{ fontWeight: 700, color: "var(--neo-text)", letterSpacing: "0.04em" }}>
+                Each cell groups by:
+              </span>
               {[
-                { icon: "▲", label: "Rising",   hint: "Opened in the last hour" },
-                { icon: "⏱", label: "Stuck",    hint: "Active for more than 4 hours" },
-                { icon: "⚡", label: "Critical", hint: "Severity 4 or 5" },
-                { icon: "Σ", label: "Total",    hint: "Every active problem in the cell" },
+                { label: "Rising",   hint: "Problems opened in the last hour" },
+                { label: "Stuck",    hint: "Problems active for more than 4 hours" },
+                { label: "Critical", hint: "Problems with severity 4 or 5" },
+                { label: "Total",    hint: "Every active problem in the cell" },
               ].map((m) => (
                 <span
                   key={m.label}
                   title={m.hint}
-                  style={{ display: "inline-flex", alignItems: "center", gap: 4 }}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    padding: "3px 8px",
+                    borderRadius: 999,
+                    background: "var(--neo-surface)",
+                    border: "1px solid var(--neo-border)",
+                    color: "var(--neo-text)",
+                    fontWeight: 600,
+                  }}
                 >
-                  <span style={{ fontWeight: 700, color: "var(--neo-text)" }}>{m.icon}</span>
-                  <span>{m.label}</span>
+                  {m.label}
+                  <span style={{ marginLeft: 6, fontSize: 9, opacity: 0.6, fontWeight: 500 }}>{m.hint}</span>
                 </span>
               ))}
-              <span style={{ marginLeft: "auto", opacity: 0.6 }}>Click any bubble to see its problems.</span>
+              <span style={{ marginLeft: "auto", opacity: 0.6 }}>
+                Click any bubble to see its problems.
+              </span>
             </div>
           )}
           <ConstellationView
