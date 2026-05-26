@@ -975,14 +975,12 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
     const cellY = cellYMin * size.h;
     const cellW = (cellXMax - cellXMin) * size.w;
     const cellH = (cellYMax - cellYMin) * size.h;
-    if (lockExpandedQuadrant) {
-      const scaleX = size.w / cellW;
-      const scaleY = size.h / cellH;
-      const tx = -cellX * scaleX;
-      const ty = -cellY * scaleY;
-      return { scaleX, scaleY, tx, ty };
-    }
-    const PADDING = 0.92;
+    // Always UNIFORM scaling — non-uniform stretched the dots into
+    // ellipses when the cell aspect ratio didn't match the canvas
+    // (user-reported "zoom estranho destorcendo"). The cost is a
+    // small empty band on whichever axis doesn't fill, but the dots
+    // stay circular which is the visual ground-truth users expect.
+    const PADDING = lockExpandedQuadrant ? 1.0 : 0.92;
     const scale = Math.min(size.w / cellW, size.h / cellH) * PADDING;
     const tx = size.w / 2 - (cellX + cellW / 2) * scale;
     const ty = size.h / 2 - (cellY + cellH / 2) * scale;
