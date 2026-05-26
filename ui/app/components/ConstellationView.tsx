@@ -1812,16 +1812,44 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
       const usableW = Math.max(0, cell.w - 24);
       const spacing = usableW / N;
       const bubbleY = cell.y + cell.h * 0.62; // sit below the title row
-      const maxCount = cats.reduce((m, c) => Math.max(m, c.count), 1);
       const maxR = Math.min(28, Math.max(14, spacing * 0.40));
       const minR = 12;
 
+      // ── Display-count override ───────────────────────────────────
+      // `c.count` is built from the LOADED problems array (capped at
+      // ~250 by the first-paint budget), so on cells with 100+ true
+      // active problems the bubble understates the actual volume —
+      // user reported seeing "80" inside an ERROR cell labelled
+      // "935 active" (0.0.101). `countOverrides.activeByCategory`
+      // carries the count-query value (what the header label uses).
+      //
+      // Single-category cells (Incidents view): the override IS the
+      // cell total — use it directly.
+      // Multi-category cells (Segments view): we don't have a
+      // per-category override, so scale the loaded subset
+      // proportionally to the true cell total.
+      // No override available (loading / debug): fall back to the
+      // loaded count.
+      const overrideCount = countOverrides?.activeByCategory?.[slot.id];
+      const loadedCellTotal = cats.reduce((s, x) => s + x.count, 0);
+      const getDisplayCount = (c: { count: number }): number => {
+        if (overrideCount == null) return c.count;
+        if (N === 1) return overrideCount;
+        if (loadedCellTotal <= 0) return c.count;
+        return Math.max(1, Math.round(overrideCount * (c.count / loadedCellTotal)));
+      };
+      // Radius scaling uses the display counts so the visual area
+      // matches the displayed numbers.
+      const displayCounts = cats.map(getDisplayCount);
+      const maxCount = Math.max(1, ...displayCounts);
+
       for (let i = 0; i < N; i++) {
         const c = cats[i];
+        const displayCount = displayCounts[i];
         const bubbleX = cell.x + 12 + spacing * (i + 0.5);
         // Log-based radius scaling keeps small differences visible
         // without letting a single huge count dominate.
-        const lr = Math.log10(Math.max(1, c.count)) / Math.max(1, Math.log10(maxCount));
+        const lr = Math.log10(Math.max(1, displayCount)) / Math.max(1, Math.log10(maxCount));
         const r = minR + lr * (maxR - minR);
         const isLeader = highlightSet.has(c.id);
 
@@ -1862,7 +1890,7 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
         ctx.fillStyle = "#ffffff";
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
-        ctx.fillText(String(c.count), bubbleX, bubbleY);
+        ctx.fillText(String(displayCount), bubbleX, bubbleY);
         ctx.restore();
 
         // Leader emphasis — this category contains the cell's top
