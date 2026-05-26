@@ -2387,10 +2387,17 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
       const isCentralCol = Math.abs(dx) < radius * 0.6;
       const spokes: SpokeCurve[] = [];
 
+      // Pull the comet's starting point a few extra pixels OUT past
+      // the hub ring so the packet's glow doesn't bleed INSIDE the
+      // central circle. User: "a animaçao nao pode penetrar o
+      // cirdulo. Ir até o aro apenas." 1 px was tight; bumped to
+      // `radius + COMET_OUTSET` where the outset is roughly the
+      // packet's peak radius + halo blur.
+      const COMET_OUTSET = 12;
       if (isCentralCol) {
         const sgnY  = dy < 0 ? -1 : 1;
         const sideX = dy < 0 ? 1 : -1; // top → right (ERROR), bottom → left (CUSTOM_ALERT)
-        const hubX  = cx + sideX * (radius + 1);
+        const hubX  = cx + sideX * (radius + COMET_OUTSET);
         const hubY  = cy;
         const tx    = pos.x;
         const ty    = pos.y - sgnY * 12;
@@ -2401,8 +2408,8 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
         spokes.push({ hubX, hubY, tx, ty, midX, midY, len: sdist });
       } else {
         const ux = dx / dist, uy = dy / dist;
-        const hubX = cx + ux * (radius + 1);
-        const hubY = cy + uy * (radius + 1);
+        const hubX = cx + ux * (radius + COMET_OUTSET);
+        const hubY = cy + uy * (radius + COMET_OUTSET);
         const tx   = pos.x - ux * 12;
         const ty   = pos.y - uy * 12;
         const curveAmount = Math.sqrt(Math.max(0, (3/8) * dist * (maxSpokeDist - dist))) * 0.75;
