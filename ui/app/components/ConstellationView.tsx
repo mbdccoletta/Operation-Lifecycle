@@ -1316,12 +1316,11 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
         if (!z) return;
         const rgb = HL_COLORS[cat] || "180,210,255";
 
-        // Strong diagonal gradient wash so the quadrant clearly "lights up"
-        const grad = ctx.createLinearGradient(z.x, z.y, z.x + z.w, z.y + z.h);
-        grad.addColorStop(0, `rgba(${rgb},${0.20 + ringPulse * 0.05})`);
-        grad.addColorStop(1, `rgba(${rgb},0.04)`);
-        ctx.fillStyle = grad;
-        ctx.fillRect(z.x, z.y, z.w, z.h);
+        // Background gradient wash REMOVED in 0.0.109 — user request
+        // "nao colocar fundo para destacar categoria, utilizar
+        // apenas borda." The diagonal gradient fill drowned the
+        // cell in colour; the leader cue now comes from the glow
+        // border alone (below).
 
         // Solid glow border — distinct from the dashed grid dividers
         ctx.save();
