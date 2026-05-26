@@ -268,6 +268,10 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
   /** Set when the pointer is over a clickable quadrant label strip — drives
    *  the pointer cursor so users discover the drilldown affordance. */
   const [hoveredLabel, setHoveredLabel] = useState<string | null>(null);
+  /** True when the cursor is currently inside one of the per-cell
+   *  sub-bubble hit areas — flips the OS cursor to `pointer` to
+   *  signal clickability (0.0.109 follow-up). */
+  const [hoveredBubble, setHoveredBubble] = useState(false);
   /** Set when the pointer is hovering empty space INSIDE a quadrant body
    *  (i.e. not on a dot, not on a label). Drives a floating "double-click
    *  to zoom" hint so the gesture is discoverable, and signals that the
@@ -2611,6 +2615,16 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
     // cursor changes to "pointer" — signals the drilldown affordance.
     const labelCat = onCategoryLabelClick ? detectLabelAt(world.x, world.y) : null;
     if (labelCat !== hoveredLabel) setHoveredLabel(labelCat);
+    // Same for the per-cell sub-bubbles — pointer cursor when hovering
+    // any of them so the click affordance is obvious. The cursor used
+    // to disappear here (the now-removed magnifier-lens code set
+    // cursor:none over empty quadrant area, which included bubble
+    // areas because bubbles aren't dots).
+    let overBubble = false;
+    for (const b of bubbleHitsRef.current) {
+      if (Math.hypot(mxPx - b.cx, myPx - b.cy) <= b.r) { overBubble = true; break; }
+    }
+    if (overBubble !== hoveredBubble) setHoveredBubble(overBubble);
     // Show the floating "zoom" hint only when the cursor is inside a
     // quadrant body — NOT over a dot (then the intent is select) and NOT
     // over the label strip (then the intent is drilldown to list).
@@ -2622,7 +2636,7 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
     } else if (zoomHint) {
       setZoomHint(null);
     }
-  }, [size, findStarAt, hover, hoveredLabel, onCategoryLabelClick, screenToWorld, expandedQuadrant, zoomHint]);
+  }, [size, findStarAt, hover, hoveredLabel, hoveredBubble, onCategoryLabelClick, screenToWorld, expandedQuadrant, zoomHint]);
 
   // ── Touch support — fingers don't fire mouse events, so we translate
   //    touchstart → click + hover (so a tap selects & shows the tooltip).
@@ -2726,6 +2740,7 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
         onMouseLeave={() => {
           setHover(null);
           setHoveredLabel(null);
+          setHoveredBubble(false);
           setZoomHint(null);
           hoveredQuadrantRef.current = null;
           cursorRef.current = null;
@@ -2734,16 +2749,15 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
         style={{
           width: "100%",
           height: "100%",
-          // Hover a dot or label → pointer; hover empty quadrant area →
-          // hide the OS cursor so only the canvas-drawn magnifier lens
-          // shows (skipped when the lens is disabled); anywhere else
-          // (hub band, RESOLVED zone) → default.
+          // Pointer cursor over any clickable canvas element:
+          // a dot (hover), a category label strip (hoveredLabel),
+          // or a sub-bubble (hoveredBubble). Otherwise the default
+          // OS arrow. The previous `cursor:none` branch (when the
+          // pointer sat in empty quadrant area) was a leftover from
+          // the now-removed magnifier-lens visual — user reported
+          // the cursor was vanishing on bubble hover (0.0.109).
           cursor:
-            hover || hoveredLabel
-              ? "pointer"
-              : (zoomHint && !disableMagnifierLens)
-                ? "none"
-                : "default",
+            hover || hoveredLabel || hoveredBubble ? "pointer" : "default",
           touchAction: "manipulation", // disables double-tap zoom on the canvas
         }}
       />
