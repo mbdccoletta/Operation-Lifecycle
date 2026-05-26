@@ -2088,15 +2088,26 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
       const usableW = Math.max(0, cell.w - 24);
       const spacing = usableW / N;
       // Bubble geometry — all bubbles SAME radius by default (user
-      // 0.0.109 request: "inicialmente todos os grupos devem possuir
-      // o mesmo tamanho. Só destacar se selecionar o grupo no
-      // filtro"). The legend chip selection (`highlightedSubsetMode`)
-      // is what grows the matching bubble; everything else stays at
-      // `baseR`. Previously the radius scaled with log(count) which
-      // made a high-count bubble visually dominate even before any
-      // filter was applied.
-      const bubbleY = cell.y + cell.h * 0.5;
-      const baseR = Math.min(28, Math.max(18, spacing * 0.32));
+      // request: "inicialmente todos os grupos devem possuir o
+      // mesmo tamanho").
+      // 0.0.109 follow-up — compute the bubble Y + radius FROM the
+      // cell's safe interior so the bubble + ring + label all fit
+      // between the cell title at the top and the cell border at
+      // the bottom. User reported the highlight ring overlapping
+      // both the title row and the cell divider lines on shorter
+      // cells.
+      const TITLE_PAD = 28; // reserved for the "ERROR 1 active" title strip
+      const LABEL_PAD = 28; // reserved for the bubble label ("Rising") below
+      const safeTop = cell.y + TITLE_PAD;
+      const safeBot = cell.y + cell.h - LABEL_PAD;
+      const bubbleY = (safeTop + safeBot) / 2;
+      // baseR bounded by both horizontal spacing AND vertical safe
+      // height — the second cap kicks in on tight rows (small
+      // viewports, multi-row grids). Highlight boost (1.25) is
+      // baked into the cap so the boosted ring still fits.
+      const HIGHLIGHT_BOOST = 1.25;
+      const verticalCap = Math.max(10, (safeBot - safeTop) / 2 / HIGHLIGHT_BOOST - 6);
+      const baseR = Math.min(28, Math.max(14, Math.min(spacing * 0.32, verticalCap)));
       // Gentle breathing pulse — one cycle every ~3 s, ±6 % radius.
       // Adds a sense of liveness without distracting from the count
       // ("colocar animação nos agrupamentos" user request).
@@ -2125,7 +2136,7 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
           && s.mode === highlightedSubsetMode;
         const isHighlighted = matchesMode && s.count > 0;
         const isDimmed = highlightedSubsetMode !== null && !isHighlighted;
-        const highlightBoost = isHighlighted ? 1.30 : 1;
+        const highlightBoost = isHighlighted ? HIGHLIGHT_BOOST : 1;
         const r = baseR
           * (1 + Math.sin(tc * 2.1 + phaseOffset) * 0.06)
           * highlightBoost;
@@ -2223,11 +2234,10 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
         ctx.shadowBlur = 4;
         ctx.fillStyle = s.color;
         ctx.globalAlpha = bubbleAlpha * 0.95;
-        // Label sits below the bubble. 18px gap keeps the label
-        // clear of the highlighted ring (extends ~7px past the
-        // bubble radius and pulses) under every phase. 12px was
-        // still tight at peak pulse — user reported overlap again.
-        ctx.fillText(s.label, bubbleX, bubbleY + r + 18);
+        // Label sits below the bubble at a fixed offset from the
+        // SAFE-BOTTOM position so it always lands inside LABEL_PAD
+        // (defined above as 28 px) — clear of the cell divider line.
+        ctx.fillText(s.label, bubbleX, safeBot + 4);
         ctx.restore();
       }
       // Silence unused-var warning for `pulse` — we now use the
