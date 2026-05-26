@@ -648,22 +648,42 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
    *       Segments page case), aggregate as soon as the dots wouldn't
    *       fit comfortably in the available pixel area.
    *  The per-dot allowance includes breathing room so dots aren't
-   *  packed shoulder-to-shoulder. */
+   *  packed shoulder-to-shoulder.
+   *
+   *  IMPORTANT — source of truth for the count check:
+   *  `cellAggregations` is built from the LOADED problems array
+   *  (which is capped at ~250 by the first-paint budget). When the
+   *  real count for a cell exceeds that cap, the loaded subset
+   *  understates how busy the cell actually is — and the dots
+   *  drawn for it look like a sparse set, even though the
+   *  category-counts query knows it's actually 1000+.
+   *
+   *  Fix: prefer `countOverrides.activeByCategory[cellId]` (the
+   *  count-query value — what the user SEES in the cell header)
+   *  over the loaded-subset sum. Fall back to the subset only when
+   *  no override is available (debug / loading states). This makes
+   *  the 100-threshold gate the actual cell volume, not whatever
+   *  fraction of it happens to have loaded yet. */
   const AGG_COUNT_THRESHOLD = 100;
   const isCellAggregated = useCallback((cellId: string): boolean => {
     const agg = cellAggregations[cellId];
-    if (!agg || agg.length === 0) return false;
-    const total = agg.reduce((s, c) => s + c.count, 0);
+    const overrideCount = countOverrides?.activeByCategory?.[cellId];
+    const loadedTotal = agg ? agg.reduce((s, c) => s + c.count, 0) : 0;
+    // Prefer the count-query value. `overrideCount` is the cell's
+    // ACTUAL active count (matches the header label); `loadedTotal`
+    // is only the subset that fits inside the first-paint budget.
+    const total = overrideCount ?? loadedTotal;
+    if (total <= 0) return false;
     if (total > AGG_COUNT_THRESHOLD) return true;
     // Capacity fallback — only useful for multi-category cells.
     // Single-category cells under the count threshold render their
     // dots; collapsing them to one bubble adds no extra information.
-    if (agg.length <= 1) return false;
+    if (!agg || agg.length <= 1) return false;
     const area  = cellPixelAreas[cellId] || 0;
     const PER_DOT_AREA = isMobileOrTablet ? 520 : 400;
     const capacity = Math.max(20, Math.floor(area / PER_DOT_AREA));
     return total > capacity;
-  }, [cellAggregations, cellPixelAreas, isMobileOrTablet]);
+  }, [cellAggregations, cellPixelAreas, isMobileOrTablet, countOverrides]);
 
   /** Per-drilled-cell subset-top info. For each cell that the user has
    *  drilled into a single category, compute the top-tier ordered list
