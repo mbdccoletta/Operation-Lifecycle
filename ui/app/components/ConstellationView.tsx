@@ -716,6 +716,40 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
     return out;
   }, [stars, expandedCellCategory]);
 
+  /** Per-cluster count of currently-rendered stars, with a flag for
+   *  "too dense for the magnifier lens to work." Counts only stars
+   *  that will actually be drawn (drilled cells: only the matching
+   *  category; aggregated-not-drilled cells: zero; otherwise: all).
+   *
+   *  Why this exists (0.0.102):
+   *  The magnifier lens scales every dot in the cursor's quadrant by
+   *  ~1.2–2.4×. In a drilled cell with hundreds of dots (e.g. ERROR
+   *  category with 1155 active → ~250 dots drawn in the drilled
+   *  subset), the lens stacks every dot's glow into a single bright
+   *  flare that hides the dots underneath — user reported "clarão"
+   *  on hover, can't read the individual problems. Above this
+   *  threshold we skip the lens so dots stay at baseline size; the
+   *  user reads individual dots normally and uses click-to-expand
+   *  for the modal view. */
+  const LENS_DENSITY_CAP = 50;
+  const denseClusters: Set<string> = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const star of stars) {
+      const drillCat = expandedCellCategory[star.cluster];
+      if (drillCat) {
+        if (star.problem["event.category"] !== drillCat) continue;
+      } else if (isCellAggregated(star.cluster)) {
+        continue;
+      }
+      counts[star.cluster] = (counts[star.cluster] || 0) + 1;
+    }
+    const dense = new Set<string>();
+    for (const [cluster, n] of Object.entries(counts)) {
+      if (n > LENS_DENSITY_CAP) dense.add(cluster);
+    }
+    return dense;
+  }, [stars, expandedCellCategory, isCellAggregated]);
+
   /** Per-cell set of Davis category ids whose bubble should be
    *  emphasised in aggregated mode. Mirrors the cell-level top-tier
    *  computation that's already driven by the active Show By mode:
@@ -1696,13 +1730,22 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
       // the user can comfortably aim at any of them — not just the ones
       // immediately under the cursor. Dots closer to the cursor still get
       // an extra boost (smoothstep falloff) so dense clusters can be
-      // picked apart visually. Skipped entirely when the host disables
-      // the lens (e.g. the enlarged-quadrant modal already shows dots
-      // at a comfortable size).
+      // picked apart visually. Skipped entirely when:
+      //   - the host disables the lens (enlarged-quadrant modal already
+      //     shows dots at a comfortable size), or
+      //   - the cursor's quadrant is in `denseClusters` (too many dots
+      //     for the lens to help — see the denseClusters memo for the
+      //     0.0.102 "clarão" report).
       let proximityScale = 1;
       const cursor = cursorRef.current;
       const cursorQuad = cursor ? detectQuadrantAt(cursor.x, cursor.y) : null;
-      if (!disableMagnifierLens && cursor && cursorQuad && cursorQuad === star.cluster) {
+      if (
+        !disableMagnifierLens
+        && cursor
+        && cursorQuad
+        && cursorQuad === star.cluster
+        && !denseClusters.has(cursorQuad)
+      ) {
         const qb = slotById[cursorQuad]?.bounds;
         if (qb) {
         // Diagonal of the cell (px) — used to normalize distance so the
@@ -2279,7 +2322,7 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
   }, [size, dk, selectedId, problems, dataMode, stars, expandedQuadrant, hoveredLabel,
       groupings, resolveGrouping, layout, layoutBounds, slotById, colorOf, labelById, detectQuadrantAt, detectLabelAt, showHub,
       cellAggregations, isCellAggregated, expandedCellCategory, isMobileOrTablet,
-      highlightedCategoriesPerCell, drilledSubsets,
+      highlightedCategoriesPerCell, drilledSubsets, denseClusters,
       // `fontScale` drives `fsMult` inside the draw fn — re-bind so
       // a change in the Display panel triggers a fresh closure on
       // the very next render.
