@@ -2108,38 +2108,26 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
       const HIGHLIGHT_BOOST = 1.25;
       const verticalCap = Math.max(10, (safeBot - safeTop) / 2 / HIGHLIGHT_BOOST - 6);
       const baseR = Math.min(28, Math.max(14, Math.min(spacing * 0.32, verticalCap)));
-      // Gentle breathing pulse — one cycle every ~3 s, ±6 % radius.
-      // Adds a sense of liveness without distracting from the count
-      // ("colocar animação nos agrupamentos" user request).
-      const pulse = 1 + Math.sin(tc * 2.1) * 0.06;
+      // Bubble animation removed — user 0.0.109 follow-up: "porem
+      // sem animacao". The earlier breathing pulse (±6 % radius)
+      // and the dashed-rotating focus ring both made highlighted
+      // bubbles read as "loading" instead of "this is selected".
 
       for (let i = 0; i < N; i++) {
         const s = subsets[i];
         const bubbleX = cell.x + 12 + spacing * (i + 0.5);
-        // Each bubble pulses slightly out of phase so the row feels
-        // alive without the four bubbles moving in lock-step.
-        const phaseOffset = i * 0.5;
         // Highlight state: this bubble matches the active legend
-        // chip → bigger + brighter, with a dashed pulsing ring around
-        // it. Others get dimmed so the eye latches onto the
-        // highlighted set across every cell at once.
-        //
-        // 0.0.109 follow-up: only call out matching bubbles that
-        // actually have data (count > 0). User reported that with
-        // Rising selected as default, cells whose Rising count was 0
-        // STILL got the highlight ring — calling attention to a zero
-        // is the opposite of helpful ("nao entendi pq esta
-        // destacando categorias que nao estao tendo aumento"). When
-        // the match has zero, the bubble dims along with the
-        // non-matching ones so the user's eye skips it entirely.
+        // chip → bigger + brighter outline. Others get dimmed.
+        // 0.0.109 follow-up: only highlight when count > 0 (calling
+        // attention to zero is the opposite of helpful).
         const matchesMode = highlightedSubsetMode !== null
           && s.mode === highlightedSubsetMode;
         const isHighlighted = matchesMode && s.count > 0;
         const isDimmed = highlightedSubsetMode !== null && !isHighlighted;
         const highlightBoost = isHighlighted ? HIGHLIGHT_BOOST : 1;
-        const r = baseR
-          * (1 + Math.sin(tc * 2.1 + phaseOffset) * 0.06)
-          * highlightBoost;
+        // Static radius — no breathing pulse. User asked for the
+        // highlighted look without animation ("porem sem animacao").
+        const r = baseR * highlightBoost;
 
         // Hit area: use the un-pulsed radius so the click target stays
         // steady even when the bubble breathes.
@@ -2202,22 +2190,20 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
         ctx.stroke();
         ctx.restore();
 
-        // Highlighted-mode focus ring — animated dashed circle
-        // OUTSIDE the bubble ring. Skipped when no mode is
-        // selected so dimmed/un-selected bubbles stay clean.
+        // Highlighted-mode focus ring — STATIC outline (no longer
+        // animated). User: "manter mesmo tom do circulo destacado,
+        // porem sem animacao". The dashed ring rotated and pulsed
+        // by tc, drawing more attention than the highlight itself
+        // deserved. Replaced with a solid outer ring at fixed
+        // radius + alpha so the visual cue stays clean.
         if (isHighlighted) {
-          const ringPulse = (Math.sin(tc * 1.8) + 1) / 2;
-          const ringR     = r + 5 + ringPulse * 3;
           ctx.save();
           ctx.strokeStyle = s.color;
           ctx.lineWidth   = 1.6;
-          ctx.globalAlpha = 0.65 + ringPulse * 0.3;
-          ctx.setLineDash([3, 4]);
-          ctx.lineDashOffset = -tc * 12;
+          ctx.globalAlpha = 0.85;
           ctx.beginPath();
-          ctx.arc(bubbleX, bubbleY, ringR, 0, Math.PI * 2);
+          ctx.arc(bubbleX, bubbleY, r + 6, 0, Math.PI * 2);
           ctx.stroke();
-          ctx.setLineDash([]);
           ctx.restore();
         }
 
@@ -2257,9 +2243,6 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
         ctx.fillText(s.label, bubbleX, safeBot + 4);
         ctx.restore();
       }
-      // Silence unused-var warning for `pulse` — we now use the
-      // per-bubble out-of-phase pulse inside the loop instead.
-      void pulse;
     }
     } // close `if (!disableAggregation)` bubble-pass gate
     bubbleHitsRef.current = bubbleHits;
