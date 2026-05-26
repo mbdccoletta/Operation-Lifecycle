@@ -2052,12 +2052,16 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
       const N = subsets.length;
       const usableW = Math.max(0, cell.w - 24);
       const spacing = usableW / N;
-      // Bubble geometry — bumped up in 0.0.109 follow-up so the
-      // bubbles read clearly without zooming the browser.
+      // Bubble geometry — all bubbles SAME radius by default (user
+      // 0.0.109 request: "inicialmente todos os grupos devem possuir
+      // o mesmo tamanho. Só destacar se selecionar o grupo no
+      // filtro"). The legend chip selection (`highlightedSubsetMode`)
+      // is what grows the matching bubble; everything else stays at
+      // `baseR`. Previously the radius scaled with log(count) which
+      // made a high-count bubble visually dominate even before any
+      // filter was applied.
       const bubbleY = cell.y + cell.h * 0.5;
-      const maxR = Math.min(36, Math.max(18, spacing * 0.42));
-      const minR = 18;
-      const maxCount = Math.max(1, ...subsets.map((s) => s.count));
+      const baseR = Math.min(28, Math.max(18, spacing * 0.32));
       // Gentle breathing pulse — one cycle every ~3 s, ±6 % radius.
       // Adds a sense of liveness without distracting from the count
       // ("colocar animação nos agrupamentos" user request).
@@ -2066,9 +2070,6 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
       for (let i = 0; i < N; i++) {
         const s = subsets[i];
         const bubbleX = cell.x + 12 + spacing * (i + 0.5);
-        // Log-based radius scaling — keeps small subsets readable
-        // when one (usually Total) dominates the cell.
-        const lr = Math.log10(Math.max(1, s.count)) / Math.max(1, Math.log10(maxCount));
         // Each bubble pulses slightly out of phase so the row feels
         // alive without the four bubbles moving in lock-step.
         const phaseOffset = i * 0.5;
@@ -2080,14 +2081,14 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
         const isHighlighted = highlightedSubsetMode !== null
           && s.mode === highlightedSubsetMode;
         const isDimmed = highlightedSubsetMode !== null && !isHighlighted;
-        const highlightBoost = isHighlighted ? 1.15 : 1;
-        const r = (minR + lr * (maxR - minR))
+        const highlightBoost = isHighlighted ? 1.30 : 1;
+        const r = baseR
           * (1 + Math.sin(tc * 2.1 + phaseOffset) * 0.06)
           * highlightBoost;
 
-        // Hit area: use the AVERAGE radius (un-pulsed) so the click
-        // target stays steady even when the bubble breathes.
-        const rHit = (minR + lr * (maxR - minR)) * highlightBoost;
+        // Hit area: use the un-pulsed radius so the click target stays
+        // steady even when the bubble breathes.
+        const rHit = baseR * highlightBoost;
         bubbleHits.push({ cellId: slot.id, subsetMode: s.mode, cx: bubbleX, cy: bubbleY, r: rHit });
 
         // Set up per-bubble alpha for the highlight cue. Drawn-with-
