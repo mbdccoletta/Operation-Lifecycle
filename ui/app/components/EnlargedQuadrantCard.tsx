@@ -95,6 +95,13 @@ export const EnlargedQuadrantCard = ({
   // Oldest = stale, Criticality = severe, Total = all). The rest go
   // into a "+N others" bubble overlay (rendered below the canvas).
   //
+  // Only applied when the cell is dense enough that showing all
+  // dots would be unreadable — for sparse cells (≤ 100 active, the
+  // same threshold that triggers the aggregation bubble) we render
+  // every problem as an individual dot. User reported a 4-active
+  // AVAILABILITY cell where the Rising filter showed "0 active"
+  // and pushed all 4 into "+4 others" — pointless for that volume.
+  //
   // Per-mode predicate on an active problem:
   //   • rising      → opened in the last hour (matches the cell
   //                   header's +N /1h badge semantically — "the new
@@ -105,7 +112,10 @@ export const EnlargedQuadrantCard = ({
   //                   AT-A-GLANCE card already uses).
   //   • criticality → severity_level ≥ 4 (high or critical).
   //   • total       → everyone (no filter).
+  const ACTIVE_COUNT_THRESHOLD = 100; // matches AGG_COUNT_THRESHOLD in ConstellationView
+  const shouldFilterByMode = activeProblems.length > ACTIVE_COUNT_THRESHOLD;
   const shownActive = useMemo(() => {
+    if (!shouldFilterByMode) return activeProblems;
     const now = Date.now();
     return activeProblems.filter((p) => {
       switch (dataMode) {
@@ -126,7 +136,7 @@ export const EnlargedQuadrantCard = ({
           return true;
       }
     });
-  }, [activeProblems, dataMode]);
+  }, [activeProblems, dataMode, shouldFilterByMode]);
 
   const restCount = activeProblems.length - shownActive.length;
 
