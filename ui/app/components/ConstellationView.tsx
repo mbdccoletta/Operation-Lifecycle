@@ -1707,11 +1707,16 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
     const RADIUS_BASE_DRAW = isMobileOrTablet ? 7   : 5.5;
     const RADIUS_TOP_DRAW  = isMobileOrTablet ? 11.5 : 10;
 
-    // Draw stars. Two rendering modes (0.0.105):
-    //   • Aggregated cell (whether drilled or not) → render only the
-    //     top `DENSE_DRILL_CAP` stars by the active Show By score,
-    //     drawn from `aggregatedTopByCell`. The bubble pass below
-    //     keeps showing the cell's full count for the rest.
+    // Draw stars. Three rendering modes (0.0.107 — progressive disclosure):
+    //   • Aggregated cell, NOT drilled → render NOTHING. The cell
+    //     shows only the aggregation bubble (category total). The
+    //     user must drill in to see anything individual.
+    //   • Aggregated cell, drilled → render only the top
+    //     `DENSE_DRILL_CAP` stars ranked by the active Show By
+    //     score (the "Rising" / "Oldest" / "Critical" leaders).
+    //     The bubble pass below keeps showing a smaller bubble for
+    //     the REST (`total − shown`), preserving the "manter os
+    //     demais agrupados" cue.
     //   • Sparse cell → render every star as usual (no cap, no
     //     bubble — the cell already has room for all of its dots).
     currentStars.forEach((star) => {
@@ -1721,6 +1726,8 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
       // filter on the LEADER side, so the two stay in sync.
       if (drillCat && star.problem["event.category"] !== drillCat) return;
       if (isCellAggregated(star.cluster)) {
+        // Collapsed aggregated cell = bubble-only (no individual dots).
+        if (!drillCat) return;
         const allowed = aggregatedTopByCell[star.cluster];
         if (!allowed || !allowed.has(star.id)) return;
       }
@@ -1880,13 +1887,28 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
       // proportionally to the true cell total.
       // No override available (loading / debug): fall back to the
       // loaded count.
+      //
+      // 0.0.107 — Drilled bubble represents "the rest":
+      // When the cell is drilled, the dot pass renders `shownDots`
+      // individual leaders. The bubble then represents only the
+      // PROBLEMS NOT SHOWN as individual dots — `total − shownDots`.
+      // Matches the user's mental model: "show details of the
+      // leaders + keep the rest grouped."
       const overrideCount = countOverrides?.activeByCategory?.[slot.id];
       const loadedCellTotal = cats.reduce((s, x) => s + x.count, 0);
+      const isDrilled = !!expandedCellCategory[slot.id];
+      const shownDotsInCell = isDrilled ? (aggregatedTopByCell[slot.id]?.size ?? 0) : 0;
       const getDisplayCount = (c: { count: number }): number => {
-        if (overrideCount == null) return c.count;
-        if (N === 1) return overrideCount;
-        if (loadedCellTotal <= 0) return c.count;
-        return Math.max(1, Math.round(overrideCount * (c.count / loadedCellTotal)));
+        let base: number;
+        if (overrideCount == null) base = c.count;
+        else if (N === 1) base = overrideCount;
+        else if (loadedCellTotal <= 0) base = c.count;
+        else base = Math.max(1, Math.round(overrideCount * (c.count / loadedCellTotal)));
+        // Subtract the leaders rendered as individual dots — single-
+        // category cells only (multi-category cells don't know how
+        // many of `shownDotsInCell` belong to each category).
+        if (isDrilled && N === 1) base = Math.max(0, base - shownDotsInCell);
+        return base;
       };
       // Radius scaling uses the display counts so the visual area
       // matches the displayed numbers.
@@ -2390,12 +2412,15 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
     starsRef.current.forEach((star) => {
       // Mirror the draw-loop skip rules so hover / click don't latch
       // onto invisible dots in aggregated cells.
-      // 0.0.105: mirrors the draw-loop's `aggregatedTopByCell` cap —
-      // aggregated cells render only the top-N leaders, so the
-      // hit-test must ignore the capped-out dots too.
+      // 0.0.107: mirrors the draw-loop's progressive disclosure —
+      //   • aggregated + not drilled → no dots are drawn at all,
+      //     so every star in the cell is hit-test-invisible.
+      //   • aggregated + drilled → only leaders in
+      //     `aggregatedTopByCell` are visible / clickable.
       const drillCat = expandedCellCategory[star.cluster];
       if (drillCat && star.problem["event.category"] !== drillCat) return;
       if (isCellAggregated(star.cluster)) {
+        if (!drillCat) return;
         const allowed = aggregatedTopByCell[star.cluster];
         if (!allowed || !allowed.has(star.id)) return;
       }
