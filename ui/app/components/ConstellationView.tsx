@@ -732,7 +732,7 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
    *  of those = solid orange smear). User reported "com mais de
    *  1000 já não consigo ver nada" on a drilled ERROR cell with
    *  1 200 active. Above the cap we ALSO render only the top-tier
-   *  subset of dots (`DENSE_DRILL_CAP` cap, see `denseDrillAllowed`
+   *  subset of dots (`DENSE_DRILL_CAP` cap, see `aggregatedTopByCell`
    *  below) and keep the aggregation bubble visible alongside, so
    *  the cell reads as "bubble + a handful of leaders" instead of a
    *  flare. */
@@ -755,23 +755,52 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
     return dense;
   }, [stars, expandedCellCategory, isCellAggregated]);
 
-  /** When a drilled cell is dense, allow only the top N stars by
-   *  score to render. The rest collapse back into the aggregation
-   *  bubble (which the bubble pass keeps visible for dense cells).
-   *  30 dots leaves enough room for top-tier picks to be aim-able;
-   *  going higher reintroduces the overlap blur on small inline
-   *  cells (the modal has more room but uses the same cap so both
-   *  views read consistently). */
+  /** For every AGGREGATED cell, pre-compute the top N stars ranked by
+   *  the active Show By mode's score. The dot pass + hit-test only
+   *  let these stars through; the bubble pass shows a count for the
+   *  rest. Applies whether the user has drilled or not — the cell
+   *  is always "leaders + bubble" once aggregated.
+   *
+   *  Why this exists (0.0.105):
+   *  0.0.104 capped the DRILLED-only case at top 30, but the user
+   *  asked to push the same logic to the NON-DRILLED collapsed view
+   *  as well. Rationale: in a tenant with thousands of active
+   *  problems, the whole purpose of the Show By selector is to pick
+   *  WHICH problems matter most under the current lens (rising vs
+   *  oldest vs critical). Pre-filtering the canvas by that lens
+   *  ("ja deixar pre-agrupado") gives the user a stable, readable
+   *  set of dots from the moment the page loads — no need to click
+   *  the bubble to see the leaders. The bubble continues to carry
+   *  the cell's full count so the user knows how big the category
+   *  actually is.
+   *
+   *  Cap rationale: 30 leaders fit comfortably in both inline cells
+   *  and the modal. Below 30 starts to feel sparse; above 30 the
+   *  overlap blur creeps back in (per the 0.0.104 report). */
   const DENSE_DRILL_CAP = 30;
-  const denseDrillAllowed: Record<string, Set<string>> = useMemo(() => {
+  const aggregatedTopByCell: Record<string, Set<string>> = useMemo(() => {
+    // Group all stars by their cluster, applying the drill filter
+    // (when a cell is drilled, only stars of the chosen category
+    // count toward its leader pool).
+    const byCluster: Record<string, Star[]> = {};
+    for (const star of stars) {
+      if (!isCellAggregated(star.cluster)) continue;
+      const drillCat = expandedCellCategory[star.cluster];
+      if (drillCat && star.problem["event.category"] !== drillCat) continue;
+      if (!byCluster[star.cluster]) byCluster[star.cluster] = [];
+      byCluster[star.cluster].push(star);
+    }
     const out: Record<string, Set<string>> = {};
-    for (const cluster of denseClusters) {
-      const topOrdered = drilledSubsets[cluster]?.topOrdered;
-      if (!topOrdered || topOrdered.length === 0) continue;
-      out[cluster] = new Set(topOrdered.slice(0, DENSE_DRILL_CAP));
+    for (const [cluster, cellStars] of Object.entries(byCluster)) {
+      // Sort by current Show By score (descending) — `star.score` is
+      // already computed per active dataMode upstream, so this respects
+      // the user's current lens (Rising / Oldest Open / Criticality /
+      // Total) without re-computing anything.
+      const sorted = [...cellStars].sort((a, b) => b.score - a.score);
+      out[cluster] = new Set(sorted.slice(0, DENSE_DRILL_CAP).map((s) => s.id));
     }
     return out;
-  }, [denseClusters, drilledSubsets]);
+  }, [stars, isCellAggregated, expandedCellCategory]);
 
   /** Per-cell set of Davis category ids whose bubble should be
    *  emphasised in aggregated mode. Mirrors the cell-level top-tier
@@ -1717,25 +1746,22 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
     const RADIUS_BASE_DRAW = isMobileOrTablet ? 7   : 5.5;
     const RADIUS_TOP_DRAW  = isMobileOrTablet ? 11.5 : 10;
 
-    // Draw stars. Three rendering modes:
-    //   • Category-drilled cell → render ONLY dots of the chosen
-    //     category, swapping each star's radius for the subset-top
-    //     treatment so the highlight reflects the drilled view.
-    //     0.0.104: when the drilled cluster is DENSE (> 50 dots),
-    //     cap rendering to the top `DENSE_DRILL_CAP` stars by score
-    //     so the user doesn't get a 1 000-dot bokeh blur. The
-    //     bubble pass below keeps showing the aggregation count.
-    //   • Aggregated cell (not drilled) → render NOTHING. The cell
-    //     shows only the category bubbles until the user drills in.
-    //   • Otherwise → render every dot as usual.
+    // Draw stars. Two rendering modes (0.0.105):
+    //   • Aggregated cell (whether drilled or not) → render only the
+    //     top `DENSE_DRILL_CAP` stars by the active Show By score,
+    //     drawn from `aggregatedTopByCell`. The bubble pass below
+    //     keeps showing the cell's full count for the rest.
+    //   • Sparse cell → render every star as usual (no cap, no
+    //     bubble — the cell already has room for all of its dots).
     currentStars.forEach((star) => {
       const drillCat = expandedCellCategory[star.cluster];
-      if (drillCat) {
-        if (star.problem["event.category"] !== drillCat) return;
-        const allowed = denseDrillAllowed[star.cluster];
-        if (allowed && !allowed.has(star.id)) return;
-      } else if (isCellAggregated(star.cluster)) {
-        return;
+      // Drilled state still filters by category, even for aggregated
+      // cells — the `aggregatedTopByCell` memo applies the same
+      // filter on the LEADER side, so the two stay in sync.
+      if (drillCat && star.problem["event.category"] !== drillCat) return;
+      if (isCellAggregated(star.cluster)) {
+        const allowed = aggregatedTopByCell[star.cluster];
+        if (!allowed || !allowed.has(star.id)) return;
       }
       // Override the per-star radius + top flag when this dot is part
       // of a category-drilled subset (different top-tier than the cell-
@@ -1873,15 +1899,16 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
     const bubbleHits: Array<{ cellId: string; categoryId: string; cx: number; cy: number; r: number }> = [];
     for (const slot of layout) {
       if (!isCellAggregated(slot.id)) continue;
-      // Drilled cells normally skip the bubble pass — the user has
-      // committed to seeing individual dots and the bubble would just
-      // crowd the canvas. 0.0.104 exception: dense drilled cells only
-      // render the top-tier subset of dots (see DENSE_DRILL_CAP), so
-      // the bubble stays visible to communicate the full cell count
-      // (the user reads it as "<TOP_N> leaders + bubble of <COUNT>"
-      // instead of being stranded with no idea how big the category
-      // actually is).
-      if (expandedCellCategory[slot.id] && !denseClusters.has(slot.id)) continue;
+      // 0.0.105: aggregated cells always show the bubble alongside
+      // the top-N leaders (regardless of drill state). The bubble
+      // carries the cell's full count so the user knows how big
+      // the category is even when only ~30 dots render. Drilled
+      // state still affects WHICH leaders show (filtered by
+      // category, see the dot pass + aggregatedTopByCell), just
+      // not the bubble's visibility.
+      //
+      // (No `continue` here — the bubble pass runs for every
+      // aggregated cell now.)
       const cats = cellAggregations[slot.id];
       if (!cats || cats.length === 0) continue;
       const cell = cellRects[slot.id];
@@ -2359,7 +2386,7 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
   }, [size, dk, selectedId, problems, dataMode, stars, expandedQuadrant, hoveredLabel,
       groupings, resolveGrouping, layout, layoutBounds, slotById, colorOf, labelById, detectQuadrantAt, detectLabelAt, showHub,
       cellAggregations, isCellAggregated, expandedCellCategory, isMobileOrTablet,
-      highlightedCategoriesPerCell, drilledSubsets, denseClusters, denseDrillAllowed,
+      highlightedCategoriesPerCell, drilledSubsets, denseClusters, aggregatedTopByCell,
       // `fontScale` drives `fsMult` inside the draw fn — re-bind so
       // a change in the Display panel triggers a fresh closure on
       // the very next render.
@@ -2419,16 +2446,15 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
     const minTouchHitPx = isTouch ? 22 : 12;
     starsRef.current.forEach((star) => {
       // Mirror the draw-loop skip rules so hover / click don't latch
-      // onto invisible dots in aggregated or category-drilled cells.
-      // 0.0.104: mirror the draw-loop's DENSE_DRILL_CAP — invisible
-      // capped-out dots shouldn't be clickable either.
+      // onto invisible dots in aggregated cells.
+      // 0.0.105: mirrors the draw-loop's `aggregatedTopByCell` cap —
+      // aggregated cells render only the top-N leaders, so the
+      // hit-test must ignore the capped-out dots too.
       const drillCat = expandedCellCategory[star.cluster];
-      if (drillCat) {
-        if (star.problem["event.category"] !== drillCat) return;
-        const allowed = denseDrillAllowed[star.cluster];
-        if (allowed && !allowed.has(star.id)) return;
-      } else if (isCellAggregated(star.cluster)) {
-        return;
+      if (drillCat && star.problem["event.category"] !== drillCat) return;
+      if (isCellAggregated(star.cluster)) {
+        const allowed = aggregatedTopByCell[star.cluster];
+        if (!allowed || !allowed.has(star.id)) return;
       }
       const dx = mxNorm - star.x;
       const dy = myNorm - star.y;
@@ -2445,7 +2471,7 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
       }
     });
     return closest;
-  }, [size, isTouch, expandedCellCategory, isCellAggregated, denseDrillAllowed]);
+  }, [size, isTouch, expandedCellCategory, isCellAggregated, aggregatedTopByCell]);
 
   // Maps screen-normalized coords (0..1) to world coords, inverting the
   // expanded-quadrant view transform when active. Used so click/hover work
