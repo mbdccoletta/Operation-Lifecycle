@@ -2454,7 +2454,7 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
               {([
                 { mode: "rising"      as const, label: "Rising",   hint: "Problems opened in the last hour" },
                 { mode: "open_time"   as const, label: "Stuck",    hint: "Problems active for more than 4 hours" },
-                { mode: "criticality" as const, label: "Critical", hint: "Problems with severity 4 or 5" },
+                { mode: "criticality" as const, label: "Critical", hint: "Davis Sev 1 — AVAILABILITY + MONITORING_UNAVAIL." },
               ]).map((m) => {
                 const isActive = highlightedSubsetMode === m.mode;
                 return (

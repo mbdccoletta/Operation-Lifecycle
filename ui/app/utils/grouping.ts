@@ -45,6 +45,55 @@ export const CATEGORY_COLOR_BY_ID: Record<string, string> = Object.fromEntries(
   CATEGORY_GROUPINGS.map((g) => [g.id, g.color]),
 );
 
+/** Davis AI severity → category mapping. Per the official Davis
+ *  documentation:
+ *    Sev 1 (Critical, 🔴) — total outage, no workaround
+ *        AVAILABILITY, MONITORING_UNAVAILABLE
+ *    Sev 2 (High, 🟠)     — partial downtime, severe degradation
+ *        ERROR, SLOWDOWN, RESOURCE_CONTENTION
+ *    Sev 3 (Medium, 🟡)   — non-critical impact, workaround exists
+ *        CUSTOM_ALERT  (custom alerts the user configured)
+ *    Sev 4 (Low, 🔵)      — informational, no active alert
+ *        INFO, WARNING  (we don't fetch these today)
+ *
+ *  Note that the Davis spec lists SLOWDOWN and RESOURCE_CONTENTION
+ *  under BOTH Sev 2 (severe) and Sev 3 (moderate). We can't tell the
+ *  two intensities apart from the category alone — the moderate
+ *  flavours would need either a separate `event.severity` numeric
+ *  field per record, or the `problem.severity` label that Davis
+ *  attaches in the native UI. For now we put them at Sev 2 since
+ *  that matches the worst case the category can represent. */
+export type DavisSeverity = 1 | 2 | 3 | 4;
+export const SEVERITY_CATEGORIES: Record<DavisSeverity, string[]> = {
+  1: ["AVAILABILITY", "MONITORING_UNAVAILABLE"],
+  2: ["ERROR", "SLOWDOWN", "RESOURCE_CONTENTION"],
+  3: ["CUSTOM_ALERT"],
+  4: [], // INFO/WARNING — not fetched by current DQL
+};
+/** Reverse lookup: which Davis severity does this category land in? */
+export const CATEGORY_TO_SEVERITY: Record<string, DavisSeverity> = (() => {
+  const out: Record<string, DavisSeverity> = {};
+  (Object.entries(SEVERITY_CATEGORIES) as Array<[string, string[]]>).forEach(([sevStr, cats]) => {
+    const sev = Number(sevStr) as DavisSeverity;
+    cats.forEach((c) => { out[c] = sev; });
+  });
+  return out;
+})();
+/** Human-readable label for a Davis severity level. */
+export const SEVERITY_LABEL: Record<DavisSeverity, string> = {
+  1: "Sev 1 · Critical",
+  2: "Sev 2 · High",
+  3: "Sev 3 · Medium",
+  4: "Sev 4 · Low",
+};
+/** Short hint used in tooltips / chip subtitles. */
+export const SEVERITY_HINT: Record<DavisSeverity, string> = {
+  1: "Total outage, no workaround (AVAILABILITY, MONITORING_UNAVAIL.)",
+  2: "Partial downtime / severe degradation (ERROR, SLOWDOWN, RESOURCE)",
+  3: "Non-critical impact, workaround available (CUSTOM_ALERT)",
+  4: "Informational events (INFO, WARNING) — not collected",
+};
+
 /** Hex colour for a problem's Davis category, with a neutral fallback
  *  for unrecognised categories. */
 export function categoryColorFor(p: Problem): string {

@@ -18,7 +18,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Problem } from "../hooks/useProblems";
 import { getCategoryIcon } from "../utils/formatters";
-import { CATEGORY_GROUPINGS, resolveByCategory, type Grouping } from "../utils/grouping";
+import { CATEGORY_GROUPINGS, resolveByCategory, SEVERITY_CATEGORIES, type Grouping } from "../utils/grouping";
 import { ConstellationView, type ConstellationDataMode } from "./ConstellationView";
 
 /** Pick a high-contrast text colour for a filled pill whose
@@ -124,7 +124,7 @@ export const EnlargedQuadrantCard = ({
   const ALL_MODES: Array<{ mode: SubsetMode; label: string; hint: string }> = [
     { mode: "rising",      label: "Rising",   hint: "Opened in the last hour" },
     { mode: "open_time",   label: "Stuck",    hint: "Active for more than 4 hours" },
-    { mode: "criticality", label: "Critical", hint: "Severity 4 or 5" },
+    { mode: "criticality", label: "Critical", hint: "Davis Sev 1 — AVAILABILITY + MONITORING_UNAVAIL." },
   ];
   // Active subset starts from the prop (the bubble the user clicked
   // on the main-page cell) and the user can switch it via the
@@ -135,13 +135,14 @@ export const EnlargedQuadrantCard = ({
   const [currentMode, setCurrentMode] = useState<SubsetMode>(initialMode);
   useEffect(() => { setCurrentMode(initialMode); }, [initialMode]);
 
-  // Same partition rules as the page-level cellSubsetBubbles memo:
-  // Critical > Rising > Stuck (mutually exclusive). Keeps the
-  // modal's TOP_N filter aligned with the cell's bubble counts.
+  // Same partition rules as the page-level cellSubsetBubbles memo
+  // (ConstellationView). 0.0.114 aligned "Critical" with Davis AI
+  // Sev 1: AVAILABILITY + MONITORING_UNAVAILABLE. The old code read
+  // a numeric severity_level that doesn't exist in real DQL output.
+  const SEV1_CATS = new Set(SEVERITY_CATEGORIES[1]);
   const matchesMode = (mode: SubsetMode, p: Problem, now: number): boolean => {
-    const sev = Number((p as { "event.severity_level"?: number | string })["event.severity_level"] ?? 0);
     const startTs = new Date(p["event.start"]).getTime();
-    if (sev >= 4) return mode === "criticality";
+    if (SEV1_CATS.has(p["event.category"])) return mode === "criticality";
     if (startTs >= now - 3_600_000) return mode === "rising";
     return mode === "open_time";
   };
@@ -159,11 +160,12 @@ export const EnlargedQuadrantCard = ({
             new Date(a["event.start"]).getTime() - new Date(b["event.start"]).getTime(),
         );
       case "criticality":
-        return arr.sort((a, b) => {
-          const sa = Number((a as { "event.severity_level"?: number | string })["event.severity_level"] ?? 0);
-          const sb = Number((b as { "event.severity_level"?: number | string })["event.severity_level"] ?? 0);
-          return sb - sa;
-        });
+        // Within Sev 1 problems, oldest first so the most urgent
+        // long-running outages bubble up.
+        return arr.sort(
+          (a, b) =>
+            new Date(a["event.start"]).getTime() - new Date(b["event.start"]).getTime(),
+        );
     }
   };
 

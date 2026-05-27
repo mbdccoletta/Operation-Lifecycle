@@ -12,6 +12,7 @@ import {
   resolveByCategory,
   detectQuadrantAt as detectQuadrantAtLayout,
   detectLabelAt as detectLabelAtLayout,
+  SEVERITY_CATEGORIES,
 } from "../utils/grouping";
 import { getCategoryLabel } from "../utils/formatters";
 import { scoreOf, TOP_TIER_THRESHOLD } from "../utils/scoring";
@@ -39,6 +40,13 @@ interface ConstellationViewProps {
   /** Clicking on the header strip of a quadrant (where the grouping name is
    *  drawn) fires this. Used to drill down to the filtered list view. */
   onCategoryLabelClick?: (groupingId: string) => void;
+  /** 0.0.114 — Clicking one of the three central hub circles
+   *  (TOTAL / ACTIVE / RESOLVED) fires this. Host is expected to
+   *  switch to LIST view with the matching status filter:
+   *    total    → no status filter
+   *    active   → status = "ACTIVE"
+   *    resolved → status = "CLOSED" */
+  onHubRingClick?: (kind: "total" | "active" | "resolved") => void;
   /** Clicking the small "expand" button anchored at each quadrant's
    *  top-left fires this. When provided, the button DOES NOT trigger
    *  the internal canvas zoom — the host page is expected to render
@@ -173,6 +181,7 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
   dataMode = "rising",
   onQuadrantClick,
   onCategoryLabelClick,
+  onHubRingClick,
   onQuadrantEnlarge,
   onEmptyClick,
   groupings = CATEGORY_GROUPINGS,
@@ -316,6 +325,12 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
    *  click handler can hit-test them. Each entry stores the bubble's
    *  PIXEL position + radius. */
   const bubbleHitsRef = useRef<Array<{ cellId: string; subsetMode: ConstellationDataMode; cx: number; cy: number; r: number }>>([]);
+  /** Central hub ring hitboxes (TOTAL / ACTIVE / RESOLVED) — same
+   *  pattern as bubbleHitsRef. Populated during the draw pass right
+   *  after the three satellites are rendered, consumed by the
+   *  click handler so clicks on the rings switch to LIST view with
+   *  the matching status filter. */
+  const hubHitsRef = useRef<Array<{ kind: "total" | "active" | "resolved"; cx: number; cy: number; r: number }>>([]);
   // Tracks the previous tap time/quadrant so we can detect a double-tap on
   // touch devices (where the synthetic dblclick event is unreliable).
   const lastTapRef = useRef<{ t: number; cat: string | null }>({ t: 0, cat: null });
@@ -724,19 +739,28 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
     icon: string;
   }>> = useMemo(() => {
     const now = Date.now();
-    // 0.0.109 follow-up — partition active problems so the three
-    // mode counts add up to the cell's active total ("Conta nao
-    // esta batendo"). Priority Critical → Rising → Stuck:
-    //   • Critical wins on severity ≥ 4, regardless of age.
-    //   • Rising = recent (< 1h) AND not Critical.
-    //   • Stuck  = everything else active (≥ 1h, low severity).
-    // Each active problem ends up in exactly one mode, so
-    // Rising + Stuck + Critical = total active.
+    // 0.0.114 — align "Critical" with the official Davis AI
+    // severity classification. Previously this read a numeric
+    // `event.severity_level` field (treated as 1..5) that does NOT
+    // exist in the live DQL response — only synthetic demo data
+    // populated it, so the bubble was always 0 in prod. The Davis
+    // spec maps SEVERITY to CATEGORY:
+    //   Sev 1 (🔴 Critical) — AVAILABILITY + MONITORING_UNAVAILABLE
+    //   Sev 2 (🟠 High)     — ERROR + SLOWDOWN + RESOURCE_CONTENTION
+    //   Sev 3 (🟡 Medium)   — CUSTOM_ALERT
+    //   Sev 4 (🔵 Low)      — INFO/WARNING (not fetched today)
+    // We surface Sev 1 ("Critical") here and let the user pick the
+    // level via the page legend strip in a later iteration. The
+    // SEVERITY_CATEGORIES map lives in utils/grouping.ts.
+    //
+    // Partition order: Critical → Rising → Stuck. A Sev-1 problem
+    // wins over the time-based modes regardless of age, so the
+    // three mode counts still sum to the cell's active total.
+    const sev1Cats = new Set(SEVERITY_CATEGORIES[1]);
     const matches = (mode: SubsetMode, p: Problem): boolean => {
       if (p["event.status"] !== "ACTIVE") return false;
-      const sev = Number((p as { "event.severity_level"?: number | string })["event.severity_level"] ?? 0);
       const startTs = new Date(p["event.start"]).getTime();
-      if (sev >= 4) return mode === "criticality";
+      if (sev1Cats.has(p["event.category"])) return mode === "criticality";
       if (startTs >= now - 3_600_000) return mode === "rising";
       return mode === "open_time";
     };
@@ -2575,7 +2599,23 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
     drawSatellite(ctx, satCenterX, satY, satR, totalActive, "ACTIVE",   "#ff4d6a", "255,77,106",  dk, totalDelta,    false, true, fsMult);
     // RESOLVED: rising rate is GOOD (resolving faster) → green ▲ / red ▼
     drawSatellite(ctx, satRightX,  satY, satR, satResolved, "RESOLVED", "#22d3a0", "34,211,160",  dk, resolvedTrend, true,  true, fsMult);
+
+    // 0.0.114 — record hub-ring hitboxes so the click handler can
+    // route a tap on TOTAL / ACTIVE / RESOLVED to the LIST view with
+    // the matching status filter. User: "permitir fazer drilldown
+    // nos circulos centrais para a lista".
+    hubHitsRef.current = [
+      { kind: "total",    cx: satLeftX,   cy: satY, r: satR },
+      { kind: "active",   cx: satCenterX, cy: satY, r: satR },
+      { kind: "resolved", cx: satRightX,  cy: satY, r: satR },
+    ];
     } // ← end of if (showHub)
+    else {
+      // Modal / enlarged view doesn't draw the hub — clear stale
+      // hitboxes so a click on the same pixel region doesn't
+      // accidentally drill.
+      hubHitsRef.current = [];
+    }
 
     // ── Rising-segment trail (Segments page only) ─────────────────
     // Comet packet flowing horizontally along the title row, starting
@@ -2780,6 +2820,18 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
         return;
       }
     }
+    // 0.0.114 — central TOTAL / ACTIVE / RESOLVED rings: drill to
+    // LIST view with the matching status filter. Hit-test before
+    // the per-dot search so a click on the ring's centre doesn't
+    // get swallowed by a dot that happens to sit nearby.
+    if (onHubRingClick) {
+      for (const ring of hubHitsRef.current) {
+        if (Math.hypot(mxPx - ring.cx, myPx - ring.cy) <= ring.r) {
+          onHubRingClick(ring.kind);
+          return;
+        }
+      }
+    }
     const found = findStarAt(world.x, world.y);
     if (found) {
       onSelect((found as Star).problem);
@@ -2809,7 +2861,7 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
     // No-op for `lockExpandedQuadrant` hosts (the modal owns dismissal).
     if (expandedQuadrant && !lockExpandedQuadrant) setExpandedQuadrant(null);
     onEmptyClick?.();
-  }, [size, onSelect, findStarAt, screenToWorld, onCategoryLabelClick, expandedQuadrant, onEmptyClick, detectQuadrantAt, detectLabelAt, expandedCellCategory, onQuadrantEnlarge, lockExpandedQuadrant]);
+  }, [size, onSelect, findStarAt, screenToWorld, onCategoryLabelClick, onHubRingClick, expandedQuadrant, onEmptyClick, detectQuadrantAt, detectLabelAt, expandedCellCategory, onQuadrantEnlarge, lockExpandedQuadrant]);
 
   const handleDoubleClick = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     // Pinned-zoom mode (modal): swallow the double-click — we don't
