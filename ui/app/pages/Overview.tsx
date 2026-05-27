@@ -1014,18 +1014,39 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
     };
   }, [statusCategoryLoading, statusCategoryTotals, statusCategoryCounts]);
 
-  // 0.0.157 — chip badges feed from constellationCountOverrides
-  // (timeframe-aware AND demo-aware) when present, with the
-  // useCategoryCounts fallback covering first-paint / loading
-  // states. Keeps chip totals in lockstep with the hub rings.
+  // 0.0.160 — chip badges feed from constellationCountOverrides
+  // (timeframe-aware) so they stay in lockstep with the list's
+  // visible row count below.
+  //   • no status chip pinned → chip count = ACTIVE + CLOSED per
+  //     category. Mirrors what the list shows (the list shows
+  //     active + closed for the timeframe by default). User: "o
+  //     filtro e grupo Total do overview mostram 1, porem o
+  //     correto seria 59."
+  //   • Active chip pinned → chip count = ACTIVE only.
+  //   • Closed chip pinned → chip count = CLOSED only.
+  // Fallback to useCategoryCounts during first paint while the
+  // override is still loading.
   useEffect(() => {
-    const fromOverride = constellationCountOverrides
-      ? (countsStatus === "CLOSED"
-          ? constellationCountOverrides.resolvedByCategory
-          : constellationCountOverrides.activeByCategory)
-      : undefined;
+    let fromOverride: Record<string, number> | undefined;
+    if (constellationCountOverrides) {
+      if (statusFilter === "ACTIVE") {
+        fromOverride = constellationCountOverrides.activeByCategory;
+      } else if (statusFilter === "CLOSED") {
+        fromOverride = constellationCountOverrides.resolvedByCategory;
+      } else {
+        // No chip pinned → sum active + closed per category so the
+        // chip matches the unfiltered list's per-category row count.
+        const activeBy = constellationCountOverrides.activeByCategory ?? {};
+        const closedBy = constellationCountOverrides.resolvedByCategory ?? {};
+        const combined: Record<string, number> = {};
+        for (const cat of new Set([...Object.keys(activeBy), ...Object.keys(closedBy)])) {
+          combined[cat] = (activeBy[cat] || 0) + (closedBy[cat] || 0);
+        }
+        fromOverride = combined;
+      }
+    }
     setCategoryCounts(fromOverride ?? activeCountsByCategoryFallback);
-  }, [constellationCountOverrides, countsStatus, activeCountsByCategoryFallback, setCategoryCounts]);
+  }, [constellationCountOverrides, statusFilter, activeCountsByCategoryFallback, setCategoryCounts]);
 
   // Hour-over-hour trend figures for the mobile headline strip.
   //
