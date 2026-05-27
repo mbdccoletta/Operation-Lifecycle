@@ -134,6 +134,32 @@ export const EnlargedQuadrantCard = ({
   const displayedActive = categoryCounts?.active ?? activeProblems.length;
   const displayedClosed = categoryCounts?.closed ?? closedProblems.length;
 
+  // 0.0.118 — compute the trend `(recent, older)` from the FULL
+  // category set so the inner ConstellationView's seal + comet
+  // animation match what the main view shows. Without this, the
+  // canvas only sees the top-50 + closed slice and the math
+  // disagrees (closed problems inflate `older` and flip the
+  // direction). User: "vejo up aqui e animacaoe sem up aqui."
+  //
+  // 0.0.132 — also drives the Rising drilldown slice (see below).
+  // Moved up from below `drilldown` so the latter can consume it.
+  const quadTrend = useMemo(() => {
+    const WINDOW_MS = 3_600_000;
+    const tCut = Date.now() - WINDOW_MS;
+    let recent = 0, older = 0;
+    for (const p of quadProblems) {
+      const startTs = new Date(p["event.start"]).getTime();
+      const endTs   = p["event.end"] ? new Date(p["event.end"]).getTime() : null;
+      const isActiveNow    = p["event.status"] === "ACTIVE";
+      const wasActiveAtCut = startTs <= tCut && (isActiveNow || (endTs !== null && endTs > tCut));
+      if (isActiveNow)    recent++;
+      if (wasActiveAtCut) older++;
+    }
+    return { recent, older };
+  }, [quadProblems]);
+  const trendDelta = quadTrend.recent - quadTrend.older;
+  const risingDelta = Math.max(0, trendDelta);
+
   // ── Drill-down: explode top 10 + keep other modes as bubbles ────
   // 0.0.109 follow-up. User asked: "Ao fazer drill down, explodir
   // problemas da categoria selecionada destacando top 10 e manter
@@ -167,11 +193,16 @@ export const EnlargedQuadrantCard = ({
   // all active problems in the cell regardless of category or age.
   // Mode name stays "criticality" internally to avoid a refactor
   // cascade — only the UI label changed.
+  //
+  // 0.0.132 — Rising is now a DELTA mode (max(0, recent − older)),
+  // not a predicate match. The Rising set is built outside this
+  // function by slicing the `risingDelta` newest active problems.
+  // This predicate only owns Stuck + Total.
   const matchesMode = (mode: SubsetMode, p: Problem, now: number): boolean => {
-    const startTs = new Date(p["event.start"]).getTime();
     if (mode === "criticality") return true;          // Total — all active
-    if (startTs >= now - 3_600_000) return mode === "rising";
-    return mode === "open_time";
+    if (mode === "rising")      return false;         // see slice below
+    const startTs = new Date(p["event.start"]).getTime();
+    return startTs < now - 3_600_000;                 // Stuck — active > 1h
   };
   const sortForMode = (mode: SubsetMode, list: Problem[]): Problem[] => {
     const arr = [...list];
@@ -206,6 +237,18 @@ export const EnlargedQuadrantCard = ({
         if (matchesMode(mode, p, now)) matchingByMode[mode].push(p);
       }
     }
+    // 0.0.132 — Rising set = the `risingDelta` newest active
+    // problems. Mirrors the canvas cell's Rising bubble (which now
+    // shows the +N delta). When delta is 0 the modal shows zero
+    // rising dots, matching the cell's absence of a Rising bubble.
+    // User: "se tenho 3 ativos e 2 rising, destacar os 2 rising no
+    // top central" — exactly this slice.
+    const activeByStartDesc = [...activeProblems].sort(
+      (a, b) =>
+        new Date(b["event.start"]).getTime() - new Date(a["event.start"]).getTime(),
+    );
+    matchingByMode.rising = activeByStartDesc.slice(0, risingDelta);
+
     const matchingForCurrent = sortForMode(currentMode, matchingByMode[currentMode]);
     const top = matchingForCurrent.slice(0, TOP_N);
     const restOfCurrent = Math.max(0, matchingForCurrent.length - TOP_N);
@@ -218,7 +261,7 @@ export const EnlargedQuadrantCard = ({
         criticality: matchingByMode.criticality.length,
       } as Record<SubsetMode, number>,
     };
-  }, [activeProblems, currentMode]);
+  }, [activeProblems, currentMode, risingDelta]);
 
   // Inner ConstellationView receives the top 10 of the current mode
   // + the closed tail (still feeds `risingCats` / trend bookkeeping).
@@ -227,31 +270,13 @@ export const EnlargedQuadrantCard = ({
     [drilldown.top, closedProblems],
   );
 
-  // 0.0.118 — compute the trend `(recent, older)` from the FULL
-  // category set so the inner ConstellationView's seal + comet
-  // animation match what the main view shows. Without this, the
-  // canvas only sees the top-50 + closed slice and the math
-  // disagrees (closed problems inflate `older` and flip the
-  // direction). User: "vejo up aqui e animacaoe sem up aqui."
-  const quadTrend = useMemo(() => {
-    const WINDOW_MS = 3_600_000;
-    const tCut = Date.now() - WINDOW_MS;
-    let recent = 0, older = 0;
-    for (const p of quadProblems) {
-      const startTs = new Date(p["event.start"]).getTime();
-      const endTs   = p["event.end"] ? new Date(p["event.end"]).getTime() : null;
-      const isActiveNow    = p["event.status"] === "ACTIVE";
-      const wasActiveAtCut = startTs <= tCut && (isActiveNow || (endTs !== null && endTs > tCut));
-      if (isActiveNow)    recent++;
-      if (wasActiveAtCut) older++;
-    }
-    return { recent, older };
-  }, [quadProblems]);
+  // quadTrend / trendDelta / risingDelta are now declared above —
+  // drilldown needs `risingDelta` to slice the Rising set. Only the
+  // override wrapper remains here.
   const trendOverride = useMemo(
     () => ({ [quadrantId]: quadTrend }),
     [quadrantId, quadTrend],
   );
-  const trendDelta = quadTrend.recent - quadTrend.older;
 
   // Single-grouping array we feed to the inner ConstellationView
   // so it lays out ONE quadrant filling the canvas.
