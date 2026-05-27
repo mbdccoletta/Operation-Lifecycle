@@ -353,11 +353,15 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
    *  page (recent additions deserve attention first). */
   const [highlightedSubsetMode, setHighlightedSubsetMode] = useState<
     "rising" | "open_time" | "criticality" | null
-  >(null);
-  // 0.0.127 — no chip is pre-selected on boot. Rising used to be
-  // auto-armed on desktop, but the strip is meant to be opt-in: the
-  // user picks the lens they want, and the canvas/list opens clean
-  // until then.
+  >(() => {
+    // 0.0.128 — restore Rising pre-selection ONLY on desktop. On
+    // mobile the list lands unfiltered so the user sees every row
+    // first; on desktop the constellation has its full visual
+    // language to express what "Rising" means, so pre-arming it is
+    // helpful (and matches what 0.0.125 originally shipped).
+    if (typeof window === "undefined") return "rising";
+    return window.innerWidth <= 960 ? null : "rising";
+  });
   /** Drives the centered HTML/SVG `<EnlargedQuadrantCard>` — a
    *  separate path from `quadrantDetail` (which opens the list-style
    *  drill-down) and from the canvas `expandedQuadrant` zoom (which
