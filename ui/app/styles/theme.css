@@ -1247,15 +1247,23 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
 .neo-constellation {
   width: 100%;
   /* Fill remaining viewport so the full dashboard fits without scroll.
-     Reserves ~340px for: sticky header (44) + filter bar (40) +
-     pulse chart (100) + ACTIVE PROBLEMS title (30) + legend chip
-     strip (40) + tabbar (50) + paddings (~36). Tighter than the
-     old 280 because the Show-By segmented control was removed in
-     0.0.109, but covers the legend strip that took its place.
-     max-height removed so on tall viewports the canvas grows to
-     fill the gap between RESOLVED and the fixed tabbar
-     ("esta barra parece fixa e nao acompanha o layout"). */
-  height: calc(100vh - 340px);
+     0.0.114 recount: 340 was too tight — pulse chart is actually
+     138 px (was estimated 100), filter strip is ~56 (was 40), and
+     the page's own padding-bottom (64) plus the tabbar reservation
+     stack on top. Real reservation:
+        header        50
+        filter bar    56
+        pulse         138
+        title         30
+        legend strip  40
+        tabbar (fixed)50
+        page padding  24 (page has 64, of which 50 is taken by the
+                          fixed tabbar overlay — net flow buffer 14)
+     Total ≈ 388 px. Earlier 340 left the canvas 48 px taller than
+     available space; the .neo-page's overflow:hidden then clipped
+     the last 48 px of the canvas — the user saw the RESOLVED
+     delta pills and "1h ago" line cut off ("ainda cortando"). */
+  height: calc(100vh - 388px);
   min-height: 360px;
   position: relative;
   border-radius: var(--neo-radius);
