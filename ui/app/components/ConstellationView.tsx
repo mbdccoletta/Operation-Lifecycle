@@ -1485,7 +1485,16 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
     // improving. No cell highlight (intentionally calm), just a discreet
     // animated green seal in the top-right corner so the user notices the
     // good news without it competing with the rising leaders.
-    if (fallingCats.length > 0) {
+    //
+    // 0.0.118 — suppressed inside the enlarged-quadrant MODAL
+    // (`disableAggregation`). The modal renders a sliced subset
+    // (top 50 active + all closed) and the trend math run on THAT
+    // subset disagrees with the main view's trend computed from
+    // the full category. User: "estou vendo trending UP com cometa
+    // e ao fazer drilldown vejo trending DOWN." The badge is
+    // redundant with the modal's header ("N active · M closed")
+    // anyway, so dropping it kills the contradiction.
+    if (fallingCats.length > 0 && !disableAggregation) {
       const FALLING_RGB = "34,197,94"; // Strato Ideal (green)
       fallingCats.forEach((cat, idx) => {
         const z = highlightRects[cat];
