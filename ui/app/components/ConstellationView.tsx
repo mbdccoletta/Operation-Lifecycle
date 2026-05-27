@@ -1599,13 +1599,16 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
 
     // 0.0.116 — leader-cell emphasis. When the host marks one or
     // more cells as leaders (via the `leaderCellIds` prop, driven
-    // by the "Total" legend chip), draw a strong attention-red
-    // outline + glow around each leader's bounds. Renders BEFORE
-    // the label so the label text reads on top. User feedback
-    // ("efeito destaque errado e cor errada"): previous version
-    // used the category accent which blended in with the cell
-    // content — switched to the same red as the ACTIVE hub ring
-    // so it reads as "where the active problems are concentrated".
+    // by the "Total" legend chip), draw a clean category-accent
+    // frame around each leader's bounds. User feedback:
+    //   - "Destaque da categoria deve seguir a cor da categoria":
+    //     reverted from attention-red back to the cell's own accent.
+    //   - "Criar moldura perfeita": pad inset removed so the frame
+    //     hugs the full cell rectangle, drawn as a single crisp
+    //     stroke plus an outer halo (no double stroke that read as
+    //     fuzzy / mis-aligned on the ERROR cell screenshot).
+    //
+    // Renders BEFORE the label so the label text reads on top.
     if (leaderCellIds && leaderCellIds.size > 0 && !disableAggregation) {
       for (const s of layout) {
         if (!leaderCellIds.has(s.id)) continue;
@@ -1613,27 +1616,25 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
         const cy0 = s.bounds.yMin * h;
         const cw  = (s.bounds.xMax - s.bounds.xMin) * w;
         const ch  = (s.bounds.yMax - s.bounds.yMin) * h;
-        const pad = 3;
-        const radius = 6;
-        const rx = cx0 + pad;
-        const ry = cy0 + pad;
-        const rw = Math.max(0, cw - pad * 2);
-        const rh = Math.max(0, ch - pad * 2);
-        // Soft outer glow first — large blur, semi-transparent red.
+        const accent = colorOf(s.id);
+        const [rR, gG, bB] = hexToRgb(accent);
+        // Sit ONE px inside the cell so the stroke renders fully on
+        // every side (a stroke drawn AT the bounds gets half-clipped
+        // by the canvas edge / divider lines, which is what made the
+        // ERROR cell look like only the bottom-right corner had a
+        // border in the user's screenshot).
+        const inset = 1;
+        const radius = 8;
+        const rx = cx0 + inset;
+        const ry = cy0 + inset;
+        const rw = Math.max(0, cw - inset * 2);
+        const rh = Math.max(0, ch - inset * 2);
+        // Single crisp accent stroke + matching halo via shadowBlur.
         ctx.save();
-        ctx.strokeStyle = "rgba(255,77,106,0.35)";
-        ctx.lineWidth = 6;
-        ctx.shadowColor = "rgba(255,77,106,0.85)";
-        ctx.shadowBlur = 28;
-        ctx.beginPath();
-        ctx.roundRect(rx, ry, rw, rh, radius);
-        ctx.stroke();
-        ctx.restore();
-        // Crisp inner stroke — solid red, no blur, so the rectangle
-        // reads as a deliberate border rather than a haze.
-        ctx.save();
-        ctx.strokeStyle = "rgba(255,77,106,0.95)";
-        ctx.lineWidth = 2.5;
+        ctx.strokeStyle = `rgba(${rR},${gG},${bB},0.95)`;
+        ctx.lineWidth = 2;
+        ctx.shadowColor = `rgba(${rR},${gG},${bB},0.65)`;
+        ctx.shadowBlur = 18;
         ctx.beginPath();
         ctx.roundRect(rx, ry, rw, rh, radius);
         ctx.stroke();
