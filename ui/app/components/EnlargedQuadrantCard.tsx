@@ -66,6 +66,12 @@ export interface EnlargedQuadrantCardProps {
    *  to (a) close this card and (b) pin the chosen problem in the
    *  list. See `onQuadrantProblemSelect` in Overview.tsx. */
   onSelectProblem?: (problem: Problem) => void;
+  /** 0.0.127 — Fires when the user clicks the "Total" pill at the
+   *  bottom of the modal. Host is expected to close the modal,
+   *  clear all filters, and switch to LIST view (raw, unfiltered).
+   *  The user reads Total here as "show me everything, escape this
+   *  drilldown." */
+  onDrilldownToList?: () => void;
   onClose: () => void;
 }
 
@@ -76,6 +82,7 @@ export const EnlargedQuadrantCard = ({
   resolveGrouping = resolveByCategory,
   dataMode = "criticality",
   onSelectProblem,
+  onDrilldownToList,
   onClose,
 }: EnlargedQuadrantCardProps) => {
   // ESC closes — same shortcut every other modal uses.
@@ -366,14 +373,28 @@ export const EnlargedQuadrantCard = ({
                   const insetBg = activeTextColor === "#0b0f1a"
                     ? "rgba(0,0,0,0.32)"
                     : "rgba(255,255,255,0.22)";
+                  // 0.0.127 — Total pill acts as a drilldown to the
+                  // raw list (no filters). User: "Botao Total da
+                  // area expandida dele fazer drilldown para a list
+                  // sem filtros." For Rising / Stuck the pill keeps
+                  // its in-modal mode-switch behaviour.
+                  const isTotalEscape = m.mode === "criticality" && !!onDrilldownToList;
                   return (
                     <button
                       key={m.mode}
                       type="button"
-                      onClick={() => !isActive && count > 0 && setCurrentMode(m.mode)}
-                      title={isActive
-                        ? `Currently showing top ${shownTop} of ${count} ${m.label.toLowerCase()}`
-                        : (count > 0 ? `${m.hint} — switch to ${m.label}` : `No ${m.label.toLowerCase()} problems`)}
+                      onClick={() => {
+                        if (isTotalEscape) {
+                          onDrilldownToList!();
+                          return;
+                        }
+                        if (!isActive && count > 0) setCurrentMode(m.mode);
+                      }}
+                      title={isTotalEscape
+                        ? "Open the full list — no filters"
+                        : (isActive
+                            ? `Currently showing top ${shownTop} of ${count} ${m.label.toLowerCase()}`
+                            : (count > 0 ? `${m.hint} — switch to ${m.label}` : `No ${m.label.toLowerCase()} problems`))}
                       style={{
                         display: "inline-flex",
                         alignItems: "center",
@@ -405,7 +426,7 @@ export const EnlargedQuadrantCard = ({
                         boxShadow: "none",
                         userSelect: "none",
                       }}
-                      disabled={count === 0 && !isActive}
+                      disabled={count === 0 && !isActive && !isTotalEscape}
                       aria-pressed={isActive}
                     >
                       {isActive && (

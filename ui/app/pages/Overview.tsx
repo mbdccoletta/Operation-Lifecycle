@@ -3591,6 +3591,16 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
           dataMode={enlargedQuadrantMode ?? dataMode}
           onClose={closeEnlargedQuadrant}
           onSelectProblem={onQuadrantProblemSelect}
+          // 0.0.127 — Total pill in the modal escapes to the raw
+          // LIST view with no filters. Close modal, clear every
+          // pinned filter the list might be carrying, jump to list.
+          onDrilldownToList={() => {
+            closeEnlargedQuadrant();
+            resetListFilters();
+            setStatusFilter(null);
+            setHighlightedSubsetMode(null);
+            setViewMode("list");
+          }}
         />
       )}
     </div>
