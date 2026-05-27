@@ -388,28 +388,20 @@ export function buildTrendQuery(timeframe: string, status?: string): string {
     conds.push(`event.status == "${status}"`);
   }
   q += `\n| filter ${conds.join(" and ")}`;
-  // 0.0.156 — per-row spread so the chart's last bar matches the
-  // central rings (ACTIVE / RESOLVED / TOTAL) exactly.
-  //   • ACTIVE row → spread (event.start, now()). Each ACTIVE bar
-  //     = count of problems alive at that bucket. The latest bar
-  //     equals the ACTIVE ring.
-  //   • CLOSED row → spread (event.end, now()). The closed series
-  //     becomes CUMULATIVE: each bar counts problems that had
-  //     already been resolved by that time. The latest bar equals
-  //     the RESOLVED ring, so Total (ACTIVE + CLOSED) at the latest
-  //     bar equals the TOTAL ring.
-  // User: "valores deveriam ser 7 ativos, 14 fechados e 21 total,
-  // como representato nos circulos centrais." The previous spread
-  // (event.start, coalesce(end, now)) made CLOSED a "alive-at-time"
-  // metric that contradicted the ring.
-  q += `\n| fieldsAdd`
-     + ` spread_start = if(event.status == "ACTIVE", event.start, else: coalesce(event.end, now())),`
-     + ` spread_end   = now()`;
-  // bins: 20 matches the native chart's pick (~20 bars regardless
-  // of timeframe). Previously we let DQL auto-pick which produced
-  // finer buckets (~50) that diverged visually from the standard.
+  // 0.0.158 — Reverted v0.0.156's per-row spread. Reason: Grail's
+  // `spread:` does per-bucket overlap (a CLOSED row spread over
+  // (event.end, now()) contributes to every bucket between, summing
+  // to > 1 across the timeframe). That made the latest bar's
+  // "closed" count exceed the RESOLVED ring instead of matching it.
+  //
+  // Back to native semantic: each row spreads across the buckets it
+  // was alive in. The PulseVisualizer then transforms the closed
+  // series client-side into a cumulative running count anchored to
+  // the count-query's `resolved` total — that's how the rightmost
+  // bar lands EXACTLY on the RESOLVED ring (and Active + Closed =
+  // TOTAL). See bars useMemo in PulseVisualizer.
   q += `\n| makeTimeseries count = count(),`
-     + ` spread: timeframe(from: spread_start, to: spread_end),`
+     + ` spread: timeframe(from: event.start, to: coalesce(event.end, now())),`
      + ` by: { event.status },`
      + ` bins: 20`;
   return q;

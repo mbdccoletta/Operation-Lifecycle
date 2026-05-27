@@ -1561,16 +1561,18 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
     };
 
     const points: Array<{ ts: number; active: number; closed: number; total: number }> = [];
-    // 0.0.156 — Active is the snapshot ("how many are alive at time
-    // ts"); Closed is CUMULATIVE ("how many had already resolved by
-    // time ts"). The rightmost bar's Closed therefore equals the
-    // RESOLVED ring's total, and Active + Closed = TOTAL ring. User:
-    // "valores deveriam ser 7 ativos, 14 fechados e 21 total."
+    // 0.0.158 — `active` is the snapshot (problems alive at ts);
+    // `closed` is CUMULATIVE — # of CLOSED problems whose end is
+    // before ts (i.e., already resolved by that time). Demo path
+    // can compute this directly via countLess(closedEnds, ts); the
+    // real path does the equivalent transform in trendData below
+    // (anchored to the RESOLVED ring). Latest bar's closed = total
+    // resolved in window; active + closed = TOTAL ring.
     for (let ts = from; ts <= to; ts += bucketMs) {
       const startsBeforeOrAt   = countLessOrEqual(starts, ts);
       const closedEndsBeforeTs = countLess(closedEnds, ts);
-      const activeAtT       = startsBeforeOrAt - closedEndsBeforeTs;
-      const closedCumulative = closedEndsBeforeTs;
+      const activeAtT          = startsBeforeOrAt - closedEndsBeforeTs;
+      const closedCumulative   = closedEndsBeforeTs;
       points.push({ ts, active: activeAtT, closed: closedCumulative, total: activeAtT + closedCumulative });
     }
     // Repackage as a single "series" so PulseVisualizer's existing
@@ -1609,6 +1611,37 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
     }
     return series;
   }, [rawProblems, timeframe, selectedRange, statusFilter]);
+
+  // 0.0.158 — transform the real-mode trendData so the CLOSED
+  // series is cumulative (count of problems resolved by bucket
+  // time), matching the demo path's emit semantic. The DQL returns
+  // per-bucket "alive during bucket" via `spread:`; we convert to
+  // cumulative anchored to the RESOLVED ring total so the rightmost
+  // bar reads RESOLVED exactly. ACTIVE series stays as the snapshot
+  // (already correct semantic). User: "valores deveriam ser 7
+  // ativos, 14 fechados e 21 total, como representato nos circulos
+  // centrais."
+  const trendDataCumulative = useMemo(() => {
+    const total = constellationCountOverrides?.resolved;
+    if (!trendData || typeof total !== "number") return trendData;
+    return trendData.map((s: any) => {
+      const dim = s?.dimensions?.["event.status"] ?? s?.dimensionValues?.["event.status"] ?? s?.name;
+      const isClosed = String(dim ?? "").toUpperCase().includes("CLOSED")
+        || String(dim ?? "").toUpperCase().includes("RESOLVED");
+      if (!isClosed) return s;
+      const dps = s.datapoints || [];
+      // cumulative_at_i = total - alive_at_end_of_bucket_i. Use the
+      // NEXT bucket's alive count as a proxy for "alive at end of i"
+      // — those are the closed problems that hadn't ended yet by
+      // the boundary. For the latest bucket no successor exists, so
+      // the cumulative lands exactly on `total` (= RESOLVED ring).
+      const newDps = dps.map((dp: any, i: number) => {
+        const aliveAfter = i + 1 < dps.length ? Number(dps[i + 1]?.value ?? 0) : 0;
+        return { ...dp, value: Math.max(0, total - aliveAfter) };
+      });
+      return { ...s, datapoints: newDps };
+    });
+  }, [trendData, constellationCountOverrides]);
 
   /** Highlight payload shared between the pulse chart and the list table.
    *  Same set of problems (the constellation's top-tier dots) so the
@@ -2628,7 +2661,7 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
              the rest of the page shows the XLARGE 22k. User: "usando
              cenarios, vejo mais de 22k ativos mas na barra vejo
              menos." */
-          data={scenario !== "real" ? activeOverTimeData : trendData}
+          data={scenario !== "real" ? activeOverTimeData : trendDataCumulative}
           loading={trendLoading && rawProblems.length === 0}
           /* Brush-to-zoom kept on every form factor. The earlier
              mobile gate was wrong — the user DID want to brush on
