@@ -353,9 +353,25 @@ export function buildTrendQuery(timeframe: string, status?: string): string {
     conds.push(`event.status == "${status}"`);
   }
   q += `\n| filter ${conds.join(" and ")}`;
-  // Group by event.status so the chart can render ACTIVE vs CLOSED as
-  // separate stacked bars. The DQL engine auto-picks an interval that
-  // gives a sensible bucket count for the requested timeframe.
-  q += `\n| makeTimeseries count = count(), by: { event.status }`;
+  // 0.0.144 — `spread: timeframe(...)` is the difference that makes
+  // each bar represent "count of problems alive during that bucket"
+  // instead of "count of problems whose start fell in that bucket".
+  // Mirrors the native Davis Problems chart (confirmed via HAR diff
+  // on tenant bwm98081). Without `spread`, a problem that started
+  // yesterday and is still active today never shows up on today's
+  // chart — its event.start lands outside the visible window.
+  //
+  // `coalesce(event.end, now())` handles still-active rows: their
+  // event.end is null, so the spread extends to "right now" — the
+  // bar at the current bucket includes them, matching the headline
+  // "N active" badge.
+  //
+  // bins: 20 matches the native chart's pick (~20 bars regardless
+  // of timeframe). Previously we let DQL auto-pick which produced
+  // finer buckets (~50) that diverged visually from the standard.
+  q += `\n| makeTimeseries count = count(),`
+     + ` spread: timeframe(from: event.start, to: coalesce(event.end, now())),`
+     + ` by: { event.status },`
+     + ` bins: 20`;
   return q;
 }

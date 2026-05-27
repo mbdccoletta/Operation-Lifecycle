@@ -289,7 +289,23 @@ describe("buildFilteredQuery × buildCategoryCountsQuery — native parity", () 
 
 describe("buildTrendQuery", () => {
   it("emits a makeTimeseries pivot", () => {
-    expect(buildTrendQuery("72h")).toContain("makeTimeseries count = count(), by: { event.status }");
+    // 0.0.144 — assert the full active-over-time shape: `spread:`
+    // makes each problem contribute to every bucket it was alive
+    // in (not just the bucket of its event.start), and `bins: 20`
+    // matches the native Davis chart bucket count.
+    const q = buildTrendQuery("72h");
+    expect(q).toContain("makeTimeseries count = count(),");
+    expect(q).toContain("by: { event.status }");
+    expect(q).toContain("bins: 20");
+  });
+
+  it("uses `spread: timeframe(...)` to count actives across buckets", () => {
+    // The critical bit that makes the chart agree with native: a
+    // problem alive for 6h contributes +1 to all 6 buckets, not
+    // just the one containing event.start. Confirmed via HAR diff
+    // against the native Davis Problems chart.
+    const q = buildTrendQuery("72h");
+    expect(q).toContain("spread: timeframe(from: event.start, to: coalesce(event.end, now()))");
   });
 
   it("falls back to 72h on malformed input", () => {

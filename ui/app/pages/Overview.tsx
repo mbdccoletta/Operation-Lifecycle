@@ -2480,7 +2480,15 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
         onDoubleClick={() => setPulseExpanded((v) => !v)}
       >
         <PulseVisualizer
-          data={activeOverTimeData}
+          /* 0.0.144 — switched from the client-side
+             `activeOverTimeData` sweep-line (which only saw the
+             first-paint sample of 250 problems) to the server's
+             `trendData` from useProblemTrend. The DQL query now
+             carries `spread: timeframe(...)` so each bucket counts
+             every problem alive during that window — matches the
+             native Davis chart's bar heights for any tenant size.
+             User: "a quantidade total por barra esta diferente." */
+          data={trendData}
           loading={trendLoading && rawProblems.length === 0}
           /* Brush-to-zoom kept on every form factor. The earlier
              mobile gate was wrong — the user DID want to brush on
