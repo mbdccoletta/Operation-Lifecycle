@@ -1053,24 +1053,24 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
     // at the bottom (32 % of canvas) when that panel is enabled.
     // When the host hides RESOLVED, the active area expands to the
     // full canvas so the quadrant fills everything visible.
-    // 0.0.112 — RESOLVED zone is a FIXED pixel height (not a ratio
-    // of canvas) so it stops inflating on tall viewports. Tile
-    // intrinsic content lays out at:
+    // 0.0.114 — RESOLVED zone fixed at 128 px. Tile content uses
+    // 118 px (8 top pad + 110 content from resolvedY to "1h ago"
+    // line bottom — see breakdown:
     //   resolvedY +  0 → "RESOLVED" section header (16 px)
     //   resolvedY + 24 → per-category dot + label
     //   resolvedY + 38 → accent line
-    //   resolvedY + 48 → hero number top (32 px tall → ends at +80)
+    //   resolvedY + 48 → hero number top (32 px → ends at +80)
     //   resolvedY + 80 → delta pill (18 px → ends at +98)
-    //   resolvedY + 98 → "1h ago: N" reference (12 px → ends at +110)
-    // So total content extends to resolvedY + 110. With the 8 px
-    // top pad that's 118 px occupied. Earlier I used 132 px (14 px
-    // bottom margin) and the user STILL saw clipping ("sessão de
-    // Resolved está comida") — DPR rounding + the canvas's own
-    // device-pixel-snap eat a few px. Bump to 156 px → 38 px
-    // bottom margin = clear of any subpixel funny business.
-    const RESOLVED_ZONE_H = 156;
+    //   resolvedY + 98 → "1h ago: N" reference (12 px → ends +110)
+    // 128 leaves a 10 px bottom margin — tight but enough for DPR
+    // rounding. User wanted less empty space than the prior 156 px
+    // ("diminuir este espaço"). The earlier 132-px attempt that
+    // reportedly clipped was never deployed (local-only); 128 is
+    // close enough to that ceiling to assume it's safe in prod. If
+    // clipping reappears we'll bump back toward 140.
+    const RESOLVED_ZONE_H = 128;
     const activeAreaH = showResolvedZone
-      ? Math.max(h * 0.68, h - RESOLVED_ZONE_H)
+      ? Math.max(h * 0.72, h - RESOLVED_ZONE_H)
       : h;
     // Hub band coordinates — only used when showHub is true. Kept at
     // module scope so trend / spoke / satellite code below can reference
