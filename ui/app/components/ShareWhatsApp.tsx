@@ -501,10 +501,10 @@ const PasteInstructionsModal: React.FC<{
 };
 
 /** Desktop disclosure: button + inline menu. State + click-outside
- *  collapse pattern is the same idiom the DEMO panel and the
- *  filter popovers use elsewhere. Kept inline rather than a shared
- *  `<Popover>` because the surface is tiny (two anchors) and a
- *  generic component would be heavier than the duplication. */
+ *  collapse pattern is the same idiom the filter popovers use
+ *  elsewhere. Kept inline rather than a shared `<Popover>` because
+ *  the surface is tiny (two anchors) and a generic component would
+ *  be heavier than the duplication. */
 const DesktopShareMenu: React.FC<{ encodedText: string }> = ({ encodedText }) => {
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLSpanElement | null>(null);

@@ -37,12 +37,6 @@ import { AgingBuckets } from "../components/analytics/AgingBuckets";
 // import { TopSegmentsByCategory } from "../components/analytics/TopSegmentsByCategory";
 import { useFilterSegments } from "../hooks/useFilterSegments";
 import { useSegmentMembership } from "../hooks/useSegmentMembership";
-import {
-  useScenario,
-  getSimulatedProblems,
-  getSimulatedFilterSegments,
-  getSimulatedSegmentMembership,
-} from "../utils/debugScenario";
 
 /** How many segments to probe for membership. The component itself
  *  shows only the top 8 by problem count, but we need to query a
@@ -113,8 +107,7 @@ export const TrendAnalysis = () => {
 
   // Davis-category filter — read EARLY so it can be forwarded to
   // `useProblems` as a server-side filter (Fase B). Falls back to
-  // a client-side filter below for defence-in-depth + scenario
-  // data (which is synthesised client-side and bypasses DQL).
+  // a client-side filter below for defence-in-depth.
   const { filter: categoryFilter, status: statusFilter } = useCategoryFilterOnly();
   const setCategoryCounts = useSetCategoryCounts();
   const categoriesArr = useMemo(() => Array.from(categoryFilter), [categoryFilter]);
@@ -152,29 +145,14 @@ export const TrendAnalysis = () => {
   } = useProblems(problemsFilter, { initialLimit: 10_000 });
   const loading = useDelayedLoading(rawLoading, 500, 200);
 
-  // Debug-scenario swap: when an Overview test scenario is active, the
-  // entire Analytics page should reflect the synthetic dataset too so
-  // the test scenarios stay coherent across pages. Real tenant data is
-  // still fetched (so cache + refresh continue to work) but every
-  // downstream metric / chart / list reads from `problems` derived
-  // from `getSimulatedProblems`. For non-scenario states the helper
-  // returns `tenantProblems` unchanged.
-  const [scenario] = useScenario();
-  const problemsBeforeCategoryFilter = useMemo(
-    () => getSimulatedProblems(scenario, tenantProblems),
-    [scenario, tenantProblems],
-  );
-
   // With Fase B the server already filtered the main query by
-  // category when chips are active, so on real data the filter
-  // below is an idempotent no-op. We keep it for two reasons:
-  // (1) debug-scenario data is client-side only and never sees the
-  // DQL filter; (2) defence in depth if the server-side filter
-  // ever returns extra records.
+  // category when chips are active, so the filter below is normally
+  // an idempotent no-op. Kept as defence in depth if the server-side
+  // filter ever returns extra records.
   const problems = useMemo(() => {
-    if (categoryFilter.size === 0) return problemsBeforeCategoryFilter;
-    return problemsBeforeCategoryFilter.filter((p) => categoryFilter.has(p["event.category"]));
-  }, [problemsBeforeCategoryFilter, categoryFilter]);
+    if (categoryFilter.size === 0) return tenantProblems;
+    return tenantProblems.filter((p) => categoryFilter.has(p["event.category"]));
+  }, [tenantProblems, categoryFilter]);
 
   // ── Team metrics (MTTA / MTTR / MTBF / MTTF) ─────────────────────
   // Lives here in Analytics so the page is the single home for
@@ -236,17 +214,8 @@ export const TrendAnalysis = () => {
   // for 60 s so navigation between Analytics ↔ Segments-grouped
   // Overview is essentially free.
   const { segments: realSegCatalog, loading: realSegCatalogLoading } = useFilterSegments();
-  // Segment debug scenarios paint a synthetic catalog + membership
-  // over the same problem set, matching the Overview behaviour so
-  // /segments and /analytics stay in lockstep when exercising the
-  // seg-* scenarios.
-  const simSegCatalog = useMemo(() => getSimulatedFilterSegments(scenario), [scenario]);
-  const simSegMembership = useMemo(
-    () => getSimulatedSegmentMembership(scenario, problems),
-    [scenario, problems],
-  );
-  const segCatalog        = simSegCatalog !== null ? simSegCatalog : realSegCatalog;
-  const segCatalogLoading = simSegCatalog !== null ? false : realSegCatalogLoading;
+  const segCatalog        = realSegCatalog;
+  const segCatalogLoading = realSegCatalogLoading;
   const segmentUidsToQuery = useMemo(
     () => segCatalog
       .filter((s) => !(s as { variables?: unknown }).variables)
@@ -255,9 +224,9 @@ export const TrendAnalysis = () => {
     [segCatalog],
   );
   const { membership: realSegMembership, loading: realSegMembershipLoading } =
-    useSegmentMembership(simSegMembership !== null ? [] : segmentUidsToQuery, problemsFilter);
-  const segMembership        = simSegMembership !== null ? simSegMembership : realSegMembership;
-  const segMembershipLoading = simSegMembership !== null ? false : realSegMembershipLoading;
+    useSegmentMembership(segmentUidsToQuery, problemsFilter);
+  const segMembership        = realSegMembership;
+  const segMembershipLoading = realSegMembershipLoading;
   const segSectionLoading = segCatalogLoading || segMembershipLoading;
 
   const [lastRefreshAt, setLastRefreshAt] = useState<number>(() => Date.now());

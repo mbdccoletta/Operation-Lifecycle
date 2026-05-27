@@ -38,13 +38,6 @@ import { LoadMoreFooter } from "../components/LoadMoreFooter";
 import { ProblemSearch } from "../components/ProblemSearch";
 import { useCategoryFilterOnly, useSetCategoryCounts } from "../contexts/CategoryFilterContext";
 import { useCategoryCounts } from "../hooks/useCategoryCounts";
-import {
-  useScenario,
-  getSimulatedProblems,
-  getSimulatedMttaMap,
-  getSimulatedProblemTimelines,
-  isMttaScenario,
-} from "../utils/debugScenario";
 
 export const ProblemTimeline: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -92,42 +85,22 @@ export const ProblemTimeline: React.FC = () => {
     loadedCount,
   } = useProblems(teamFilters);
 
-  // ── Debug-panel sim overrides ───────────────────────────────────
-  // Declared above the refresh handlers so they can call
-  // `teamMetrics.refetch` (the comments stream) alongside
-  // `useProblems.refetch` — without that pairing, the comments DQL
-  // sits behind a 5-min cache and MTTA lags up to 5 min behind the
-  // other three metrics on every refresh tick.
-  const [scenario] = useScenario();
-  const teamProblems = useMemo(
-    () => getSimulatedProblems(scenario, tenantProblems),
-    [scenario, tenantProblems],
-  );
-  const isSim = isMttaScenario(scenario);
-  const simMttaMap = useMemo(
-    () => getSimulatedMttaMap(scenario, teamProblems),
-    [scenario, teamProblems],
-  );
-  const simTimelinesByPid = useMemo(
-    () => getSimulatedProblemTimelines(scenario, teamProblems),
-    [scenario, teamProblems],
-  );
+  const teamProblems = tenantProblems;
 
   // Category-filtered problems — drives the team metrics card +
   // status button counts. With Fase B the server already filtered
-  // by category when chips are active, so on real data this is a
-  // no-op idempotent re-application. We keep the client filter as
-  // defence (debug-scenario data + safety net). MTTR / MTBF / MTTF
-  // need both ACTIVE and CLOSED so we explicitly DON'T fold the
-  // local `statusFilter` in here — MBTF is interval between
-  // starts, MTTF needs a CLOSED predecessor, etc.
+  // by category when chips are active, so this client filter is
+  // normally an idempotent no-op. Kept as a safety net. MTTR /
+  // MTBF / MTTF need both ACTIVE and CLOSED so we explicitly DON'T
+  // fold the local `statusFilter` in here — MBTF is interval
+  // between starts, MTTF needs a CLOSED predecessor, etc.
   const metricsProblems = useMemo(() => {
     if (!isFiltering) return teamProblems;
     return teamProblems.filter((p) => categoryFilter.has(p["event.category"]));
   }, [teamProblems, isFiltering, categoryFilter]);
 
   // ── Team metrics + per-problem map ──────────────────────────────
-  const teamMetrics = useTeamMetrics(metricsProblems, { simulatedFirstComments: simMttaMap });
+  const teamMetrics = useTeamMetrics(metricsProblems);
   const perProblem  = teamMetrics.perProblem;
   const refetchComments = teamMetrics.refetch;
 
@@ -331,18 +304,6 @@ export const ProblemTimeline: React.FC = () => {
         <CategoryFilterChips />
       </div>
 
-      {/* Sim-mode notice (replaces the old header banner — kept
-          subtle, sits inline above the team-metrics section). */}
-      {isSim && (
-        <div className="ptl-sim-notice">
-          <span className="ptl-sim-dot" aria-hidden="true">◆</span>
-          <span className="ptl-sim-label">SIMULATION · {scenario}</span>
-          <span className="ptl-sim-hint">
-            {teamProblems.length} synthetic problems · clear via Debug panel → Real
-          </span>
-        </div>
-      )}
-
       {/* Deep-link focus banner. */}
       {focusId && (
         <div className="ptl-focus-notice">
@@ -450,7 +411,6 @@ export const ProblemTimeline: React.FC = () => {
             {virtualizer.getVirtualItems().map((virtualItem) => {
               const p = visibleProblems[virtualItem.index];
               const davisId = (p as unknown as { davis_problem_id?: string }).davis_problem_id || "";
-              const sim = isSim ? (simTimelinesByPid?.get(davisId) || { comments: [], automations: [] }) : null;
               const focused = isFocused(p);
               return (
                 <div
@@ -469,12 +429,10 @@ export const ProblemTimeline: React.FC = () => {
                 >
                   <ProblemTimelineCard
                     problem={p}
-                    simulated={sim}
                     sortDir={sortDir}
                     filter="all"
                     defaultExpanded={focused}
                     hideOpenLink={false}
-                    allowComposer={!isSim}
                     metrics={davisId ? perProblem.get(davisId) : undefined}
                   />
                 </div>

@@ -22,7 +22,6 @@ import {
   useProblemTimeline,
   type TimelineEvent,
   type TimelineCategory,
-  type SimulatedTimelineOverride,
 } from "../hooks/useProblemTimeline";
 import type { Problem } from "../hooks/useProblems";
 import { renderMarkdown } from "../utils/markdown";
@@ -66,11 +65,7 @@ function dayKey(iso: string): string { return iso.slice(0, 10); }
 
 export interface ProblemActivityFeedProps {
   problem: Problem;
-  /** Debug-scenario override — when supplied, the underlying hook
-   *  skips DQL and renders these events instead. */
-  simulated?: SimulatedTimelineOverride | null;
-  /** Comment composer visibility. Set to `false` when there's no
-   *  real Davis backend (sim mode). */
+  /** Comment composer visibility. Defaults to true. */
   allowComposer?: boolean;
   /** INITIAL activity feed sort direction. Default is "asc"
    *  (oldest-first / chronological top-to-bottom) — that's the
@@ -89,7 +84,6 @@ export interface ProblemActivityFeedProps {
 
 export const ProblemActivityFeed: React.FC<ProblemActivityFeedProps> = ({
   problem,
-  simulated = null,
   allowComposer = true,
   sortDir = "asc",
   filter = "all",
@@ -111,7 +105,6 @@ export const ProblemActivityFeed: React.FC<ProblemActivityFeedProps> = ({
       status:      problem["event.status"],
       category:    problem["event.category"],
     },
-    simulated,
     { enabled },
   );
 

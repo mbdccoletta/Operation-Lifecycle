@@ -149,8 +149,8 @@ interface ConstellationViewProps {
    *  When omitted (loading, or callers that don't use the hook) we
    *  fall back to deriving counts from `problems` — same behaviour as
    *  before this prop existed. Preserves the constellation in
-   *  scenarios like the enlarged-quadrant modal or debug scenarios
-   *  where the count query isn't meaningful. */
+   *  contexts like the enlarged-quadrant modal where the count query
+   *  isn't meaningful. */
   countOverrides?: {
     total?: number;
     active?: number;
@@ -375,10 +375,6 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
   // touch devices (where the synthetic dblclick event is unreliable).
   const lastTapRef = useRef<{ t: number; cat: string | null }>({ t: 0, cat: null });
 
-  // Scenario override is now handled UP in Overview so every surface
-  // (chart, list, list highlights) sees the same problems. The parent
-  // already passed us scenario-swapped data, so we just rename for
-  // backward-compat with the rest of this file.
   const problems = realProblems;
 
   useEffect(() => {
@@ -763,7 +759,7 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
    *  the full cell total — anything less mismatches the cell header
    *  ("ERROR 1200 active" vs bubble "1190" — user-reported 0.0.108).
    *  Used as the fallback when no `countOverrides` is provided
-   *  (demo scenarios). In real prd, `countOverrides.activeByCategory`
+   *  (initial paint / loading). In real prd, `countOverrides.activeByCategory`
    *  carries the count-query value and takes priority. */
   const cellActiveTotalAll: Record<string, number> = useMemo(() => {
     const out: Record<string, number> = {};
@@ -786,9 +782,7 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
    *  ~250 in real prd). To stay honest when the cell has thousands
    *  of true active problems, we scale each subset count by the
    *  ratio of `realCellTotal / loadedCellTotal`, drawing the real
-   *  total from `countOverrides.activeByCategory` when available.
-   *  Stress 3K demo: 100 % of problems load → no scaling needed,
-   *  counts are exact. */
+   *  total from `countOverrides.activeByCategory` when available. */
   // Total dropped (0.0.109 follow-up — "remover total"): the cell
   // header already prints the active count, and the 3 remaining
   // modes are non-overlapping signals worth highlighting in their
@@ -1697,7 +1691,7 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
          rationale at the central hub. Missing keys (zero rows for that
          category in the response) correctly resolve to 0. Falls back
          to list-derived filter only when no override map is present
-         (loading / debug scenarios). */
+         (loading / initial paint). */
       const activeOverride = countOverrides?.activeByCategory;
       const activeCount = activeOverride
         ? (activeOverride[cat] ?? 0)
@@ -2883,7 +2877,7 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
     /* Prefer the count-query override (covers the full window even
        when `problems` is trimmed by DPS Tier 3's `DEFAULT_INITIAL = 250`).
        Falls back to the list-derived length when the override isn't
-       available — initial paint, debug scenarios, etc. */
+       available — initial paint, etc. */
     const totalActive    = countOverrides?.active ?? activeProblems.length;
 
     // Compute total trend: net change in ACTIVE problems over last 1h

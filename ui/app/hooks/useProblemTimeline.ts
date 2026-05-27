@@ -184,24 +184,6 @@ export interface ProblemLifecycle {
   category?: string;
 }
 
-export interface SimulatedTimelineOverride {
-  /** Pre-baked annotation cells (typically all "comment" category). */
-  comments: Array<{
-    at: string;
-    text: string;
-    authorName: string;
-    authorId: string;
-  }>;
-  /** Pre-baked workflow-execution cells. */
-  automations: Array<{
-    at: string;
-    title: string;
-    state: "SUCCESS" | "ERROR" | "CANCELLED" | string;
-    type?: string;
-    executionId: string;
-  }>;
-}
-
 export interface UseProblemTimelineOptions {
   /** When `false`, both DQL queries are gated off via `useDql`'s
    *  `enabled` option. Used by `<ProblemTimelineCard>` to skip the
@@ -214,11 +196,9 @@ export function useProblemTimeline(
   davisProblemId: string,
   problemStartIso?: string,
   lifecycle?: ProblemLifecycle,
-  simulated?: SimulatedTimelineOverride | null,
   opts: UseProblemTimelineOptions = {},
 ): UseProblemTimelineResult {
   const enabled = opts.enabled ?? true;
-  const isSim = !!simulated;
   const valid = isDavisProblemId(davisProblemId);
 
   const annotationsParams = useMemo(() => ({
@@ -234,15 +214,14 @@ export function useProblemTimeline(
   }), [davisProblemId, problemStartIso]);
 
   const annotationsQuery = useDql<AnnotationRecord>(annotationsParams, {
-    // Gates: valid id + not sim mode (sim feeds synthetic data
-    // below) + caller opted in. The `enabled` toggle lets the
-    // multi-problem stack on the Timeline page skip queries for
+    // Gates: valid id + caller opted in. The `enabled` toggle lets
+    // the multi-problem stack on the Timeline page skip queries for
     // collapsed cards — otherwise 100 cards = 200 in-flight DQL.
-    enabled: valid && !isSim && enabled,
+    enabled: valid && enabled,
     staleTime: 30_000,
   });
   const workflowQuery = useDql<WorkflowRecord>(workflowParams, {
-    enabled: valid && !isSim && enabled,
+    enabled: valid && enabled,
     staleTime: 30_000,
   });
 
@@ -279,45 +258,14 @@ export function useProblemTimeline(
   const events = useMemo<TimelineEvent[]>(() => {
     if (!valid) return [];
     const out: TimelineEvent[] = [];
-    if (isSim && simulated) {
-      // Synthetic comments → TimelineEvent (category=comment).
-      simulated.comments.forEach((c, i) => {
-        out.push({
-          key: `sim:c:${i}:${c.at}`,
-          timestamp: c.at,
-          category: "comment",
-          sourceLabel: "Problems App",
-          actor: c.authorName,
-          body: c.text,
-          raw: c as unknown as Record<string, unknown>,
-        });
-      });
-      // Synthetic automations → TimelineEvent (category=automation).
-      simulated.automations.forEach((a, i) => {
-        const sigil =
-          a.state === "SUCCESS"   ? "✓" :
-          a.state === "ERROR"     ? "✕" :
-          a.state === "CANCELLED" ? "⊘" : "·";
-        out.push({
-          key: `sim:a:${i}:${a.at}`,
-          timestamp: a.at,
-          category: "automation",
-          sourceLabel: a.title,
-          body: `${a.title} · ${sigil} ${a.state}`,
-          meta: `${a.state}${a.type ? " · " + a.type.toLowerCase() : ""} · run ${a.executionId.slice(0, 8)}…`,
-          raw: a as unknown as Record<string, unknown>,
-        });
-      });
-    } else {
-      const annRecords = annotationsQuery.data?.records || [];
-      const wfRecords  = workflowQuery.data?.records || [];
-      annRecords.forEach((r, i) => out.push(normaliseAnnotation(r, i)));
-      wfRecords.forEach((r, i)  => out.push(normaliseWorkflow(r, i + annRecords.length)));
-    }
+    const annRecords = annotationsQuery.data?.records || [];
+    const wfRecords  = workflowQuery.data?.records || [];
+    annRecords.forEach((r, i) => out.push(normaliseAnnotation(r, i)));
+    wfRecords.forEach((r, i)  => out.push(normaliseWorkflow(r, i + annRecords.length)));
     out.push(...lifecycleEvents);
     out.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
     return out;
-  }, [valid, isSim, simulated, annotationsQuery.data, workflowQuery.data, lifecycleEvents]);
+  }, [valid, annotationsQuery.data, workflowQuery.data, lifecycleEvents]);
 
   const counts = useMemo(() => {
     const c: Record<TimelineCategory, number> = { comment: 0, insight: 0, automation: 0, lifecycle: 0, other: 0 };
@@ -328,9 +276,9 @@ export function useProblemTimeline(
   return {
     events,
     counts,
-    loading: !!valid && !isSim && (annotationsQuery.isLoading || workflowQuery.isLoading),
-    annotationsError: isSim ? null : (annotationsQuery.error || null),
-    workflowsError:   isSim ? null : (workflowQuery.error || null),
+    loading: !!valid && (annotationsQuery.isLoading || workflowQuery.isLoading),
+    annotationsError: annotationsQuery.error || null,
+    workflowsError:   workflowQuery.error || null,
     invalidId: !valid && davisProblemId.length > 0,
     refetch: () => {
       annotationsQuery.forceRefetch();

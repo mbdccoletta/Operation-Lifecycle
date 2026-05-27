@@ -103,9 +103,6 @@ export interface UseTeamMetricsResult {
 }
 
 export interface UseTeamMetricsOptions {
-  /** Override the comments-stream DQL with synthetic
-   *  `Map<davis_problem_id, firstCommentIso>` from the debug panel. */
-  simulatedFirstComments?: Map<string, string> | null;
   /** Explicit chart-window override in ms. Without this the window
    *  is derived from min/max of `event.start` across the data —
    *  which silently stretches the X-axis way past the user's
@@ -136,16 +133,15 @@ export function useTeamMetrics(
   problems: Problem[],
   opts: UseTeamMetricsOptions = {},
 ): UseTeamMetricsResult {
-  const { simulatedFirstComments, windowFromMs, windowToMs, enabled = true } = opts;
-  const simulated = !!simulatedFirstComments;
+  const { windowFromMs, windowToMs, enabled = true } = opts;
 
   // When `enabled` is false, the hook short-circuits all expensive
   // work (DQL, aggregations, per-problem joins). The caller still
   // gets back a `UseTeamMetricsResult` with the same shape — just
   // with empty series + null scalars — so callers don't need
   // defensive `?.` chains. Used by Overview to bail out at
-  // catastrophic problem counts (>10k synthetic) where the 4× sort
-  // over the full list blocks the main thread for seconds.
+  // catastrophic problem counts (>10k) where the 4× sort over the
+  // full list blocks the main thread for seconds.
   // Pass through to `useDql` below so even the comments query is
   // skipped when disabled — saves the DPS too.
   const effectivelyEnabled = enabled;
@@ -179,12 +175,11 @@ export function useTeamMetrics(
        aggregate over hours/days of data; 10 min cache cuts
        repeat-visit cost in half without affecting accuracy. */
     staleTime: 600_000,
-    enabled: !simulated && effectivelyEnabled,
+    enabled: effectivelyEnabled,
   });
 
   // First-comment per problem id — drives the MTTA stream.
   const firstCommentByPid = useMemo(() => {
-    if (simulated) return simulatedFirstComments!;
     const map = new Map<string, string>();
     const records = query.data?.records || [];
     for (const r of records) {
@@ -199,7 +194,7 @@ export function useTeamMetrics(
       }
     }
     return map;
-  }, [query.data, simulated, simulatedFirstComments]);
+  }, [query.data]);
 
   // All four metric pair arrays are computed by the pure helpers in
   // `useTeamMetrics.helpers.ts`. Each is independently unit-tested
@@ -362,12 +357,11 @@ export function useTeamMetrics(
   // auto-refresh `setInterval` in ProblemTimeline) would tear down +
   // re-create the timer on every render, so the 30s tick never
   // actually fired. Capturing the `forceRefetch` callback (which IS
-  // stable from useDql) lets us return a stable wrapper. The check
-  // for `simulated` is a no-op when sim is active.
+  // stable from useDql) lets us return a stable wrapper.
   const queryForceRefetch = query.forceRefetch;
   const stableRefetch = useCallback(() => {
-    if (!simulated) queryForceRefetch();
-  }, [simulated, queryForceRefetch]);
+    queryForceRefetch();
+  }, [queryForceRefetch]);
 
   // When the caller flipped `enabled: false` (defensive cap on
   // catastrophic problem counts), return the empty-result shape so
@@ -399,10 +393,9 @@ export function useTeamMetrics(
     problemCountSeries,
     perProblem,
     totalProblems: problems.length,
-    loading: simulated ? false : query.isLoading,
-    error:   simulated ? null  : (query.error || null),
-    // No-op in sim mode (no live data to refetch). `forceRefetch`
-    // bypasses the 5-min cache window.
+    loading: query.isLoading,
+    error:   query.error || null,
+    // `forceRefetch` bypasses the 5-min cache window.
     refetch: stableRefetch,
   };
 }

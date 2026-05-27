@@ -1,13 +1,8 @@
 // Floating display-settings panel — globally rendered alongside the
 // app routes so the user can dial intensity / font size from ANY
 // page (Incidents, Trends, etc) without having to navigate back to
-// a settings screen. Collapsed by default to a compact chip in the
-// bottom-left corner; clicking it opens an inline panel with two
-// 3-button toggles.
-//
-// Mirrors the DEMO scenario panel's positioning + interaction
-// pattern (click-outside collapses, theme-aware tokens for the
-// chrome) so users learn one mental model and apply it to both.
+// a settings screen. Collapsed by default to a compact chip;
+// clicking it opens an inline panel with two 3-button toggles.
 
 import React, { useEffect, useRef, useState } from "react";
 import { useIntensity, type FontScale, type Intensity } from "../contexts/IntensityContext";
@@ -16,10 +11,10 @@ import { useIntensity, type FontScale, type Intensity } from "../contexts/Intens
 //   • Font size (small / normal / large) — scales every text
 //     element + canvas-rendered text in lockstep.
 //   • Contrast (normal / high) — toggles a global filter that
-//     boosts saturation + contrast for low-contrast monitors,
-//     demos, or accessibility needs. Maps to the `intensity`
-//     field in IntensityContext (the legacy "subtle" value is
-//     no longer surfaced from this panel).
+//     boosts saturation + contrast for low-contrast monitors or
+//     accessibility needs. Maps to the `intensity` field in
+//     IntensityContext (the legacy "subtle" value is no longer
+//     surfaced from this panel).
 
 const FONTSCALES: { id: FontScale; label: string; hint: string }[] = [
   { id: "small",  label: "Small",  hint: "0.92× — denser layout" },
@@ -86,7 +81,7 @@ export const DisplaySettingsPanel: React.FC<DisplaySettingsPanelProps> = ({ inli
       >
         {/* Sun-and-text glyph "Aa" reads as the universal "text
             size / display" icon. Kept text-only (no SVG) to match
-            the DEMO panel's chip-style affordance. */}
+            the app's chip-style affordance. */}
         <span className="neo-display-panel-glyph" aria-hidden="true">Aa</span>
         <span>Display</span>
         <span className="neo-display-panel-caret" aria-hidden="true">

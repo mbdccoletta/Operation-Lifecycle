@@ -146,9 +146,9 @@
 /* ── Global intensity tint via filter ──────────────────────────
    Applied on the app's root data-theme wrapper. `filter` creates
    a containing block for fixed-position descendants, so the
-   floating widgets (DEMO panel, Display panel) get the tint
-   too — which is actually what we want; their accent chips
-   should feel consistent with the rest of the page.
+   floating widgets (Display panel) get the tint too — which is
+   actually what we want; their accent chips should feel
+   consistent with the rest of the page.
    ────────────────────────────────────────────────────────── */
 /* Normal is the canonical baseline. Medium and Bold pump up
    colour intensity via TWO complementary mechanisms:
@@ -4540,10 +4540,6 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   /* Constellation needs a sensible minimum on mobile so dots can breathe */
   .neo-constellation { height: 540px; min-height: 540px; max-height: none; }
 
-  /* Debug panel out of the way on mobile — collapsible by tap on header */
-  .neo-debug-panel,
-  [data-debug-panel] { font-size: 12px; max-width: 280px; }
-
   /* Page padding-bottom larger to clear the tab bar on iOS */
   .neo-page { padding-bottom: max(72px, env(safe-area-inset-bottom, 72px)); }
 
@@ -6425,10 +6421,9 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   border-radius: 6px;
 }
 
-/* ─── Sim-mode notice — sits inline above the team-metrics section
-   instead of cluttering the header. Matches the neo-empty-segments
-   visual treatment so it reads as a system notification. */
-.ptl-sim-notice,
+/* ─── Deep-link focus notice — sits inline above the team-metrics
+   section. Matches the neo-empty-segments visual treatment so it
+   reads as a system notification. */
 .ptl-focus-notice {
   display: flex;
   align-items: center;
@@ -6439,12 +6434,6 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   font-family: var(--neo-mono);
   font-size: calc(11.5px * var(--neo-fs-mult, 1));
   letter-spacing: 0.2px;
-}
-.ptl-sim-notice {
-  background: rgba(255,139,62,0.08);
-  border: 1px solid rgba(255,139,62,0.35);
-}
-.ptl-focus-notice {
   background: rgba(99,102,241,0.10);
   border: 1px solid rgba(180,210,255,0.30);
   color: rgba(226,232,240,0.92);
@@ -6473,10 +6462,6 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
 .ptl-focus-notice button:hover {
   background: rgba(99,102,241,0.30);
   border-color: rgba(99,102,241,0.65);
-}
-[data-theme="light"] .ptl-sim-notice {
-  background: rgba(255,139,62,0.08);
-  border-color: rgba(180,95,30,0.40);
 }
 [data-theme="light"] .ptl-focus-notice {
   background: rgba(99,102,241,0.06);
@@ -6806,38 +6791,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
    feed". The chronological list directly below the chart now serves
    as the detail surface — see `.ptl-cell-highlighted` below. */
 
-/* ─── Sim-mode banner in the header ─────────────────────────────── */
-.ptl-sim-banner {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 4px 12px;
-  border-radius: 999px;
-  background: rgba(255,139,62,0.10);
-  border: 1px solid rgba(255,139,62,0.45);
-  font-family: var(--neo-mono);
-  font-size: calc(11px * var(--neo-fs-mult, 1));
-  letter-spacing: 0.4px;
-  white-space: nowrap;
-}
-.ptl-sim-dot { color: #FF8B3E; font-size: 11px; }
-.ptl-sim-label {
-  font-weight: 700;
-  color: #FFB98A;
-  text-transform: uppercase;
-}
-.ptl-sim-hint {
-  color: rgba(226,232,240,0.78);
-  font-weight: 500;
-}
-[data-theme="light"] .ptl-sim-banner {
-  background: rgba(255,139,62,0.08);
-  border-color: rgba(180, 95, 30, 0.40);
-}
-[data-theme="light"] .ptl-sim-label { color: rgba(180, 95, 30, 0.95); }
-[data-theme="light"] .ptl-sim-hint  { color: rgba(71,85,105, 0.92); }
-
-/* ─── Multi-problem card stack (sim mode) ───────────────────────── */
+/* ─── Multi-problem card stack ──────────────────────────────────── */
 .ptl-cards {
   display: flex;
   flex-direction: column;
@@ -8458,14 +8412,12 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
 }
 
 /* ─── Display settings panel ──────────────────────────────────
-   Floating chip + popover in the bottom-LEFT corner (opposite
-   the DEMO scenario panel at bottom-right). Reachable from any
-   page so the user can dial intensity / font size during
-   navigation without going to a settings screen.
-   Visual style mirrors the DEMO panel: theme-aware translucent
-   surface, mono labels, frosted-glass blur, brand-accent active
-   state. Two sections (Intensity, Font size) with 3-button
-   toggles each.
+   Floating chip + popover reachable from any page so the user
+   can dial intensity / font size during navigation without
+   going to a settings screen. Theme-aware translucent surface,
+   mono labels, frosted-glass blur, brand-accent active state.
+   Two sections (Intensity, Font size) with 3-button toggles
+   each.
 ─────────────────────────────────────────────────────────────── */
 .neo-display-panel {
   position: fixed;
@@ -8626,8 +8578,8 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
    filtered set exceeds the render cap (MAX_RENDER_ROWS = 1000) or
    the team-metrics cap (TEAM_METRICS_CAP = 10000). Real customer
    tenants stay under both caps thanks to useProblems.HARD_CEILING.
-   This is the visible signal for synthetic perf-* scenarios or
-   edge-case states. Amber accent — informational, not error. */
+   Belt-and-braces in case a future regression lifts the source
+   cap. Amber accent — informational, not error. */
 .neo-large-dataset-banner {
   background: rgba(245, 158, 11, 0.08);
   border: 1px solid rgba(245, 158, 11, 0.45);

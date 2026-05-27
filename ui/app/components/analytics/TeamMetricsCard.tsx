@@ -136,10 +136,6 @@ interface Props {
    *  call. This is the recommended path — see C1 in the perf
    *  audit (duplicate DQL fan-out). */
   teamMetrics?: UseTeamMetricsResult;
-  /** Forwarded to `useTeamMetrics` ONLY when `teamMetrics` isn't
-   *  supplied — legacy callers that still want the card to manage
-   *  its own data source can pass the sim map here. */
-  simulatedFirstComments?: Map<string, string> | null;
   /** Optional drilldown — click a bucket to see the problems that
    *  contributed to that point. Host receives the bucket's [start,
    *  end] window in ms and is expected to navigate / filter the
@@ -184,7 +180,6 @@ interface Props {
 export const TeamMetricsCard: React.FC<Props> = ({
   problems,
   teamMetrics,
-  simulatedFirstComments,
   onBucketClick,
   onMetricClick,
   onZoomRangeSelect,
@@ -196,12 +191,8 @@ export const TeamMetricsCard: React.FC<Props> = ({
   // us pre-computed metrics. React rules of hooks require an
   // unconditional call — short-circuit with empty inputs when
   // `teamMetrics` is provided so the hook is cheap (still runs,
-  // but operates on empty arrays and skips the DQL via the sim
-  // map shortcut).
-  const ownMetrics = useTeamMetrics(
-    teamMetrics ? [] : problems,
-    { simulatedFirstComments: teamMetrics ? new Map() : simulatedFirstComments },
-  );
+  // but operates on empty arrays).
+  const ownMetrics = useTeamMetrics(teamMetrics ? [] : problems);
   const m = teamMetrics ?? ownMetrics;
   const { isMobileOrTablet } = useDevice();
   const [highlight, setHighlight] = useState<MetricKey | null>(null);
@@ -431,8 +422,7 @@ export const TeamMetricsCard: React.FC<Props> = ({
       )}
       {!m.loading && !m.error && m.totalProblems === 0 && (
         <div className="neo-analytics-empty">
-          No problems in the selected timeframe. Widen the window via the timeframe
-          picker, or pick an MTTA scenario from the Debug panel.
+          No problems in the selected timeframe. Widen the window via the timeframe picker.
         </div>
       )}
 

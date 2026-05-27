@@ -39,13 +39,6 @@ import { getStatusLabel } from "../utils/formatters";
 import { usePageVisible, useDelayedLoading } from "../hooks/useUiUtils";
 import { scoreOf, pickTopTier, TOP_TIER_THRESHOLD } from "../utils/scoring";
 import {
-  useScenario,
-  getSimulatedProblems,
-  getSimulatedFilterSegments,
-  getSimulatedSegmentMembership,
-  getSimulatedMttaMap,
-} from "../utils/debugScenario";
-import {
   SEVERITY_COLORS,
   getSeverity as getSeverityLevel,
 } from "../utils/filters";
@@ -221,9 +214,8 @@ const SHOW_SEGMENT_VIEW = false;
  *  customer sessions never breach this — `useProblems.HARD_CEILING`
  *  already caps the source at 10 000 and the user has to click
  *  "Load more" all the way up to get there. The cap is here as
- *  belt-and-braces for unusual states: synthetic perf-* scenarios
- *  (up to 50 k client-side), a future regression that lifts the
- *  source cap, or a debug deeplink. Above this, the renderer slices
+ *  belt-and-braces for a future regression that lifts the source
+ *  cap, or an unusual deeplink state. Above this, the renderer slices
  *  + shows a "showing N of M" banner advising the user to refine
  *  filters. Without the slice the React reconciliation cost of 50k
  *  rows blocks the main thread for ~20 s on every state change. */
@@ -918,27 +910,14 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
     triggerRefresh();
   }, [refetch, triggerRefresh]);
 
-  // Debug-scenario override — when a scenario is selected in the floating
-  // panel we swap the real tenant problems for synthetic ones BEFORE any
-  // downstream surface (chart, list, highlights, entity-name lookup) sees
-  // them. The constellation used to do this swap internally; lifting it
-  // up here makes every surface react to the scenario in lockstep.
-  const [scenario] = useScenario();
-  const rawProblems = useMemo(
-    () => getSimulatedProblems(scenario, tenantProblems),
-    [scenario, tenantProblems],
-  );
+  const rawProblems = tenantProblems;
 
   // Apply the global category-filter chip strip to the raw problems
   // list. With Fase B the server already filters by category when
-  // chips are active, so on real data this filter is a no-op
-  // (idempotent re-application of the same predicate). We keep it
-  // for two reasons:
-  //   • Debug-scenario data is generated client-side and bypasses
-  //     the server filter — this is the only thing applying chips
-  //     to synthetic data.
-  //   • Defence in depth — if a future server-side filter bug ever
-  //     returns out-of-set records, the UI stays consistent.
+  // chips are active, so this filter is normally a no-op (idempotent
+  // re-application of the same predicate). Defence in depth — if a
+  // future server-side filter bug ever returns out-of-set records,
+  // the UI stays consistent.
   const problems = useMemo(() => {
     if (categoryFilter.size === 0) return rawProblems;
     return rawProblems.filter((p) => categoryFilter.has(p["event.category"]));
@@ -949,23 +928,12 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
   // page already aggregates. Fires one extra DQL (the team-metrics
   // comments stream); cached + reused via the shared hook so it
   // doesn't fan out per-row.
-  // In sim/scenario mode the helper feeds the synthesised MTTA map
-  // to the hook so debug scenarios show realistic MTTA values
-  // (without it the loop would skip the comments DQL but still
-  // leave MTTA null on every row).
-  const simMttaMap = useMemo(
-    () => getSimulatedMttaMap(scenario, rawProblems),
-    [scenario, rawProblems],
-  );
   // Defensive cap: skip the 4× O(N log N) aggregation when the list
-  // is large enough that the work would block the main thread
-  // (synthetic 50 k-problem benchmarks measured ~20 s of jank on
-  // dataMode toggle pre-cap). Hook returns empty KPIs in that mode
-  // and the UI advises the user to filter (see the large-dataset
-  // banner below).
+  // is large enough that the work would block the main thread. Hook
+  // returns empty KPIs in that mode and the UI advises the user to
+  // filter (see the large-dataset banner below).
   const teamMetricsEnabled = problems.length < TEAM_METRICS_CAP;
   const teamMetrics = useTeamMetrics(problems, {
-    simulatedFirstComments: simMttaMap,
     enabled: teamMetricsEnabled,
   });
   const perProblem  = teamMetrics.perProblem;
@@ -987,12 +955,8 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
   // pings the Grail count for status=Active or Closed under the
   // current timeframe) but the chip badges now PREFER the
   // constellationCountOverrides values when available. Reason:
-  // constellationCountOverrides is the only source that is both
-  // timeframe-aware AND demo-aware in lockstep — under a synthetic
-  // scenario the chip badges previously showed real-tenant counts
-  // while the rings/cells showed the simulated dataset, breaking
-  // parity. User: "count destes filtros tambem devem ser com base
-  // timeframe master."
+  // constellationCountOverrides is timeframe-aware in lockstep with
+  // the rings/cells.
   const { counts: activeCountsByCategoryFallback } = useCategoryCounts({
     status: countsStatus,
     ...timeframeFilter,
@@ -1020,117 +984,35 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
 
   // Constellation prop — `undefined` while loading so ConstellationView
   // falls back to list-derived counts (avoids first-paint flicker
-  // showing zero). Also skipped while a SYNTHETIC debug scenario is
-  // active — those swap `problems` for client-side synthetic data
-  // that the count query can't see (it queries the real tenant),
-  // so list-derived math is the only honest answer for them.
-  //
-  // `scenario` is a string union — its sentinel for "no scenario"
-  // is the literal string "real" (a truthy value). The previous
-  // gate `if (scenario)` rejected the override IN NORMAL USE
-  // (every page-load) because "real" is truthy — leaving the rings
-  // locked to list-derived math and reproducing the exact bug
-  // this hook was meant to fix.
+  // showing zero). The count query is already timeframe-bounded
+  // server-side via from/to in buildStatusCategoryCountsQuery.
   const constellationCountOverrides = useMemo(() => {
-    if (scenario === "real") {
-      // Real tenant → use the count query (already timeframe-bounded
-      // server-side via from/to in buildStatusCategoryCountsQuery).
-      if (statusCategoryLoading) return undefined;
-      // 0.0.150 — Rising bubble used to derive from the 250-row
-      // sample (`recent - older` computed client-side over the
-      // loaded problems). For busy tenants where the sample is
-      // truncated, the delta collapsed regardless of timeframe.
-      // Now compute it from the server-side `OLDER` count instead:
-      // risingDelta = max(0, ACTIVE - OLDER) per category.
-      const risingDeltaByCategory: Record<string, number> = {};
-      for (const cat of Object.keys(statusCategoryCounts.ACTIVE)) {
-        const a = statusCategoryCounts.ACTIVE[cat] || 0;
-        const o = statusCategoryCounts.OLDER[cat] || 0;
-        const d = a - o;
-        if (d > 0) risingDeltaByCategory[cat] = d;
-      }
-      return {
-        total: statusCategoryTotals.total,
-        active: statusCategoryTotals.active,
-        resolved: statusCategoryTotals.closed,
-        activeByCategory: statusCategoryCounts.ACTIVE,
-        resolvedByCategory: statusCategoryCounts.CLOSED,
-        // 0.0.137 — authoritative Stuck count per category, server-
-        // side. Now timeframe-aware (0.0.148).
-        stuckByCategory: statusCategoryCounts.STUCK,
-        risingDeltaByCategory,
-      };
-    }
-    // 0.0.149 — DEMO scenarios bypass DQL entirely. Compute the same
-    // counts client-side, applying the timeframe filter so the rings
-    // + bubbles react when the user switches between Today / Last 7
-    // days / etc. User: "calculos de Total, stuck, resolved devem
-    // respeitar timeframe principal do app."
-    //
-    // A synthetic problem "intersects" the timeframe when:
-    //   • event.start <= timeframe.to AND
-    //   • (status === ACTIVE OR event.end >= timeframe.from)
-    let tfFromMs = -Infinity;
-    let tfToMs   = Date.now();
-    if (selectedRange) {
-      tfFromMs = selectedRange.from.getTime();
-      tfToMs   = selectedRange.to.getTime();
-    } else {
-      const fromIso = timeframe?.from?.absoluteDate;
-      const toIso   = timeframe?.to?.absoluteDate;
-      if (fromIso) {
-        const t = Date.parse(fromIso);
-        if (Number.isFinite(t)) tfFromMs = t;
-      }
-      if (toIso) {
-        const t = Date.parse(toIso);
-        if (Number.isFinite(t)) tfToMs = t;
-      }
-    }
-    let active = 0;
-    let closed = 0;
-    const activeBy: Record<string, number> = {};
-    const closedBy: Record<string, number> = {};
-    const stuckBy:  Record<string, number> = {};
-    const olderBy:  Record<string, number> = {};
-    const oneHourAgo = Date.now() - 3_600_000;
-    for (const p of rawProblems) {
-      const startTs = new Date(p["event.start"]).getTime();
-      if (!Number.isFinite(startTs) || startTs > tfToMs) continue;
-      const isActive = p["event.status"] === "ACTIVE";
-      const endTs = p["event.end"] ? new Date(p["event.end"]).getTime() : null;
-      if (!isActive && endTs !== null && endTs < tfFromMs) continue;
-      const cat = p["event.category"];
-      // Was alive 1h ago? (ACTIVE & started before 1h ago) OR
-      // (CLOSED & ended after 1h ago).
-      const wasOlder = startTs <= oneHourAgo && (isActive || (endTs !== null && endTs > oneHourAgo));
-      if (wasOlder) olderBy[cat] = (olderBy[cat] || 0) + 1;
-      if (isActive) {
-        active++;
-        activeBy[cat] = (activeBy[cat] || 0) + 1;
-        if (startTs < stuckCutoffMs) {
-          stuckBy[cat] = (stuckBy[cat] || 0) + 1;
-        }
-      } else {
-        closed++;
-        closedBy[cat] = (closedBy[cat] || 0) + 1;
-      }
-    }
+    if (statusCategoryLoading) return undefined;
+    // 0.0.150 — Rising bubble used to derive from the 250-row
+    // sample (`recent - older` computed client-side over the
+    // loaded problems). For busy tenants where the sample is
+    // truncated, the delta collapsed regardless of timeframe.
+    // Now compute it from the server-side `OLDER` count instead:
+    // risingDelta = max(0, ACTIVE - OLDER) per category.
     const risingDeltaByCategory: Record<string, number> = {};
-    for (const cat of Object.keys(activeBy)) {
-      const d = (activeBy[cat] || 0) - (olderBy[cat] || 0);
+    for (const cat of Object.keys(statusCategoryCounts.ACTIVE)) {
+      const a = statusCategoryCounts.ACTIVE[cat] || 0;
+      const o = statusCategoryCounts.OLDER[cat] || 0;
+      const d = a - o;
       if (d > 0) risingDeltaByCategory[cat] = d;
     }
     return {
-      total: active + closed,
-      active,
-      resolved: closed,
-      activeByCategory: activeBy,
-      resolvedByCategory: closedBy,
-      stuckByCategory: stuckBy,
+      total: statusCategoryTotals.total,
+      active: statusCategoryTotals.active,
+      resolved: statusCategoryTotals.closed,
+      activeByCategory: statusCategoryCounts.ACTIVE,
+      resolvedByCategory: statusCategoryCounts.CLOSED,
+      // 0.0.137 — authoritative Stuck count per category, server-
+      // side. Now timeframe-aware (0.0.148).
+      stuckByCategory: statusCategoryCounts.STUCK,
       risingDeltaByCategory,
     };
-  }, [scenario, statusCategoryLoading, statusCategoryTotals, statusCategoryCounts, rawProblems, timeframe, selectedRange, stuckCutoffMs]);
+  }, [statusCategoryLoading, statusCategoryTotals, statusCategoryCounts]);
 
   // 0.0.157 — chip badges feed from constellationCountOverrides
   // (timeframe-aware AND demo-aware) when present, with the
@@ -1198,18 +1080,14 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
   }, [rawProblems]);
 
   // Memoised list-derived fallback for the mobile rings. Used ONLY
-  // when `constellationCountOverrides` is undefined — which means
-  // either (a) the count query is still loading or (b) a synthetic
-  // DEMO scenario is active (count query queries the REAL tenant,
-  // so synthetic data would mismatch). In real customer use, the
-  // override is populated almost immediately and this fallback is
-  // never read, so the memo is essentially free.
+  // when `constellationCountOverrides` is undefined — i.e. while the
+  // count query is still loading. In real customer use, the override
+  // is populated almost immediately and this fallback is never read,
+  // so the memo is essentially free.
   //
   // Was previously inline `problems.filter(...).length` in the JSX,
-  // which ran O(N) twice on EVERY render of the page (~10 ms × 2 on
-  // 50 k synthetic). On mobile that compounded with React's higher
-  // re-render rate on touch / scroll. The memo collapses it to a
-  // single pair of walks per `problems` change.
+  // which ran O(N) twice on EVERY render of the page. The memo
+  // collapses it to a single pair of walks per `problems` change.
   const mobileRingFallbackCounts = useMemo(() => {
     let active = 0;
     let closed = 0;
@@ -1235,18 +1113,8 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
   //   4. Bucket the rest (and any problems matching none) into the
   //      synthetic UNASSIGNED grouping so every dot lands somewhere.
   const { segments: realSegCatalog, loading: realSegCatalogLoading } = useFilterSegments();
-  // Debug-scenario override: when a segment scenario is active, swap
-  // the real catalog + membership for the synthetic ones. Lets the
-  // /segments page be exercised end-to-end without a tenant that has
-  // segments configured. Returns null in non-segment scenarios →
-  // we fall through to the real data.
-  const simSegCatalog = useMemo(() => getSimulatedFilterSegments(scenario), [scenario]);
-  const simSegMembership = useMemo(
-    () => getSimulatedSegmentMembership(scenario, rawProblems),
-    [scenario, rawProblems],
-  );
-  const segCatalog        = simSegCatalog !== null ? simSegCatalog : realSegCatalog;
-  const segCatalogLoading = simSegCatalog !== null ? false : realSegCatalogLoading;
+  const segCatalog        = realSegCatalog;
+  const segCatalogLoading = realSegCatalogLoading;
   // uid → display name lookup, used by the list's Segment column.
   const segNameByUid: Record<string, string> = useMemo(() => {
     const m: Record<string, string> = {};
@@ -1284,16 +1152,14 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
   // the xlarge-tenant pricing analysis). Since `SHOW_SEGMENT_VIEW
   // = false` and the user authorised dropping the side-features
   // it powers (Segments column drilldown + Top Segments card),
-  // we gate the fetch behind that same flag. Sim/demo segment
-  // scenarios continue to work because `simSegMembership` is the
-  // primary source there.
+  // we gate the fetch behind that same flag.
   const { membership: realSegMembership, loading: realSegMembershipLoading } =
     useSegmentMembership(
-      (simSegMembership !== null || !SHOW_SEGMENT_VIEW) ? [] : segmentUidsToQuery,
+      !SHOW_SEGMENT_VIEW ? [] : segmentUidsToQuery,
       problemsFilter,
     );
-  const segMembership        = simSegMembership !== null ? simSegMembership : realSegMembership;
-  const segMembershipLoading = simSegMembership !== null ? false : realSegMembershipLoading;
+  const segMembership        = realSegMembership;
+  const segMembershipLoading = realSegMembershipLoading;
 
   // Full ranked segment list (only populated in segment mode). Exposed
   // separately so the overflow chip's dropdown can show every queried
@@ -1443,184 +1309,20 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
     [groupings],
   );
 
-  // ── Cross-link to the constellation's leader ─────────────────────────
-  // Whichever category the constellation is currently highlighting (the
-  // "★ TOP" / "▲ UP" quadrant for the active Show by mode) keeps a
-  // matching accent in the list table below (`chartHighlight.byId`).
-  // The Pulse seismograph that originally shared this highlight was
-  // retired in the Fase-0 UX cleanup (KPIs already live in Analytics).
-  // The sweep-line `activeOverTimeData` memo that fed the chart is
-  // intentionally gone — kept the brush context refs so a future
-  // Trends-page evolution chart can re-wire without a fork.
   // ── Cross-link the pulse chart to the constellation's leader ──────────
   // Whichever category the constellation is currently highlighting (the
   // "★ TOP" / "▲ UP" quadrant for the active Show by mode) also gets its
   // problems painted on the pulse chart with a matching glow — so the
   // user instantly sees WHEN those incidents happened.
-  // ── Active-over-time series for the pulse chart ─────────────────────
-  // Instead of the DQL "count of starts per bucket" series (which makes
-  // a chart bar reflect events that *started* in that bucket, regardless
-  // of whether they're now closed), we compute "how many problems were
-  // active AT each bucket time T". That's the semantic Davis uses and it
-  // makes the chart agree with the constellation hub: the rightmost bar
-  // height = current active count.
-  const activeOverTimeData = useMemo(() => {
-    if (rawProblems.length === 0) return [] as any[];
-    const now = Date.now();
-    let from: number;
-    let to: number;
-    if (selectedRange) {
-      from = selectedRange.from.getTime();
-      to   = Math.min(now, selectedRange.to.getTime());
-    } else {
-      // Derive from the Strato Timeframe — its `from.absoluteDate`
-      // is always a resolved ISO string we can parse.
-      const fromIso = timeframe?.from.absoluteDate;
-      const toIso   = timeframe?.to.absoluteDate;
-      from = fromIso ? Date.parse(fromIso) : now - 72 * 3600_000;
-      to   = toIso   ? Math.min(now, Date.parse(toIso)) : now;
-    }
-    // Pre-compute each problem's [start, end] window once.
-    const windows = rawProblems
-      .map((p) => {
-        const start = new Date(p["event.start"]).getTime();
-        const isActive = p["event.status"] === "ACTIVE";
-        const end = isActive
-          ? Number.POSITIVE_INFINITY
-          : (p["event.end"] ? new Date(p["event.end"]).getTime() : start + 60_000);
-        return { start, end, isActive };
-      })
-      .filter((w) => Number.isFinite(w.start) && w.end > w.start);
 
-    // Auto-fit the chart window when the actual data covers a tiny
-    // slice of the requested timeframe. Otherwise long timeframes
-    // (e.g. 30d) with synthetic / scenario data that only spans the
-    // last few hours render as a nearly-empty chart with everything
-    // crushed into the rightmost pixel. Only narrow — never widen
-    // beyond what the user asked for.
-    if (!selectedRange && windows.length > 0) {
-      const dataMin = windows.reduce((m, w) => Math.min(m, w.start), Infinity);
-      const dataExtent = to - dataMin;
-      const requestedSpan = to - from;
-      if (dataExtent < requestedSpan * 0.4) {
-        // Add a 10% buffer to the left so the cluster doesn't hug the
-        // left edge of the chart.
-        from = Math.max(from, dataMin - Math.max(60_000, dataExtent * 0.1));
-      }
-    }
-
-    // ~50 buckets across the visible range — enough resolution to see
-    // structure without crowding the canvas.
-    const targetBuckets = 50;
-    const span = Math.max(60_000, to - from);
-    const bucketMs = Math.max(60_000, Math.floor(span / targetBuckets));
-
-    // Sweep-line aggregation (H6 in the perf audit).
-    //
-    // Previous algorithm walked all N windows for every bucket =
-    // O(N × B). With N=10k and B=50 that's 500 000 iterations per
-    // chart re-render, and the chart re-renders on every brush /
-    // refresh / filter change. The new algorithm pre-sorts the
-    // start + end timestamps then uses binary search per bucket:
-    // O((N + B) log N) ≈ 700 ops at N=10k instead of 500 000.
-    //
-    //   activeAtT(ts)        = |{w : start <= ts AND end >= ts}|
-    //                        = |starts <= ts| − |closedEnds < ts|
-    //                          (active windows have end = +∞ so
-    //                          they're never in `closedEnds`)
-    //   closedInBucket(ts,e) = |closedEnds in [ts, e)|
-    //                        = |closedEnds < e| − |closedEnds < ts|
-    const starts: number[] = [];
-    const closedEnds: number[] = [];
-    for (let i = 0; i < windows.length; i++) {
-      const w = windows[i];
-      starts.push(w.start);
-      if (!w.isActive && Number.isFinite(w.end)) closedEnds.push(w.end);
-    }
-    starts.sort((a, b) => a - b);
-    closedEnds.sort((a, b) => a - b);
-
-    // Upper-bound / lower-bound binary searches.
-    const countLessOrEqual = (arr: number[], v: number): number => {
-      let lo = 0, hi = arr.length;
-      while (lo < hi) {
-        const mid = (lo + hi) >>> 1;
-        if (arr[mid] <= v) lo = mid + 1;
-        else hi = mid;
-      }
-      return lo;
-    };
-    const countLess = (arr: number[], v: number): number => {
-      let lo = 0, hi = arr.length;
-      while (lo < hi) {
-        const mid = (lo + hi) >>> 1;
-        if (arr[mid] < v) lo = mid + 1;
-        else hi = mid;
-      }
-      return lo;
-    };
-
-    const points: Array<{ ts: number; active: number; closed: number; total: number }> = [];
-    // 0.0.158 — `active` is the snapshot (problems alive at ts);
-    // `closed` is CUMULATIVE — # of CLOSED problems whose end is
-    // before ts (i.e., already resolved by that time). Demo path
-    // can compute this directly via countLess(closedEnds, ts); the
-    // real path does the equivalent transform in trendData below
-    // (anchored to the RESOLVED ring). Latest bar's closed = total
-    // resolved in window; active + closed = TOTAL ring.
-    for (let ts = from; ts <= to; ts += bucketMs) {
-      const startsBeforeOrAt   = countLessOrEqual(starts, ts);
-      const closedEndsBeforeTs = countLess(closedEnds, ts);
-      const activeAtT          = startsBeforeOrAt - closedEndsBeforeTs;
-      const closedCumulative   = closedEndsBeforeTs;
-      points.push({ ts, active: activeAtT, closed: closedCumulative, total: activeAtT + closedCumulative });
-    }
-    // Repackage as a single "series" so PulseVisualizer's existing
-    // unstacking logic doesn't fight us: emit two series tagged ACTIVE
-    // and CLOSED, each with the right per-bucket value.
-    //
-    // The FILTERS-strip status chip narrows the chart to a single
-    // series so it matches what the list shows. Omitting (not
-    // zeroing) the dropped series keeps the chart legend honest and
-    // lets PulseVisualizer render the remaining bars in its own
-    // colour without an invisible second stack underneath.
-    // 0.0.155 — restore both series in the demo path so the chart
-    // tooltip shows Active + Closed + Total again. User: "essa
-    // barra deve mostrar abertos, fechados e total."
-    //   • no chip       → both ACTIVE and CLOSED
-    //   • Active chip   → only ACTIVE
-    //   • Closed chip   → only CLOSED
-    const series: Array<{
-      name: string;
-      dimensions: Record<string, string>;
-      datapoints: Array<{ start: Date; value: number }>;
-    }> = [];
-    if (statusFilter !== "CLOSED") {
-      series.push({
-        name: "ACTIVE",
-        dimensions: { "event.status": "ACTIVE" },
-        datapoints: points.map((p) => ({ start: new Date(p.ts), value: p.active })),
-      });
-    }
-    if (statusFilter !== "ACTIVE") {
-      series.push({
-        name: "CLOSED",
-        dimensions: { "event.status": "CLOSED" },
-        datapoints: points.map((p) => ({ start: new Date(p.ts), value: p.closed })),
-      });
-    }
-    return series;
-  }, [rawProblems, timeframe, selectedRange, statusFilter]);
-
-  // 0.0.158 — transform the real-mode trendData so the CLOSED
-  // series is cumulative (count of problems resolved by bucket
-  // time), matching the demo path's emit semantic. The DQL returns
-  // per-bucket "alive during bucket" via `spread:`; we convert to
-  // cumulative anchored to the RESOLVED ring total so the rightmost
-  // bar reads RESOLVED exactly. ACTIVE series stays as the snapshot
-  // (already correct semantic). User: "valores deveriam ser 7
-  // ativos, 14 fechados e 21 total, como representato nos circulos
-  // centrais."
+  // 0.0.158 — transform the trendData so the CLOSED series is
+  // cumulative (count of problems resolved by bucket time). The
+  // DQL returns per-bucket "alive during bucket" via `spread:`; we
+  // convert to cumulative anchored to the RESOLVED ring total so
+  // the rightmost bar reads RESOLVED exactly. ACTIVE series stays
+  // as the snapshot (already correct semantic). User: "valores
+  // deveriam ser 7 ativos, 14 fechados e 21 total, como representato
+  // nos circulos centrais."
   const trendDataCumulative = useMemo(() => {
     const total = constellationCountOverrides?.resolved;
     if (!trendData || typeof total !== "number") return trendData;
@@ -2646,22 +2348,14 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
         onDoubleClick={() => setPulseExpanded((v) => !v)}
       >
         <PulseVisualizer
-          /* 0.0.144 — switched from the client-side
-             `activeOverTimeData` sweep-line (which only saw the
-             first-paint sample of 250 problems) to the server's
-             `trendData` from useProblemTrend. The DQL query now
+          /* 0.0.144 — switched from a client-side sweep-line (which
+             only saw the first-paint sample of 250 problems) to the
+             server's `trendData` from useProblemTrend. The DQL query
              carries `spread: timeframe(...)` so each bucket counts
              every problem alive during that window — matches the
              native Davis chart's bar heights for any tenant size.
-             User: "a quantidade total por barra esta diferente."
-             0.0.146 — fall back to the client-side sweep-line when a
-             demo scenario is active. The server's trendData hits real
-             Grail (the simulated dataset bypasses DQL entirely), so
-             without this swap the chart would show ~7 active while
-             the rest of the page shows the XLARGE 22k. User: "usando
-             cenarios, vejo mais de 22k ativos mas na barra vejo
-             menos." */
-          data={scenario !== "real" ? activeOverTimeData : trendDataCumulative}
+             User: "a quantidade total por barra esta diferente." */
+          data={trendDataCumulative}
           loading={trendLoading && rawProblems.length === 0}
           /* Brush-to-zoom kept on every form factor. The earlier
              mobile gate was wrong — the user DID want to brush on
@@ -2957,9 +2651,8 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
           {/* Large-dataset advisory — surfaces when the filtered set is
               big enough that the list and KPIs degrade. Real customer
               tenants stay below this cap because `useProblems.HARD_CEILING`
-              limits the source to 10k. Synthetic perf-* scenarios in the
-              DEMO panel can produce up to 50k client-side — that's the
-              path this banner protects. */}
+              limits the source to 10k. Belt-and-braces in case a future
+              regression lifts the source cap. */}
           {(filtered.length > MAX_RENDER_ROWS || !teamMetricsEnabled) && (
             <div className="neo-large-dataset-banner" role="status">
               <strong>Large dataset detected</strong>{" "}
@@ -3159,14 +2852,12 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
                unreachable on small viewports but kept intact so
                nothing changes for desktop users.
                Apply the SAME MAX_RENDER_ROWS slice the desktop list
-               uses (line 2518 below). Without it, very large
-               problem sets (synthetic DEMO scenarios or a future
-               regression that lifts the source cap) push the entire
-               array into MobileIncidentList → hundreds of thousands
-               of DOM nodes → mobile tab unresponsive. Real customer
-               flows never breach
-               the cap because useProblems.HARD_CEILING limits the
-               source to 10 k. */
+               uses (line 2518 below). Without it, a future regression
+               that lifts the source cap could push the entire array
+               into MobileIncidentList → hundreds of thousands of DOM
+               nodes → mobile tab unresponsive. Real customer flows
+               never breach the cap because useProblems.HARD_CEILING
+               limits the source to 10 k. */
             <MobileIncidentList
               problems={filtered.slice(0, MAX_RENDER_ROWS)}
               perProblem={perProblem}

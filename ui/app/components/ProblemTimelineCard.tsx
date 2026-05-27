@@ -1,10 +1,9 @@
 // Compact per-problem activity card. Used both in the single-problem
 // view of /timeline (one card, expanded) and in the multi-problem
-// sim-mode view (many cards stacked, each independently collapsible).
+// stacked view (many cards, each independently collapsible).
 //
-// The card owns its own `useProblemTimeline` so each card pulls /
-// receives data independently — the page just passes problem
-// metadata + an optional synthetic timeline override.
+// The card owns its own `useProblemTimeline` so each card pulls
+// data independently — the page just passes problem metadata.
 
 import React, { useMemo, useState } from "react";
 import { Chip } from "@dynatrace/strato-components-preview/content";
@@ -13,7 +12,6 @@ import { ProblemActivityFeed } from "./ProblemActivityFeed";
 import {
   useProblemTimeline,
   TimelineCategory,
-  SimulatedTimelineOverride,
 } from "../hooks/useProblemTimeline";
 import type { Problem } from "../hooks/useProblems";
 import { formatDuration, formatDurationMs, getCategoryLabel } from "../utils/formatters";
@@ -26,9 +24,6 @@ import type { PerProblemMetrics } from "../hooks/useTeamMetrics";
 
 interface Props {
   problem: Problem;
-  /** When provided, the underlying hook skips DQL and uses these
-   *  events as-is. Used by the debug-panel MTTA scenarios. */
-  simulated?: SimulatedTimelineOverride | null;
   /** Sort direction shared with the parent page so the toggle at the
    *  top of /timeline affects every card consistently. */
   sortDir: "asc" | "desc";
@@ -43,8 +38,7 @@ interface Props {
   hideOpenLink?: boolean;
   /** When true (default), an in-card composer is rendered above the
    *  events feed so users can post a comment without leaving the
-   *  card. Set to `false` for sim-mode cards — there's no real
-   *  Davis backend to write to. */
+   *  card. */
   allowComposer?: boolean;
   /** Per-problem MTTA/MTTR/MTBF/MTTF, pre-computed by the page from
    *  `useTeamMetrics.perProblem`. The card renders one chip per
@@ -54,7 +48,6 @@ interface Props {
 
 export const ProblemTimelineCard: React.FC<Props> = ({
   problem,
-  simulated,
   sortDir,
   filter,
   defaultExpanded = false,
@@ -79,7 +72,6 @@ export const ProblemTimelineCard: React.FC<Props> = ({
       status:      problem["event.status"],
       category:    problem["event.category"],
     },
-    simulated,
     { enabled: expanded },
   );
 
@@ -211,7 +203,6 @@ export const ProblemTimelineCard: React.FC<Props> = ({
               the Overview row expand. */}
           <ProblemActivityFeed
             problem={problem}
-            simulated={simulated}
             allowComposer={allowComposer}
             sortDir={sortDir}
             filter={filter}
