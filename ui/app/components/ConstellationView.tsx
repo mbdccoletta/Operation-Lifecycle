@@ -52,6 +52,15 @@ interface ConstellationViewProps {
    *  maior numero de problemas". When set, leader cells get a
    *  thicker outline + a soft glow; non-leaders dim slightly. */
   leaderCellIds?: ReadonlySet<string>;
+  /** 0.0.118 — Per-category trend override. When the host knows
+   *  the true `(recent, older)` numbers for a category — typically
+   *  because it computed them from a FULL data set the canvas can't
+   *  see (e.g. the enlarged-quadrant modal only feeds the top 50 +
+   *  closed but the parent has the whole 5500-active category in
+   *  hand) — passing them here keeps the seal/comet trend logic
+   *  consistent with what the main view shows. Categories not in
+   *  the map fall back to the canvas's own computation. */
+  catTrendOverride?: Record<string, { recent: number; older: number }>;
   /** Clicking the small "expand" button anchored at each quadrant's
    *  top-left fires this. When provided, the button DOES NOT trigger
    *  the internal canvas zoom — the host page is expected to render
@@ -188,6 +197,7 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
   onCategoryLabelClick,
   onHubRingClick,
   leaderCellIds,
+  catTrendOverride,
   onQuadrantEnlarge,
   onEmptyClick,
   groupings = CATEGORY_GROUPINGS,
@@ -1238,6 +1248,16 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
       if (isActiveNow)    b.recent++;
       if (wasActiveAtCut) b.older++;
     });
+    // 0.0.118 — host-supplied trend override wins over the canvas's
+    // own (potentially partial) computation. Modal context uses
+    // this to feed the FULL category trend instead of the trend
+    // measured on the sliced top-50+closed subset, so the comet
+    // animation in the modal agrees with what the main view shows.
+    if (catTrendOverride) {
+      for (const [cat, t] of Object.entries(catTrendOverride)) {
+        catTrends[cat] = { recent: t.recent, older: t.older };
+      }
+    }
 
 
     // ── Per-quadrant visuals based on trend ─────────────────────────────────
@@ -2861,7 +2881,7 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
   }, [size, dk, selectedId, problems, dataMode, stars, expandedQuadrant, hoveredLabel,
       groupings, resolveGrouping, layout, layoutBounds, slotById, colorOf, labelById, detectQuadrantAt, detectLabelAt, showHub,
       cellAggregations, cellActiveTotalAll, cellSubsetBubbles, isCellAggregated, expandedCellCategory, isMobileOrTablet,
-      highlightedCategoriesPerCell, drilledSubsets, aggregatedTopByCell, viewTransform, highlightedSubsetMode, leaderCellIds,
+      highlightedCategoriesPerCell, drilledSubsets, aggregatedTopByCell, viewTransform, highlightedSubsetMode, leaderCellIds, catTrendOverride,
       // `fontScale` drives `fsMult` inside the draw fn — re-bind so
       // a change in the Display panel triggers a fresh closure on
       // the very next render.

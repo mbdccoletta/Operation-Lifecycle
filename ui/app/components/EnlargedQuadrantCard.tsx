@@ -199,6 +199,32 @@ export const EnlargedQuadrantCard = ({
     [drilldown.top, closedProblems],
   );
 
+  // 0.0.118 — compute the trend `(recent, older)` from the FULL
+  // category set so the inner ConstellationView's seal + comet
+  // animation match what the main view shows. Without this, the
+  // canvas only sees the top-50 + closed slice and the math
+  // disagrees (closed problems inflate `older` and flip the
+  // direction). User: "vejo up aqui e animacaoe sem up aqui."
+  const quadTrend = useMemo(() => {
+    const WINDOW_MS = 3_600_000;
+    const tCut = Date.now() - WINDOW_MS;
+    let recent = 0, older = 0;
+    for (const p of quadProblems) {
+      const startTs = new Date(p["event.start"]).getTime();
+      const endTs   = p["event.end"] ? new Date(p["event.end"]).getTime() : null;
+      const isActiveNow    = p["event.status"] === "ACTIVE";
+      const wasActiveAtCut = startTs <= tCut && (isActiveNow || (endTs !== null && endTs > tCut));
+      if (isActiveNow)    recent++;
+      if (wasActiveAtCut) older++;
+    }
+    return { recent, older };
+  }, [quadProblems]);
+  const trendOverride = useMemo(
+    () => ({ [quadrantId]: quadTrend }),
+    [quadrantId, quadTrend],
+  );
+  const trendDelta = quadTrend.recent - quadTrend.older;
+
   // Single-grouping array we feed to the inner ConstellationView
   // so it lays out ONE quadrant filling the canvas.
   const singleGrouping: Grouping[] = useMemo(() => [grouping], [grouping]);
@@ -222,6 +248,22 @@ export const EnlargedQuadrantCard = ({
           </h2>
           <span className="neo-enlarged-quadrant-bignum">{activeProblems.length}</span>
           <span className="neo-enlarged-quadrant-suffix">active</span>
+          {/* 0.0.118 — surface the same ▲/▼ trend the main view
+              shows, computed from the FULL category set (not the
+              top-50 slice). Hidden when delta is zero. */}
+          {trendDelta !== 0 && (
+            <span
+              className="neo-enlarged-quadrant-suffix"
+              style={{
+                color: trendDelta > 0 ? "#ff4d6a" : "#22d3a0",
+                marginLeft: 8,
+                fontWeight: 600,
+              }}
+              title={`${trendDelta > 0 ? "Rising" : "Falling"} — ${quadTrend.recent} now vs ${quadTrend.older} an hour ago`}
+            >
+              {trendDelta > 0 ? "▲" : "▼"} {trendDelta > 0 ? `+${trendDelta}` : trendDelta} /1h
+            </span>
+          )}
           {closedProblems.length > 0 && (
             <>
               <span aria-hidden="true" className="neo-enlarged-quadrant-sep">·</span>
@@ -264,6 +306,7 @@ export const EnlargedQuadrantCard = ({
                 dotScale={1.6}
                 initialExpandedQuadrant={quadrantId}
                 lockExpandedQuadrant
+                catTrendOverride={trendOverride}
               />
               {/* 0.0.117 — gradient backdrop strip behind the mode
                   pills. Without it, dots placed near the bottom-right
