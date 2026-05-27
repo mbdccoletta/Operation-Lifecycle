@@ -264,7 +264,12 @@ export const EnlargedQuadrantCard = ({
   };
 
   // User 0.0.109: "ao fazer drilldown mostrar top 50." Was 10.
-  const TOP_N = 50;
+  // 0.0.165 — back to top-10 per user request ("apresentando ao
+  // centro os top 10 mais relevantes"). v0.0.109 had bumped this to
+  // 50; the user has since walked it back so the canvas reads as a
+  // focused leaderboard rather than a dense scatter. The on-demand
+  // stuck-fetch (useStuckProblemsByCategory) also caps at this N.
+  const TOP_N = 10;
 
   // 0.0.142 — on-demand fetch of the oldest active problems for
   // this category. Only fires when the modal is open AND the user
@@ -422,6 +427,48 @@ export const EnlargedQuadrantCard = ({
             </div>
           ) : (
             <div className="neo-enlarged-quadrant-canvas" style={{ position: "relative" }}>
+              {/* 0.0.165 — explicit caption inside the canvas so
+                  the user reads "what am I looking at" without
+                  guessing: the dots are the top-N most relevant
+                  ACTIVE problems for the selected mode. User:
+                  "deixar claro nesta area expandida que os dados
+                  apresentados sao baseados em problemas ativos.
+                  apresentando ao centro os top 10 mais relevantes."
+                  Subtle styling so it sits as metadata above the
+                  dot field, not as a heading. */}
+              {(() => {
+                const matchingForCurrent = drilldown.counts[currentMode];
+                const showing = Math.min(TOP_N, matchingForCurrent);
+                const modeLabel = ALL_MODES.find((m) => m.mode === currentMode)?.label
+                  ?? currentMode;
+                return (
+                  <div
+                    aria-live="polite"
+                    style={{
+                      position: "absolute",
+                      top: 8,
+                      left: 0,
+                      right: 0,
+                      textAlign: "center",
+                      color: "var(--neo-text-3)",
+                      font: '500 11px/1.4 "SF Mono","JetBrains Mono",monospace',
+                      letterSpacing: "0.06em",
+                      textTransform: "uppercase",
+                      pointerEvents: "none",
+                      userSelect: "none",
+                      zIndex: 3,
+                    }}
+                  >
+                    <span style={{ color: "var(--neo-text-2)", fontWeight: 600 }}>
+                      Active problems
+                    </span>
+                    <span style={{ margin: "0 8px", opacity: 0.5 }}>·</span>
+                    <span>
+                      Top {showing}{matchingForCurrent > showing ? ` of ${matchingForCurrent}` : ""} by {modeLabel.toLowerCase()}
+                    </span>
+                  </div>
+                );
+              })()}
               {/* 0.0.109 drill-down: inner ConstellationView gets the
                   top 10 of the CURRENT subset mode plus the closed
                   tail. The OTHER two modes stay aggregated as small
