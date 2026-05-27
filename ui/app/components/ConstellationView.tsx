@@ -2386,14 +2386,15 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
         // chip → bigger + brighter outline + animated. Others get
         // dimmed + static. Only highlight when count > 0.
         //
-        // 0.0.116 — for the "Total" mode (criticality key), the
-        // visual emphasis is the CELL outline (leaderCellIds), not
-        // a bubble dashed ring. So suppress the per-bubble highlight
-        // when the active mode is "criticality" — the user reported
-        // "efeito destaque errado": the Critical/Total bubble was
-        // pulsing in every cell instead of just the leaders.
+        // 0.0.118 — bubble ring lights up for ANY selected chip,
+        // including Total ("Total nao esta pulsando ao ser
+        // selecionado"). The earlier suppression for criticality
+        // (Option B history) was reverted along with the dual-ring
+        // experiment; with Option A back in place the Total bubble
+        // gets the same dashed ring the other modes do. The
+        // leader-cell corner brackets remain on top of that — both
+        // cues now stack on the leader cell.
         const matchesMode = highlightedSubsetMode !== null
-          && highlightedSubsetMode !== "criticality"
           && s.mode === highlightedSubsetMode;
         const isHighlighted = matchesMode && s.count > 0;
         // 0.0.109 follow-up — all bubbles with count > 0 are
