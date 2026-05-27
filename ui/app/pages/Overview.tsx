@@ -1835,6 +1835,18 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
     setSearch("");
     setCatFilter(new Set());
     setPinnedProblemId(null);
+    // 0.0.167 — also clear the drilldown-style filters that the URL
+    // carries (entity, rce, segment, stuck-hours). Without this a
+    // previous deep-link or AT A GLANCE drilldown can leave a
+    // filter that silently narrows the list to 0 rows on the
+    // NEXT drilldown. User: "vejo 2 problemas aqui mas ao fazer
+    // drilldown, nao vejo eles na lista" — caused by a stuck-hours
+    // filter that survived a previous navigation and excluded all
+    // CLOSED problems (the filter gates on ACTIVE).
+    setEntityFilter(null);
+    setRceFilter(null);
+    setSegmentFilter(null);
+    setStuckHoursFilter(null);
   }, []);
 
   // When the user navigates between /  (categories) and /segments,
