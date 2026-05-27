@@ -9,32 +9,50 @@ import { useDevice } from "../hooks/useDevice";
 interface OptionEntry { id: Scenario; label: string; hint: string; }
 interface OptionSection { title: string; subtitle?: string; options: OptionEntry[]; }
 
+// 0.0.117 — scenarios were rewritten end-to-end (see
+// utils/debugScenario.ts). The DEMO panel sections now reflect the
+// new categorisation: SIZES (small → xlarge), ANIMATIONS (rising /
+// stuck / cluster), LEADERS (single / tied), RESOLVED (closure wave),
+// and the unchanged MTTA section. Segment scenarios stay registered
+// in the type union for URL deep-links but the picker is hidden — see
+// the `SHOW_SEGMENT_VIEW = false` gate in Overview.tsx.
 const SECTIONS: OptionSection[] = [
   {
-    title: "Categories",
+    title: "Sizes",
+    subtitle: "dynamic environment scale · severities derived from category (Davis AI)",
     options: [
-      { id: "real",         label: "Real",         hint: "No override · real data from the tenant" },
-      { id: "quiet",        label: "Quiet",        hint: "Sparse · 4 active · tests single-leader UI" },
-      { id: "all-rising",   label: "All ▲",        hint: "Every quadrant rising · tests ▲ UP badges" },
-      { id: "all-falling",  label: "All ▼",        hint: "Every quadrant falling · tests ▼ DOWN seal" },
-      { id: "mixed",        label: "Mixed",        hint: "Half ▲, half ▼ · asymmetric trends" },
-      { id: "critical",     label: "Critical",     hint: "Severity-heavy · highlights Criticality mode" },
-      { id: "long-running", label: "Long-running", hint: "Old actives (12–48 h) · highlights Open Time mode" },
-      { id: "tied",         label: "Tied",         hint: "AVAIL + ERROR tied at 4 · multi-colour highlights" },
-      { id: "time-cluster", label: "Cluster",      hint: "8 actives in 1 min · tests bar drill-down" },
-      { id: "focused",      label: "Focused",      hint: "ERROR saturated (~200) · dense scatter + top-tier" },
-      { id: "stress",       label: "Stress",       hint: "Every quadrant at +15 · heavy load" },
-      { id: "xlarge",       label: "XLarge",       hint: "Enterprise scale · ~3.6 K problems · stresses everything" },
-      { id: "stress-3k",    label: "Stress 3 K",   hint: "3 000 ACTIVE · ERROR + RES_CONT heavy · validates dense-cell UX" },
+      { id: "real",   label: "Real",   hint: "No override · real data from the tenant" },
+      { id: "quiet",  label: "Quiet",  hint: "~3 active · empty-state UI" },
+      { id: "small",  label: "Small",  hint: "~13 active · calm operations" },
+      { id: "medium", label: "Medium", hint: "~90 active · busy SRE day" },
+      { id: "large",  label: "Large",  hint: "~550 active · incident in progress" },
+      { id: "xlarge", label: "XLarge", hint: ">3 K active PER category · ~22 K total · enterprise crisis" },
     ],
   },
-  // Segments section retired in lockstep with `SHOW_SEGMENT_VIEW =
-  // false` in Overview.tsx — the segment view is hidden from the UI,
-  // so the synthetic segment catalogs in the demo panel exercise a
-  // surface the user can't reach. The `seg-*` scenario IDs are kept
-  // recognised in the underlying utils/debugScenario.ts switch (and
-  // still work via URL deep-link) so re-enabling the view also
-  // re-enables their selectors here if we add the section back.
+  {
+    title: "Animations",
+    subtitle: "exercise Rising / Stuck / cluster paths",
+    options: [
+      { id: "all-rising",   label: "All Rising",  hint: "Every active <1 h · Rising bubble lit in every cell" },
+      { id: "all-stuck",    label: "All Stuck",   hint: "Every active >4 h · Stuck bubble lit, no Rising" },
+      { id: "time-cluster", label: "Cluster",     hint: "8 actives in a 1-min window · bar drill-down" },
+    ],
+  },
+  {
+    title: "Leaders",
+    subtitle: "Total-mode leader-frame highlight",
+    options: [
+      { id: "single-leader", label: "Single",  hint: "ERROR ≫ others · one cell wins the frame" },
+      { id: "tied-leaders",  label: "Tied",    hint: "AVAIL + ERROR tied · two cells share the frame" },
+    ],
+  },
+  {
+    title: "Resolved",
+    subtitle: "RESOLVED zone +N /1h delta + recent closure waves",
+    options: [
+      { id: "wave-resolved", label: "Wave",   hint: "Big closure wave <1 h · RESOLVED ▲ +N /1h spikes" },
+    ],
+  },
   {
     title: "MTTA",
     subtitle: "synthetic comments stream · open /analytics → Responder velocity",
