@@ -398,6 +398,21 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
     }
   }, [isMobileOrTablet, viewMode]);
 
+  // 0.0.129 — useState init checks `window.innerWidth <= 960`, but
+  // that's unreliable on first render (iOS Safari can report
+  // pre-viewport-meta widths; touch tablets in landscape exceed 960
+  // but still want the mobile "no pre-select" rule). Once useDevice
+  // hydrates the canonical signal we re-evaluate: any mobile/tablet
+  // user that arrived with Rising pre-armed gets it cleared. Desktop
+  // users that manually selected Rising and then narrow the browser
+  // also get reset — acceptable, they can re-pick.
+  useEffect(() => {
+    if (isMobileOrTablet && highlightedSubsetMode === "rising") {
+      setHighlightedSubsetMode(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isMobileOrTablet]);
+
   // Broadcast the current view mode on <body> so the shared filter
   // strip (CategoryFilterChips, rendered in App.tsx outside this
   // component) can hide the Active/Closed status chips when the user
