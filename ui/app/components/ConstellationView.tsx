@@ -1597,18 +1597,15 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
     const LABEL_X_INSET = 8;
     const LABEL_Y_INSET = 3;
 
-    // 0.0.116 — leader-cell emphasis. When the host marks one or
-    // more cells as leaders (via the `leaderCellIds` prop, driven
-    // by the "Total" legend chip), draw a clean category-accent
-    // frame around each leader's bounds. User feedback:
-    //   - "Destaque da categoria deve seguir a cor da categoria":
-    //     reverted from attention-red back to the cell's own accent.
-    //   - "Criar moldura perfeita": pad inset removed so the frame
-    //     hugs the full cell rectangle, drawn as a single crisp
-    //     stroke plus an outer halo (no double stroke that read as
-    //     fuzzy / mis-aligned on the ERROR cell screenshot).
-    //
-    // Renders BEFORE the label so the label text reads on top.
+    // 0.0.116 — leader-cell emphasis. User: "replicar modelo da
+    // categoria Error" — the existing Rising-leader border (drawn
+    // ~150 lines above for cells in `leaderCats`) uses a sharp
+    // `strokeRect` with shadowBlur 10 and prints as a clean solid
+    // frame. The previous version of this block used roundRect +
+    // shadowBlur 18, which read as "fuzzy" next to that crisp
+    // border. Match the exact technique so a Total-leader cell
+    // looks identical in form (only the source of the leader
+    // set differs).
     if (leaderCellIds && leaderCellIds.size > 0 && !disableAggregation) {
       for (const s of layout) {
         if (!leaderCellIds.has(s.id)) continue;
@@ -1617,27 +1614,17 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
         const cw  = (s.bounds.xMax - s.bounds.xMin) * w;
         const ch  = (s.bounds.yMax - s.bounds.yMin) * h;
         const accent = colorOf(s.id);
-        const [rR, gG, bB] = hexToRgb(accent);
-        // Sit ONE px inside the cell so the stroke renders fully on
-        // every side (a stroke drawn AT the bounds gets half-clipped
-        // by the canvas edge / divider lines, which is what made the
-        // ERROR cell look like only the bottom-right corner had a
-        // border in the user's screenshot).
-        const inset = 1;
-        const radius = 8;
-        const rx = cx0 + inset;
-        const ry = cy0 + inset;
-        const rw = Math.max(0, cw - inset * 2);
-        const rh = Math.max(0, ch - inset * 2);
-        // Single crisp accent stroke + matching halo via shadowBlur.
+        const rgb = hexToRgb(accent);
         ctx.save();
-        ctx.strokeStyle = `rgba(${rR},${gG},${bB},0.95)`;
+        ctx.strokeStyle = `rgba(${rgb},0.9)`;
         ctx.lineWidth = 2;
-        ctx.shadowColor = `rgba(${rR},${gG},${bB},0.65)`;
-        ctx.shadowBlur = 18;
-        ctx.beginPath();
-        ctx.roundRect(rx, ry, rw, rh, radius);
-        ctx.stroke();
+        ctx.shadowColor = `rgba(${rgb},0.65)`;
+        ctx.shadowBlur = 10;
+        // Same geometry as the existing Rising-leader border:
+        // strokeRect inset 1.5 px on each side → sharp corners that
+        // align with the cell's outer bounds and aren't eaten by the
+        // dashed divider lines.
+        ctx.strokeRect(cx0 + 1.5, cy0 + 1.5, cw - 3, ch - 3);
         ctx.restore();
       }
     }
