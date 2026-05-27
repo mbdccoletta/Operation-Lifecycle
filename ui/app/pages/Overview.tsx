@@ -1728,6 +1728,24 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
     if (statusFilter) {
       out = out.filter((p) => p["event.status"] === statusFilter);
     }
+    // 0.0.123 — Rising / Stuck / Total chips from the list's Group-by
+    // strip filter the visible rows. The same `highlightedSubsetMode`
+    // state drives the constellation's bubble emphasis on the
+    // neural view, so toggling the chip on one view persists on the
+    // other. "criticality" (Total) narrows to ACTIVE-only since
+    // that's the parent set the Rising / Stuck subsets share.
+    if (highlightedSubsetMode) {
+      const RISING_MS = 3_600_000;
+      const now = Date.now();
+      out = out.filter((p) => {
+        if (p["event.status"] !== "ACTIVE") return false;
+        if (highlightedSubsetMode === "criticality") return true;
+        const startTs = new Date(p["event.start"]).getTime();
+        if (highlightedSubsetMode === "rising")    return startTs >= now - RISING_MS;
+        if (highlightedSubsetMode === "open_time") return startTs <  now - RISING_MS;
+        return true;
+      });
+    }
     if (stuckHoursFilter != null) {
       // "Stuck" = ACTIVE problems older than the configured threshold.
       // Combined with statusFilter above (which the KPI card also
@@ -1799,7 +1817,7 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
       });
     }
     return out;
-  }, [sorted, searchDebounced, catFilter, pinnedProblemId, groupBy, segMembership, resolveGrouping, selectedRange, entityFilter, rceFilter, segmentFilter, statusFilter, stuckHoursFilter]);
+  }, [sorted, searchDebounced, catFilter, pinnedProblemId, groupBy, segMembership, resolveGrouping, selectedRange, entityFilter, rceFilter, segmentFilter, statusFilter, stuckHoursFilter, highlightedSubsetMode]);
 
   const entityCount = useMemo(() => {
     const set = new Set<string>();
@@ -2788,6 +2806,45 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
                 aria-label="Clear grouping"
               >✕</button>
             )}
+            {/* 0.0.123 — subset chips imported from the constellation
+                page. User: "acrescentar group by da pagina de overview
+                na pagina de list." Same `highlightedSubsetMode` state
+                drives both views, so the chip selection persists when
+                the user toggles between constellation and list. In
+                LIST mode the chip filters the visible rows:
+                   rising      → active AND event.start < 1 h ago
+                   open_time   → active AND event.start ≥ 1 h ago
+                   criticality → all active (subset = total → no narrow)
+                Visual separator before the group keeps the strip
+                readable as two distinct concepts (hierarchical
+                grouping vs subset filter).  */}
+            <span aria-hidden="true" style={{
+              display: "inline-block",
+              width: 1,
+              height: 18,
+              background: "var(--neo-border)",
+              margin: "0 6px",
+            }} />
+            {([
+              { mode: "rising"      as const, label: "Rising", hint: "Opened in the last hour" },
+              { mode: "open_time"   as const, label: "Stuck",  hint: "Active for more than 1 hour" },
+              { mode: "criticality" as const, label: "Total",  hint: "All active problems" },
+            ]).map((m) => {
+              const isActive = highlightedSubsetMode === m.mode;
+              return (
+                <button
+                  key={m.mode}
+                  type="button"
+                  className={`neo-groupby-chip${isActive ? " neo-groupby-chip-active" : ""}`}
+                  onClick={() => setHighlightedSubsetMode((prev) => (prev === m.mode ? null : m.mode))}
+                  title={isActive ? `Clear ${m.label} filter` : `Filter rows: ${m.hint}`}
+                  aria-pressed={isActive}
+                >
+                  <span className="neo-groupby-chip-glyph" aria-hidden="true">⊙</span>
+                  <span className="neo-groupby-chip-label">{m.label}</span>
+                </button>
+              );
+            })}
           </div>
 
           {loading ? (
