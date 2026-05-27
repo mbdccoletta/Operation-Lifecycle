@@ -1012,6 +1012,13 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
       // side. Now timeframe-aware (0.0.148).
       stuckByCategory: statusCategoryCounts.STUCK,
       risingDeltaByCategory,
+      // 0.0.173 — expose the raw `older_count` per category too so
+      // the constellation badge (`▲+N/1h` / `▼-N`) and the modal
+      // headline trend can compute the SIGNED delta from server
+      // data. Without this they fell back to the sample-derived
+      // `catTrends` and disagreed with the Rising bubble (which
+      // uses risingDeltaByCategory). User: "Rising esta discrepante."
+      olderByCategory: statusCategoryCounts.OLDER,
     };
   }, [statusCategoryLoading, statusCategoryTotals, statusCategoryCounts]);
 

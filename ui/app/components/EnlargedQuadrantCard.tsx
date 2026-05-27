@@ -208,7 +208,15 @@ export const EnlargedQuadrantCard = ({
     }
     return { recent, older };
   }, [quadProblems]);
-  const trendDelta = quadTrend.recent - quadTrend.older;
+  // 0.0.173 — prefer the SERVER's signed delta when the host
+  // provides it (categoryCounts.rising is the positive part; we
+  // can reconstruct sign via active vs displayedActive). For now,
+  // use categoryCounts.rising directly when defined — it's the
+  // same number the cell bubble + chip badge use. Falls back to
+  // sample trend for dev/standalone hosts.
+  const trendDelta = (typeof categoryCounts?.rising === "number")
+    ? categoryCounts.rising
+    : (quadTrend.recent - quadTrend.older);
   const risingDelta = Math.max(0, trendDelta);
 
   // ── Drill-down: explode top 10 + keep other modes as bubbles ────

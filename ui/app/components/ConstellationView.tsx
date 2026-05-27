@@ -179,6 +179,13 @@ interface ConstellationViewProps {
      *  Replaces the sample-derived `recent - older` math that
      *  capped at the 250-row first paint. */
     risingDeltaByCategory?: Record<string, number>;
+    /** 0.0.173 — raw count of problems that were alive 1h ago per
+     *  category (server-authoritative). Used together with
+     *  `activeByCategory` to compute the SIGNED delta for the cell
+     *  badge (`▲ +N /1h` or `▼ -N`). Without this the badge fell
+     *  back to the sample-derived `catTrends`, which disagreed
+     *  with the Rising bubble on busy categories. */
+    olderByCategory?: Record<string, number>;
   };
   /** 0.0.148 — ms timestamp before which an ACTIVE problem counts
    *  as Stuck. Host derives this from the user-selected timeframe.
@@ -1731,9 +1738,23 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
       cx += ctx.measureText("active").width + 10;
 
       // Trend (▲ +M /1h | ▼ -M | ● neutral)
-      const trend = catTrends[cat];
-      if (trend) {
-        const diff = trend.recent - trend.older;
+      //
+      // 0.0.173 — prefer the SERVER's signed delta when the host
+      // provides activeByCategory + olderByCategory. The Rising
+      // bubble below already reads server values; without this the
+      // badge above kept showing the sample-derived number and the
+      // two surfaces disagreed (badge ▲+5 vs bubble 3). Falls back
+      // to the sample `catTrends` for dev/standalone hosts.
+      const serverActive = countOverrides?.activeByCategory?.[cat];
+      const serverOlder = countOverrides?.olderByCategory?.[cat];
+      let diff: number | null = null;
+      if (typeof serverActive === "number" && typeof serverOlder === "number") {
+        diff = serverActive - serverOlder;
+      } else {
+        const trend = catTrends[cat];
+        if (trend) diff = trend.recent - trend.older;
+      }
+      if (diff !== null) {
         ctx.font = `500 ${(12 * fsMult).toFixed(2)}px "Roboto Mono", "SF Mono", monospace`;
         let tText: string;
         if (diff > 0) {
