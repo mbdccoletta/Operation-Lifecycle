@@ -2679,8 +2679,18 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
             problems={problems}
             onSelect={onConstellationSelect}
             dataMode={dataMode}
-            onQuadrantClick={onQuadrantClick}
-            onCategoryLabelClick={onCategoryLabelClick}
+            /* 0.0.127 — drilldown via category-name click AND via
+               cell-area click both removed. User: "remover opcao
+               de drill down na tela overview pelo nome da categoria
+               ou na area sem dados. Permitir drilldown apenas nos
+               circulos de agrupamentos." The only entry points to
+               the enlarged modal now are the sub-bubbles (Rising /
+               Stuck / Total) inside each cell — `onQuadrantEnlarge`
+               below. The dot click still pins an individual
+               problem (its own path, not a category drilldown).
+               `onQuadrantClick` and `onCategoryLabelClick` props
+               intentionally left undefined so the canvas hit-tests
+               for the cell-body / label-strip become no-ops. */
             onHubRingClick={(kind) => {
               // 0.0.118 — central rings drill to the LIST view
               // with the matching status filter. Same intent as
