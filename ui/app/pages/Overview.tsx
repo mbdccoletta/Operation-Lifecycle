@@ -2487,8 +2487,15 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
              carries `spread: timeframe(...)` so each bucket counts
              every problem alive during that window — matches the
              native Davis chart's bar heights for any tenant size.
-             User: "a quantidade total por barra esta diferente." */
-          data={trendData}
+             User: "a quantidade total por barra esta diferente."
+             0.0.146 — fall back to the client-side sweep-line when a
+             demo scenario is active. The server's trendData hits real
+             Grail (the simulated dataset bypasses DQL entirely), so
+             without this swap the chart would show ~7 active while
+             the rest of the page shows the XLARGE 22k. User: "usando
+             cenarios, vejo mais de 22k ativos mas na barra vejo
+             menos." */
+          data={scenario !== "real" ? activeOverTimeData : trendData}
           loading={trendLoading && rawProblems.length === 0}
           /* Brush-to-zoom kept on every form factor. The earlier
              mobile gate was wrong — the user DID want to brush on
