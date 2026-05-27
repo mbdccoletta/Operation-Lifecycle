@@ -1816,8 +1816,25 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
         return startMs < toMs && endMs > fromMs;
       });
     }
+    // 0.0.125 — Rising / Stuck chip strip filters rows when in
+    // LIST view. Total chip is excluded from the list strip (no
+    // semantic — Total = all active = no filter). In constellation
+    // mode the same chip drives bubble highlight only, NOT row
+    // filtering, so the gate keys off viewMode.
+    if (viewMode === "list" && (highlightedSubsetMode === "rising" || highlightedSubsetMode === "open_time")) {
+      const now = Date.now();
+      const RISING_WINDOW = 3_600_000;     // < 1 h
+      out = out.filter((p) => {
+        if (p["event.status"] !== "ACTIVE") return false;
+        const startTs = new Date(p["event.start"]).getTime();
+        if (highlightedSubsetMode === "rising") {
+          return startTs >= now - RISING_WINDOW;
+        }
+        return startTs < now - RISING_WINDOW;  // Stuck
+      });
+    }
     return out;
-  }, [sorted, searchDebounced, catFilter, pinnedProblemId, groupBy, segMembership, resolveGrouping, selectedRange, entityFilter, rceFilter, segmentFilter, statusFilter, stuckHoursFilter, highlightedSubsetMode]);
+  }, [sorted, searchDebounced, catFilter, pinnedProblemId, groupBy, segMembership, resolveGrouping, selectedRange, entityFilter, rceFilter, segmentFilter, statusFilter, stuckHoursFilter, highlightedSubsetMode, viewMode]);
 
   const entityCount = useMemo(() => {
     const set = new Set<string>();
@@ -2427,6 +2444,83 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
           CategoryFilterContext effect below so the shared strip
           shows numbers relevant to this view.) */}
 
+      {/* 0.0.125 — Chip strip lifted out of the constellation branch.
+          User: "permitir estes group by no modo list e no mobile view"
+          + "remover agrupamento por Total da visao mobile. nao faz
+          sentido em lista." Shows on every view and device, with the
+          chip list filtered by context:
+            • Constellation view (any device) → Rising + Stuck + Total
+            • List view (any device)         → Rising + Stuck only
+              (Total = "highlight categories" doesn't apply to a flat
+               row list — semantically empty there.)
+          When in list view the Rising/Stuck chip ALSO acts as a row
+          filter (see the `filtered` useMemo below). */}
+      {(() => {
+        const inList = viewMode === "list";
+        const chips: Array<{ mode: typeof highlightedSubsetMode; label: string; hint: string }> = inList
+          ? [
+              { mode: "rising"    as const, label: "Rising", hint: "Problems opened in the last hour" },
+              { mode: "open_time" as const, label: "Stuck",  hint: "Problems active for more than 4 hours" },
+            ]
+          : [
+              { mode: "rising"      as const, label: "Rising",   hint: "Problems opened in the last hour" },
+              { mode: "open_time"   as const, label: "Stuck",    hint: "Problems active for more than 4 hours" },
+              { mode: "criticality" as const, label: "Total",    hint: "Highlight categories with the most active problems" },
+            ];
+        return (
+          <div
+            role="note"
+            aria-label="Cell sub-bubble legend"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              flexWrap: "wrap",
+              gap: 12,
+              padding: "8px 14px",
+              margin: "0 0 10px",
+              borderRadius: 8,
+              background: "var(--neo-surface-2)",
+              border: "1px solid var(--neo-border)",
+              color: "var(--neo-text-2)",
+              font: '500 11px/1.3 "Inter", system-ui, sans-serif',
+              userSelect: "none",
+            }}
+          >
+            <span style={{ fontWeight: 700, color: "var(--neo-text)", letterSpacing: "0.04em" }}>
+              {inList ? "Filter by:" : "Each cell groups by:"}
+            </span>
+            {chips.map((m) => {
+              const isActive = highlightedSubsetMode === m.mode;
+              return (
+                <button
+                  key={m.label}
+                  type="button"
+                  title={`${m.hint}${isActive ? " — click to clear" : (inList ? " — click to filter" : " — click to highlight in every cell")}`}
+                  onClick={() => setHighlightedSubsetMode((prev) => (prev === m.mode ? null : m.mode))}
+                  aria-pressed={isActive}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    padding: "3px 10px",
+                    borderRadius: 999,
+                    background: isActive ? "rgba(99,102,241,0.20)" : "var(--neo-surface)",
+                    border: `1px solid ${isActive ? "#6366f1" : "var(--neo-border)"}`,
+                    color: isActive ? "#a5b4fc" : "var(--neo-text)",
+                    fontWeight: 600,
+                    font: 'inherit',
+                    cursor: "pointer",
+                    transition: "background 120ms, border-color 120ms, color 120ms",
+                  }}
+                >
+                  {m.label}
+                  <span style={{ marginLeft: 6, fontSize: 9, opacity: 0.6, fontWeight: 500 }}>{m.hint}</span>
+                </button>
+              );
+            })}
+          </div>
+        );
+      })()}
+
       {/* ═══ MAIN CONTENT ═══ */}
       {viewMode === "neural" ? (
         <div className="neo-neural-section">
@@ -2519,72 +2613,11 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
               </div>
             </div>
           )}
-          {/* Sub-bubble legend — explains the four labels that show
-              up under each cell's bubbles (Rising, Stuck, Critical,
-              Total). Replaces the old "Show By" segmented control
-              that was removed in 0.0.109. Hidden in mobile to save
-              the cramped header real estate. */}
-          {!isMobileOrTablet && (
-            <div
-              role="note"
-              aria-label="Cell sub-bubble legend"
-              style={{
-                display: "flex",
-                alignItems: "center",
-                flexWrap: "wrap",
-                gap: 12,
-                padding: "8px 14px",
-                margin: "0 0 10px",
-                borderRadius: 8,
-                background: "var(--neo-surface-2)",
-                border: "1px solid var(--neo-border)",
-                color: "var(--neo-text-2)",
-                font: '500 11px/1.3 "Inter", system-ui, sans-serif',
-                userSelect: "none",
-              }}
-            >
-              <span style={{ fontWeight: 700, color: "var(--neo-text)", letterSpacing: "0.04em" }}>
-                Each cell groups by:
-              </span>
-              {([
-                { mode: "rising"      as const, label: "Rising",   hint: "Problems opened in the last hour" },
-                { mode: "open_time"   as const, label: "Stuck",    hint: "Problems active for more than 4 hours" },
-                { mode: "criticality" as const, label: "Total",    hint: "Highlight categories with the most active problems" },
-              ]).map((m) => {
-                const isActive = highlightedSubsetMode === m.mode;
-                return (
-                  <button
-                    key={m.label}
-                    type="button"
-                    title={`${m.hint}${isActive ? " — click to clear" : " — click to highlight in every cell"}`}
-                    onClick={() => setHighlightedSubsetMode((prev) => (prev === m.mode ? null : m.mode))}
-                    aria-pressed={isActive}
-                    style={{
-                      display: "inline-flex",
-                      alignItems: "center",
-                      padding: "3px 10px",
-                      borderRadius: 999,
-                      background: isActive ? "rgba(99,102,241,0.20)" : "var(--neo-surface)",
-                      border: `1px solid ${isActive ? "#6366f1" : "var(--neo-border)"}`,
-                      color: isActive ? "#a5b4fc" : "var(--neo-text)",
-                      fontWeight: 600,
-                      font: 'inherit',
-                      cursor: "pointer",
-                      transition: "background 120ms, border-color 120ms, color 120ms",
-                    }}
-                  >
-                    {m.label}
-                    <span style={{ marginLeft: 6, fontSize: 9, opacity: 0.6, fontWeight: 500 }}>{m.hint}</span>
-                  </button>
-                );
-              })}
-              <span style={{ marginLeft: "auto", opacity: 0.6 }}>
-                {highlightedSubsetMode
-                  ? "Highlighted across all cells. Click chip again to clear."
-                  : "Click a chip to highlight that group across all cells."}
-              </span>
-            </div>
-          )}
+          {/* 0.0.125 — chip strip moved up above the viewMode ternary
+              so it shows in both constellation AND list. The old
+              inline strip used to live here (constellation-only,
+              desktop-only). See the new strip above the main-content
+              block. */}
           <ConstellationView
             problems={problems}
             onSelect={onConstellationSelect}
