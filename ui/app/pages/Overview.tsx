@@ -1019,22 +1019,81 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
   // locked to list-derived math and reproducing the exact bug
   // this hook was meant to fix.
   const constellationCountOverrides = useMemo(() => {
-    if (statusCategoryLoading) return undefined;
-    if (scenario !== "real") return undefined;
+    if (scenario === "real") {
+      // Real tenant → use the count query (already timeframe-bounded
+      // server-side via from/to in buildStatusCategoryCountsQuery).
+      if (statusCategoryLoading) return undefined;
+      return {
+        total: statusCategoryTotals.total,
+        active: statusCategoryTotals.active,
+        resolved: statusCategoryTotals.closed,
+        activeByCategory: statusCategoryCounts.ACTIVE,
+        resolvedByCategory: statusCategoryCounts.CLOSED,
+        // 0.0.137 — authoritative Stuck count per category, server-
+        // side. Now timeframe-aware (0.0.148).
+        stuckByCategory: statusCategoryCounts.STUCK,
+      };
+    }
+    // 0.0.149 — DEMO scenarios bypass DQL entirely. Compute the same
+    // counts client-side, applying the timeframe filter so the rings
+    // + bubbles react when the user switches between Today / Last 7
+    // days / etc. User: "calculos de Total, stuck, resolved devem
+    // respeitar timeframe principal do app."
+    //
+    // A synthetic problem "intersects" the timeframe when:
+    //   • event.start <= timeframe.to AND
+    //   • (status === ACTIVE OR event.end >= timeframe.from)
+    let tfFromMs = -Infinity;
+    let tfToMs   = Date.now();
+    if (selectedRange) {
+      tfFromMs = selectedRange.from.getTime();
+      tfToMs   = selectedRange.to.getTime();
+    } else {
+      const fromIso = timeframe?.from?.absoluteDate;
+      const toIso   = timeframe?.to?.absoluteDate;
+      if (fromIso) {
+        const t = Date.parse(fromIso);
+        if (Number.isFinite(t)) tfFromMs = t;
+      }
+      if (toIso) {
+        const t = Date.parse(toIso);
+        if (Number.isFinite(t)) tfToMs = t;
+      }
+    }
+    let active = 0;
+    let closed = 0;
+    const activeBy: Record<string, number> = {};
+    const closedBy: Record<string, number> = {};
+    const stuckBy:  Record<string, number> = {};
+    for (const p of rawProblems) {
+      const startTs = new Date(p["event.start"]).getTime();
+      if (!Number.isFinite(startTs) || startTs > tfToMs) continue;
+      const isActive = p["event.status"] === "ACTIVE";
+      const endTs = p["event.end"] ? new Date(p["event.end"]).getTime() : null;
+      // Closed problems must have ended after the timeframe start to
+      // count — otherwise the closure happened before the window.
+      if (!isActive && endTs !== null && endTs < tfFromMs) continue;
+      const cat = p["event.category"];
+      if (isActive) {
+        active++;
+        activeBy[cat] = (activeBy[cat] || 0) + 1;
+        if (startTs < stuckCutoffMs) {
+          stuckBy[cat] = (stuckBy[cat] || 0) + 1;
+        }
+      } else {
+        closed++;
+        closedBy[cat] = (closedBy[cat] || 0) + 1;
+      }
+    }
     return {
-      total: statusCategoryTotals.total,
-      active: statusCategoryTotals.active,
-      resolved: statusCategoryTotals.closed,
-      activeByCategory: statusCategoryCounts.ACTIVE,
-      resolvedByCategory: statusCategoryCounts.CLOSED,
-      // 0.0.137 — authoritative Stuck count (ACTIVE & start < now-4h)
-      // per category, derived from the same count query. Lets the
-      // constellation Stuck bubble report a true number instead of
-      // a scaled-from-sample estimate that collapses to 0 when the
-      // category overflows the first-paint sample.
-      stuckByCategory: statusCategoryCounts.STUCK,
+      total: active + closed,
+      active,
+      resolved: closed,
+      activeByCategory: activeBy,
+      resolvedByCategory: closedBy,
+      stuckByCategory: stuckBy,
     };
-  }, [statusCategoryLoading, scenario, statusCategoryTotals, statusCategoryCounts]);
+  }, [scenario, statusCategoryLoading, statusCategoryTotals, statusCategoryCounts, rawProblems, timeframe, selectedRange, stuckCutoffMs]);
 
 
   // Hour-over-hour trend figures for the mobile headline strip.
