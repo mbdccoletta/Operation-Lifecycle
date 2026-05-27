@@ -67,11 +67,12 @@ export interface EnlargedQuadrantCardProps {
    *  list. See `onQuadrantProblemSelect` in Overview.tsx. */
   onSelectProblem?: (problem: Problem) => void;
   /** 0.0.127 — Fires when the user clicks the "Total" pill at the
-   *  bottom of the modal. Host is expected to close the modal,
-   *  clear all filters, and switch to LIST view (raw, unfiltered).
-   *  The user reads Total here as "show me everything, escape this
-   *  drilldown." */
-  onDrilldownToList?: () => void;
+   *  bottom of the modal. Host is expected to close the modal and
+   *  switch to LIST view filtered by `groupingId` (the modal's
+   *  category). Other filters (status, stuck-hours, segment, etc.)
+   *  should be cleared. The user reads Total as "see every
+   *  problem from THIS category, regardless of Rising/Stuck split". */
+  onDrilldownToList?: (groupingId: string) => void;
   onClose: () => void;
 }
 
@@ -385,13 +386,13 @@ export const EnlargedQuadrantCard = ({
                       type="button"
                       onClick={() => {
                         if (isTotalEscape) {
-                          onDrilldownToList!();
+                          onDrilldownToList!(quadrantId);
                           return;
                         }
                         if (!isActive && count > 0) setCurrentMode(m.mode);
                       }}
                       title={isTotalEscape
-                        ? "Open the full list — no filters"
+                        ? `Open the list filtered by ${grouping.label}`
                         : (isActive
                             ? `Currently showing top ${shownTop} of ${count} ${m.label.toLowerCase()}`
                             : (count > 0 ? `${m.hint} — switch to ${m.label}` : `No ${m.label.toLowerCase()} problems`))}

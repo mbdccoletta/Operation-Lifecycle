@@ -3600,14 +3600,20 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
           dataMode={enlargedQuadrantMode ?? dataMode}
           onClose={closeEnlargedQuadrant}
           onSelectProblem={onQuadrantProblemSelect}
-          // 0.0.127 — Total pill in the modal escapes to the raw
-          // LIST view with no filters. Close modal, clear every
-          // pinned filter the list might be carrying, jump to list.
-          onDrilldownToList={() => {
+          // 0.0.127 — Total pill in the modal jumps to LIST
+          // filtered by the modal's category. User: "o total da
+          // area expandida dele levar o filtro de categoria para a
+          // list." Clears other narrowing filters (status, stuck,
+          // entity, root-cause, segment, pinned-problem) so the
+          // user sees every problem of that category, no other
+          // narrowing — Rising/Stuck split is dropped in favour of
+          // the full category view.
+          onDrilldownToList={(groupingId) => {
             closeEnlargedQuadrant();
             resetListFilters();
             setStatusFilter(null);
             setHighlightedSubsetMode(null);
+            setCatFilter(new Set([groupingId]));
             setViewMode("list");
           }}
         />
