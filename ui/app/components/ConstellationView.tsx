@@ -1650,7 +1650,7 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
       const unitStart = cx - unitW / 2;
       const dotX      = unitStart + dotR;
       const labelX    = unitStart + dotR * 2 + gap;
-      const headerY   = resolvedY + 32;
+      const headerY   = resolvedY + 24;
 
       ctx.beginPath();
       ctx.arc(dotX, headerY, dotR, 0, Math.PI * 2);
@@ -1705,7 +1705,7 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
 
       // ── Row 4: delta /1h indicator — colored pill-style label
       if (!isEmpty) {
-        const deltaY = heroY + 40;
+        const deltaY = heroY + 32;
         const arrow  = delta > 0 ? "▲" : delta < 0 ? "▼" : "●";
         const sign   = delta > 0 ? `+${delta}` : `${delta}`;
         const trendRgb =
@@ -1733,7 +1733,7 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
         ctx.font = `400 ${(12 * fsMult).toFixed(2)}px "Roboto Mono", "SF Mono", monospace`;
         ctx.textBaseline = "top";
         ctx.fillStyle = dk ? "rgba(148,163,184,0.55)" : "rgba(100,116,139,0.6)";
-        ctx.fillText(`1h ago: ${countPrev}`, cx, deltaY + 22);
+        ctx.fillText(`1h ago: ${countPrev}`, cx, deltaY + 18);
       }
 
       // Column separator — vertical thin dashed line for HUD look
