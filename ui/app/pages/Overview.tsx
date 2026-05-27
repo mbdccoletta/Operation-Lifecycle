@@ -1114,8 +1114,22 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
       .slice(0, MAX_SEGMENTS_TO_RANK)
       .map((s) => s.uid);
   }, [segCatalog]);
+  // 0.0.119 — DPS-killer optimisation. `useSegmentMembership` fires
+  // up to 30 parallel DQL queries per refresh cycle (≤30 segments,
+  // each scanning the full problem set under the current filters).
+  // At 1000 concurrent users on a 1-min refresh, this single hook
+  // accounts for ~83 % of the monthly DPS budget (~$2.5 M/mo on
+  // the xlarge-tenant pricing analysis). Since `SHOW_SEGMENT_VIEW
+  // = false` and the user authorised dropping the side-features
+  // it powers (Segments column drilldown + Top Segments card),
+  // we gate the fetch behind that same flag. Sim/demo segment
+  // scenarios continue to work because `simSegMembership` is the
+  // primary source there.
   const { membership: realSegMembership, loading: realSegMembershipLoading } =
-    useSegmentMembership(simSegMembership !== null ? [] : segmentUidsToQuery, problemsFilter);
+    useSegmentMembership(
+      (simSegMembership !== null || !SHOW_SEGMENT_VIEW) ? [] : segmentUidsToQuery,
+      problemsFilter,
+    );
   const segMembership        = simSegMembership !== null ? simSegMembership : realSegMembership;
   const segMembershipLoading = simSegMembership !== null ? false : realSegMembershipLoading;
 
@@ -2249,18 +2263,26 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
             >
               <span className={`neo-refresh-icon${rawFetching ? " neo-refresh-icon-spinning" : ""}`} aria-hidden="true">↻</span>
             </button>
+            {/* 0.0.119 — DPS guardrail. Removed the 30 s and 1 min
+                auto-refresh options after the cost analysis showed
+                that 1 min refresh × 1000 users = ~$3 M/mo. The
+                shortest interval users can now pick is 5 min,
+                which together with the 120-600 s staleTimes brings
+                the sustained DPS down to a sustainable regime. The
+                manual ↻ button is right there for "I need fresh
+                NOW" cases. */}
             <select
               className="neo-refresh-interval"
               value={refreshIntervalSec}
               onChange={(e) => setRefreshIntervalSec(Number(e.target.value))}
-              title="Auto refresh interval"
+              title="Auto refresh interval (min 5m to control DPS)"
               aria-label="Auto refresh interval"
             >
               <option value={0}>Auto-refresh: Off</option>
-              <option value={30}>Every 30s</option>
-              <option value={60}>Every 1m</option>
               <option value={300}>Every 5m</option>
+              <option value={900}>Every 15m</option>
               <option value={1800}>Every 30m</option>
+              <option value={3600}>Every 1h</option>
             </select>
             {/* Visual intensity + font-scale controls moved out of
                 this header into a globally-rendered floating panel
