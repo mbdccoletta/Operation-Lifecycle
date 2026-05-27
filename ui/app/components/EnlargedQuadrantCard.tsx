@@ -465,7 +465,16 @@ export const EnlargedQuadrantCard = ({
         </header>
 
         <div className="neo-enlarged-quadrant-body">
-          {activeProblems.length === 0 ? (
+          {/* 0.0.171 — empty-state gate uses the AUTHORITATIVE
+              active count (categoryCounts.active from the count
+              query), not just the local sample. On wide timeframes
+              (e.g. 365 days) the sample of 250 newest globally is
+              dominated by closed rows and the active AVAILABILITY
+              problems can fall outside it — header said "4 active"
+              but the body printed "No active problems". The focused
+              Rising / Stuck fetches will populate the canvas even
+              when the global sample missed the category's actives. */}
+          {(displayedActive > 0 ? false : activeProblems.length === 0) ? (
             <div className="neo-enlarged-quadrant-empty">
               No active problems in this {grouping.label.toLowerCase()}.
             </div>
