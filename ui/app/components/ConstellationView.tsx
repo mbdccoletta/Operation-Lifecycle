@@ -2533,6 +2533,39 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
         ctx.fillText(s.label, bubbleX, safeBot + 4);
         ctx.restore();
       }
+
+      // 0.0.118 — calm-cell pulse. When the user has the Rising chip
+      // selected AND this cell has ZERO problems opened in the last
+      // hour (`trend.recent === 0`), the comet won't fire and the
+      // bubble pass already skipped the Rising bubble (count 0).
+      // The cell still deserves SOME signal so it doesn't read as
+      // "missing data" — a slow electric-cyan pulse breathes at the
+      // cell centre and says "monitored, currently calm". Cells
+      // with new arrivals keep the existing comet + ring animation.
+      if (highlightedSubsetMode === "rising") {
+        const recentNow = catTrends[slot.id]?.recent ?? 0;
+        if (recentNow === 0) {
+          const cxCell = cell.x + cell.w / 2;
+          const cyCell = (safeTop + safeBot) / 2;
+          const pulse  = (Math.sin(tc * 1.3) + 1) / 2;       // 0..1, slow
+          const pulseR = baseR * 0.85 + pulse * (baseR * 0.55);
+          ctx.save();
+          ctx.strokeStyle = `rgba(0,212,255,${0.30 + pulse * 0.45})`;
+          ctx.lineWidth   = 1.6;
+          ctx.shadowColor = "rgba(0,212,255,0.55)";
+          ctx.shadowBlur  = 10 + pulse * 10;
+          ctx.beginPath();
+          ctx.arc(cxCell, cyCell, pulseR, 0, Math.PI * 2);
+          ctx.stroke();
+          // Tiny core dot — anchors the pulse, "antenna" feel.
+          ctx.fillStyle = `rgba(0,212,255,${0.75 + pulse * 0.20})`;
+          ctx.shadowBlur = 6;
+          ctx.beginPath();
+          ctx.arc(cxCell, cyCell, 2, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+        }
+      }
     }
     } // close `if (!disableAggregation)` bubble-pass gate
     bubbleHitsRef.current = bubbleHits;
@@ -2637,18 +2670,19 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
       const trendData = catTrends[cat];
       const diff      = trendData ? trendData.recent - trendData.older : 0;
       const isRising  = diff > 0;
-      // 0.0.118 — comet trail is now RED regardless of the category
-      // accent. User proposal: "alterar a cor da animacao do cometa
-      // para vermelho". The trail only fires when the cell trend is
-      // POSITIVE (more problems than 1 h ago), so red carries the
-      // "alarm — things are escalating" semantic. Identity-by-cell
-      // is preserved positionally (the comet stops at the cell's
-      // Rising bubble, so the user reads category from WHERE the
-      // trail terminates). `baseColor` is still derived for the
-      // per-dot shadow halo below — keeping a soft category tint
-      // on the glow keeps a hint of where each comet is going.
+      // 0.0.118 — comet trail tinted electric cyan. User: "destacar
+      // mais a animação com cor mais futurista." Red carried the
+      // "alarm" semantic but lost the sci-fi HUD feel the rest of
+      // the dashboard is going for. Cyan (#00d4ff) is the classic
+      // targeting/data-feed colour in heads-up displays and pops
+      // crisply against the dark canvas. The trail still only
+      // fires on a POSITIVE trend delta, so the meaning is still
+      // "count climbing" — only the colour and futurism dialled
+      // up. `baseColor` keeps feeding the per-dot shadow halo so
+      // each trail still carries a faint category tint where it
+      // terminates.
       const baseColor = colorOf(cat);
-      const cR = 255, cG = 77, cB = 106;   // #ff4d6a — matches ACTIVE hub ring
+      const cR = 0, cG = 212, cB = 255;    // #00d4ff — electric cyan
 
       // Only animate spokes for rising quadrants AND only in the
       // Rising view mode — motion signals "count climbing", so it's
