@@ -734,7 +734,7 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
   const SUBSET_MODES = [
     { mode: "rising" as const,      label: "Rising",   icon: "▲" },     // ▲
     { mode: "open_time" as const,   label: "Stuck",    icon: "⏱" },     // ⏱
-    { mode: "criticality" as const, label: "Critical", icon: "⚡" },     // ⚡
+    { mode: "criticality" as const, label: "Total",    icon: "Σ" },     // Total of all active
   ];
   type SubsetMode = (typeof SUBSET_MODES)[number]["mode"];
   const cellSubsetBubbles: Record<string, Array<{
@@ -1597,12 +1597,15 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
     const LABEL_X_INSET = 8;
     const LABEL_Y_INSET = 3;
 
-    // 0.0.115 — leader-cell emphasis. When the host marks one or
+    // 0.0.116 — leader-cell emphasis. When the host marks one or
     // more cells as leaders (via the `leaderCellIds` prop, driven
-    // by the "Total" legend chip), draw a soft glow + thicker
-    // outline around each leader's bounds. Renders BEFORE the
-    // label so the label text reads on top. User asked: "Permitir
-    // destacar categoria/s com maior numero de problemas."
+    // by the "Total" legend chip), draw a strong attention-red
+    // outline + glow around each leader's bounds. Renders BEFORE
+    // the label so the label text reads on top. User feedback
+    // ("efeito destaque errado e cor errada"): previous version
+    // used the category accent which blended in with the cell
+    // content — switched to the same red as the ACTIVE hub ring
+    // so it reads as "where the active problems are concentrated".
     if (leaderCellIds && leaderCellIds.size > 0 && !disableAggregation) {
       for (const s of layout) {
         if (!leaderCellIds.has(s.id)) continue;
@@ -1610,21 +1613,27 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
         const cy0 = s.bounds.yMin * h;
         const cw  = (s.bounds.xMax - s.bounds.xMin) * w;
         const ch  = (s.bounds.yMax - s.bounds.yMin) * h;
-        const accent = colorOf(s.id);
-        const [rR, gG, bB] = hexToRgb(accent);
-        // Outer glow rect — drawn slightly inside the bounds so it
-        // doesn't fight with the dashed cell dividers.
-        ctx.save();
-        ctx.strokeStyle = `rgba(${rR},${gG},${bB},0.85)`;
-        ctx.lineWidth = 2;
-        ctx.shadowColor = `rgba(${rR},${gG},${bB},0.55)`;
-        ctx.shadowBlur = 14;
         const pad = 3;
         const radius = 6;
         const rx = cx0 + pad;
         const ry = cy0 + pad;
         const rw = Math.max(0, cw - pad * 2);
         const rh = Math.max(0, ch - pad * 2);
+        // Soft outer glow first — large blur, semi-transparent red.
+        ctx.save();
+        ctx.strokeStyle = "rgba(255,77,106,0.35)";
+        ctx.lineWidth = 6;
+        ctx.shadowColor = "rgba(255,77,106,0.85)";
+        ctx.shadowBlur = 28;
+        ctx.beginPath();
+        ctx.roundRect(rx, ry, rw, rh, radius);
+        ctx.stroke();
+        ctx.restore();
+        // Crisp inner stroke — solid red, no blur, so the rectangle
+        // reads as a deliberate border rather than a haze.
+        ctx.save();
+        ctx.strokeStyle = "rgba(255,77,106,0.95)";
+        ctx.lineWidth = 2.5;
         ctx.beginPath();
         ctx.roundRect(rx, ry, rw, rh, radius);
         ctx.stroke();
@@ -2233,7 +2242,15 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
         // Highlight state: this bubble matches the active legend
         // chip → bigger + brighter outline + animated. Others get
         // dimmed + static. Only highlight when count > 0.
+        //
+        // 0.0.116 — for the "Total" mode (criticality key), the
+        // visual emphasis is the CELL outline (leaderCellIds), not
+        // a bubble dashed ring. So suppress the per-bubble highlight
+        // when the active mode is "criticality" — the user reported
+        // "efeito destaque errado": the Critical/Total bubble was
+        // pulsing in every cell instead of just the leaders.
         const matchesMode = highlightedSubsetMode !== null
+          && highlightedSubsetMode !== "criticality"
           && s.mode === highlightedSubsetMode;
         const isHighlighted = matchesMode && s.count > 0;
         // 0.0.109 follow-up — all bubbles with count > 0 are
