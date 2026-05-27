@@ -23,7 +23,7 @@
 // complicate the dt-app build. Bump this whenever `app.version`
 // in app.config.json is bumped — the deploy check below will
 // flag a drift in code review if forgotten.
-const APP_VERSION = "0.0.139";
+const APP_VERSION = "0.0.140";
 
 export type LogLevel = "info" | "warn" | "error";
 

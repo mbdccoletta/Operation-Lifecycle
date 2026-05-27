@@ -2358,24 +2358,57 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
       // everyone at full alpha (scoreNorm is forced to 1 in that mode).
       const baseAlpha = 0.45 + star.scoreNorm * 0.55; // 0.45 → 1.0
 
-      // 0.0.139 — small helper: brighten dark accents toward white
-      // via YIQ luminance. Reused for the core fill and ring stroke.
-      const brightenIfDark = (hex: string, factor: number): string => {
+      // 0.0.140 — replace YIQ brightening (which mixes toward white
+      // and KILLS saturation — slate-blue #3a5fa3 came out as
+      // rgb(166,183,213) i.e. gray-blue) with HSL pumping. Convert
+      // accent to HSL, force S → 1.0 and L → 0.58, convert back.
+      // This preserves the category hue but gives a vivid, neon-ish
+      // version. User: "a cor azul parece cinza...precisa destacar
+      // com cor viva e tecnologica."
+      const vividAccent = (hex: string): string => {
         const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
         if (!m) return hex;
-        const r0 = parseInt(m[1], 16);
-        const g0 = parseInt(m[2], 16);
-        const b0 = parseInt(m[3], 16);
-        const lum = (r0 * 299 + g0 * 587 + b0 * 114) / 1000;
-        if (lum >= 140) return hex; // already vivid
-        const br = Math.round(r0 + (255 - r0) * factor);
-        const bg = Math.round(g0 + (255 - g0) * factor);
-        const bb = Math.round(b0 + (255 - b0) * factor);
+        const r = parseInt(m[1], 16) / 255;
+        const g = parseInt(m[2], 16) / 255;
+        const b = parseInt(m[3], 16) / 255;
+        const max = Math.max(r, g, b);
+        const min = Math.min(r, g, b);
+        const l0 = (max + min) / 2;
+        let h = 0;
+        if (max !== min) {
+          const d = max - min;
+          if (max === r)      h = ((g - b) / d) % 6;
+          else if (max === g) h = (b - r) / d + 2;
+          else                h = (r - g) / d + 4;
+          h *= 60;
+          if (h < 0) h += 360;
+        }
+        // Target HSL — fully saturated, mid-bright. Skip if the
+        // source is already very bright (no need to mess with it).
+        if (l0 >= 0.55 && max - min > 0.4) return hex;
+        const S = 1;
+        const L = 0.58;
+        const c = (1 - Math.abs(2 * L - 1)) * S;
+        const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
+        const mLight = L - c / 2;
+        let rp = 0, gp = 0, bp = 0;
+        if (h < 60)       { rp = c; gp = x; bp = 0; }
+        else if (h < 120) { rp = x; gp = c; bp = 0; }
+        else if (h < 180) { rp = 0; gp = c; bp = x; }
+        else if (h < 240) { rp = 0; gp = x; bp = c; }
+        else if (h < 300) { rp = x; gp = 0; bp = c; }
+        else              { rp = c; gp = 0; bp = x; }
+        const R = Math.round((rp + mLight) * 255);
+        const G = Math.round((gp + mLight) * 255);
+        const B = Math.round((bp + mLight) * 255);
         return "#"
-          + br.toString(16).padStart(2, "0")
-          + bg.toString(16).padStart(2, "0")
-          + bb.toString(16).padStart(2, "0");
+          + R.toString(16).padStart(2, "0")
+          + G.toString(16).padStart(2, "0")
+          + B.toString(16).padStart(2, "0");
       };
+      // Alias for callsites that previously used `brightenIfDark` —
+      // same intent, better implementation.
+      const brightenIfDark = (hex: string, _factor: number): string => vividAccent(hex);
 
       // Outer glow that "breathes" — kept for `pulse > 0` (proactive
       // animation states) and selection, but NOT for top-tier dots.
