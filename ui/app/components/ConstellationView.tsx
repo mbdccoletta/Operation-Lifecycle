@@ -1607,30 +1607,29 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
     const LABEL_X_INSET = 8;
     const LABEL_Y_INSET = 3;
 
-    // 0.0.116 — leader-cell emphasis. User feedback iteration:
-    //  1. "replicar modelo da categoria Error" — match the
-    //     existing data-mode-leader border style (strokeRect +
-    //     shadowBlur 10).
-    //  2. "deve destacar toda a borda, como as demais dimensoes" —
-    //     brighten dark accents toward white so the frame stays
-    //     legible on every category, not just the warm-toned ones.
-    //  3. "eraddooooo" — earlier I used `s.bounds` (the full slot,
-    //     yMax extends down to the dashed cell divider), which made
-    //     the frame's bottom edge clip through the "Stuck"/"Total"
-    //     bubble labels. Switched to `cellRects` (the hub-band-
-    //     clamped geometry) so the frame leaves the label row
-    //     clear AND the inner divider lines aren't crossed.
+    // 0.0.116 — leader-cell emphasis. User: "gerar destaque um
+    // pouco mais futurista". Dropped the full rectangle stroke in
+    // favour of a HUD-style targeting reticle:
+    //   • L-shaped corner brackets at each cell corner.
+    //   • Short inward tick marks at the midpoint of each side.
+    //   • Subtle alpha pulse (sin wave on the animation clock) so
+    //     the cue feels alive without becoming distracting.
+    //   • Soft accent-coloured halo via shadowBlur for depth.
+    //
+    // Geometry uses `cellRects` so the brackets sit inside the
+    // hub-band-clamped working area and never cross the "Stuck"/
+    // "Total" bubble labels at the bottom of the cell.
     if (leaderCellIds && leaderCellIds.size > 0 && !disableAggregation) {
       for (const s of layout) {
         if (!leaderCellIds.has(s.id)) continue;
         const z = cellRects[s.id];
         if (!z) continue;
         const accent = colorOf(s.id);
-        // Brighten the stroke when the accent is dark — keeps the
-        // outline crisp on every category. Halo (shadowColor) uses
-        // the un-brightened accent so the colour identity reads.
+        // Brighten the stroke for dark accents so the brackets
+        // stay legible. Halo uses the un-brightened accent so the
+        // category identity reads.
         const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(accent);
-        let rS = 180, gS = 200, bS = 255;
+        let rS = 200, gS = 220, bS = 255;
         let haloRgb = "180,200,255";
         if (m) {
           const r = parseInt(m[1], 16);
@@ -1639,7 +1638,7 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
           haloRgb = `${r},${g},${b}`;
           const lum = (r * 299 + g * 587 + b * 114) / 1000;
           if (lum < 140) {
-            const factor = 0.5; // lift halfway to white
+            const factor = 0.5;
             rS = Math.round(r + (255 - r) * factor);
             gS = Math.round(g + (255 - g) * factor);
             bS = Math.round(b + (255 - b) * factor);
@@ -1647,16 +1646,69 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
             rS = r; gS = g; bS = b;
           }
         }
+        // Subtle breathing pulse — 0.7..1.0 alpha.
+        const pulse = 0.7 + ((Math.sin(tc * 1.6) + 1) / 2) * 0.3;
+
+        const inset = 1.5;
+        const x0 = z.x + inset;
+        const y0 = z.y + inset;
+        const x1 = z.x + z.w - inset;
+        const y1 = z.y + z.h - inset;
+        const mx = (x0 + x1) / 2;
+        const my = (y0 + y1) / 2;
+        // Bracket arms scale with cell size so they don't dominate
+        // tiny cells or vanish on big ones. ~12 % of the smaller
+        // side, clamped to a 14–30 px range.
+        const minSide = Math.min(z.w, z.h);
+        const cornerLen = Math.max(14, Math.min(30, minSide * 0.12));
+        const tickLen = Math.max(6, cornerLen * 0.36);
+
         ctx.save();
-        ctx.strokeStyle = `rgba(${rS},${gS},${bS},1.0)`;
+        ctx.strokeStyle = `rgba(${rS},${gS},${bS},${pulse})`;
         ctx.lineWidth = 2.5;
-        ctx.shadowColor = `rgba(${haloRgb},0.7)`;
-        ctx.shadowBlur = 14;
-        // Same geometry/inset as the existing data-mode-leader
-        // border: strokeRect on the clamped cellRects, inset 1.5 px
-        // on each side → sharp corners aligned with the cell's
-        // working area, leaving the bottom label row untouched.
-        ctx.strokeRect(z.x + 1.5, z.y + 1.5, z.w - 3, z.h - 3);
+        ctx.lineCap = "round";
+        ctx.shadowColor = `rgba(${haloRgb},${pulse * 0.65})`;
+        ctx.shadowBlur = 12;
+
+        // Four L-shaped corner brackets.
+        // Top-left
+        ctx.beginPath();
+        ctx.moveTo(x0, y0 + cornerLen);
+        ctx.lineTo(x0, y0);
+        ctx.lineTo(x0 + cornerLen, y0);
+        ctx.stroke();
+        // Top-right
+        ctx.beginPath();
+        ctx.moveTo(x1 - cornerLen, y0);
+        ctx.lineTo(x1, y0);
+        ctx.lineTo(x1, y0 + cornerLen);
+        ctx.stroke();
+        // Bottom-left
+        ctx.beginPath();
+        ctx.moveTo(x0, y1 - cornerLen);
+        ctx.lineTo(x0, y1);
+        ctx.lineTo(x0 + cornerLen, y1);
+        ctx.stroke();
+        // Bottom-right
+        ctx.beginPath();
+        ctx.moveTo(x1 - cornerLen, y1);
+        ctx.lineTo(x1, y1);
+        ctx.lineTo(x1, y1 - cornerLen);
+        ctx.stroke();
+
+        // Mid-side inward tick marks — thinner stroke, no halo so
+        // they read as fine HUD detail rather than another border.
+        ctx.lineWidth = 1.5;
+        ctx.shadowBlur = 6;
+        // top
+        ctx.beginPath(); ctx.moveTo(mx, y0); ctx.lineTo(mx, y0 + tickLen); ctx.stroke();
+        // bottom
+        ctx.beginPath(); ctx.moveTo(mx, y1); ctx.lineTo(mx, y1 - tickLen); ctx.stroke();
+        // left
+        ctx.beginPath(); ctx.moveTo(x0, my); ctx.lineTo(x0 + tickLen, my); ctx.stroke();
+        // right
+        ctx.beginPath(); ctx.moveTo(x1, my); ctx.lineTo(x1 - tickLen, my); ctx.stroke();
+
         ctx.restore();
       }
     }
