@@ -64,6 +64,7 @@ import {
   segmentsToGroupings,
 } from "../utils/grouping";
 import { useFilterSegments } from "../hooks/useFilterSegments";
+import { APP_VERSION_TAG } from "../utils/logger";
 import { useSegmentMembership, clearSegmentMembershipCache } from "../hooks/useSegmentMembership";
 
 type ViewMode = "neural" | "list";
@@ -2385,6 +2386,24 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
                 panel is reachable from every page, and the
                 preferences persist via IntensityContext. */}
             <RefreshStatus lastRefreshAt={lastRefreshAt} intervalSec={refreshIntervalSec} />
+            {/* 0.0.135 — surface app version next to the refresh
+                stamp so support / users can match a screenshot to
+                an exact build without opening DevTools. Subtle
+                styling (smaller, muted, monospaced) so it reads as
+                metadata, not a primary UI element. */}
+            <span
+              className="neo-app-version"
+              title={`Problem Lifecycle ${APP_VERSION_TAG}`}
+              style={{
+                marginLeft: 8,
+                font: '500 11px/1 "SF Mono","JetBrains Mono",monospace',
+                color: "var(--neo-text-3)",
+                letterSpacing: "0.02em",
+                userSelect: "all",
+              }}
+            >
+              v{APP_VERSION_TAG}
+            </span>
           </div>
         </div>
       </header>
