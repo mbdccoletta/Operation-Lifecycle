@@ -1580,21 +1580,16 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
       ctx.textBaseline = "top";
       let cx = x;
 
-      // Category name. 0.0.118 — user: "alterar cor dos nomes dos
-      // grupos em branco e adaptar para modo Dark." Text is now
-      // theme-neutral (white in dark, slate-900 in light) instead
-      // of the category accent — the accent identity moves entirely
-      // to the dot before the label, the cell frame, and the bubble
-      // rings. Hover keeps an accent-tinted glow + underline so the
-      // "this is a click target" affordance + category cue remain.
+      // Category name (bold colored). When the pointer is over this
+      // quadrant's label strip, draw a glow + underline so the user
+      // discovers that the name is a click target.
       const isLabelHover = hoveredLabel === cat;
-      const nameColor = dk ? "#ffffff" : "#0f172a";
       ctx.font = `500 ${(12 * fsMult).toFixed(2)}px "Roboto Mono", "Roboto Mono", "SF Mono", monospace`;
-      ctx.fillStyle = nameColor;
-      ctx.globalAlpha = 0.95;
+      ctx.fillStyle = color;
+      ctx.globalAlpha = dk ? 0.95 : 0.95;
       if (isLabelHover) {
         ctx.save();
-        ctx.shadowColor = color;   // accent-tinted glow on hover
+        ctx.shadowColor = color;
         ctx.shadowBlur  = 8;
         ctx.fillText(label, cx, y);
         ctx.restore();
@@ -1602,8 +1597,7 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
         ctx.fillText(label, cx, y);
       }
       const labelW = ctx.measureText(label).width;
-      // Hover underline — short bar under the category name. Stays
-      // accent-coloured so the cue still points to "this category".
+      // Hover underline — short bar under the category name
       if (isLabelHover) {
         ctx.save();
         ctx.fillStyle = color;
