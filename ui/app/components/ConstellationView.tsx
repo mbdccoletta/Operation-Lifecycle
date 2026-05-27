@@ -46,6 +46,10 @@ interface ConstellationViewProps {
    *    active   → status = "ACTIVE"
    *    resolved → status = "CLOSED" */
   onHubRingClick?: (kind: "total" | "active" | "resolved") => void;
+  /** 0.0.118 — Clicking a per-category tile in the RESOLVED zone
+   *  fires this with the grouping id. Host switches to LIST view
+   *  with category=<id> AND status="CLOSED". */
+  onResolvedTileClick?: (groupingId: string) => void;
   /** 0.0.115 — Cells (by grouping id) that the host wants emphasised
    *  as leaders — i.e. the categories with the largest active count.
    *  Used by the "Total" legend chip to "destacar categoria/s com
@@ -196,6 +200,7 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
   onQuadrantClick,
   onCategoryLabelClick,
   onHubRingClick,
+  onResolvedTileClick,
   leaderCellIds,
   catTrendOverride,
   onQuadrantEnlarge,
@@ -347,6 +352,10 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
    *  click handler so clicks on the rings switch to LIST view with
    *  the matching status filter. */
   const hubHitsRef = useRef<Array<{ kind: "total" | "active" | "resolved"; cx: number; cy: number; r: number }>>([]);
+  /** RESOLVED-zone per-category tile hitboxes — populated while
+   *  rendering the bottom strip. Consumed by `handleClick` to
+   *  drill into the LIST view filtered by category + CLOSED. */
+  const resolvedTileHitsRef = useRef<Array<{ groupingId: string; x: number; y: number; w: number; h: number }>>([]);
   // Tracks the previous tap time/quadrant so we can detect a double-tap on
   // touch devices (where the synthetic dblclick event is unreliable).
   const lastTapRef = useRef<{ t: number; cat: string | null }>({ t: 0, cat: null });
@@ -1815,8 +1824,20 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
     const cutoff1h    = Date.now() - ONE_HOUR_MS;
     const resolvedCats = groupings.map((g) => g.id);
     const colW = w / Math.max(resolvedCats.length, 1);
+    // 0.0.118 — record per-tile hitboxes so a click in the
+    // RESOLVED zone drills into the LIST view filtered by
+    // category + status = CLOSED. Reset before populating so a
+    // grouping list change doesn't leave stale tiles in the map.
+    resolvedTileHitsRef.current = [];
     // Show ALL groupings in the RESOLVED zone — even with zero count.
     resolvedCats.forEach((cat, idx) => {
+      resolvedTileHitsRef.current.push({
+        groupingId: cat,
+        x: colW * idx,
+        y: activeAreaH + 2,
+        w: colW,
+        h: h - activeAreaH - 2,
+      });
       const catResolved = resolvedProbs.filter((p) => resolveGrouping(p) === cat);
       /* Headline count prefers the count-query override so the
          per-category RESOLVED hero number tracks the full window
@@ -1956,6 +1977,10 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
         ctx.setLineDash([]);
       }
     });
+    } else {
+      // Clear stale RESOLVED-tile hitboxes when the zone is hidden
+      // (modal view) so a click in that region never drills.
+      resolvedTileHitsRef.current = [];
     } // end if (showResolvedZone)
 
     const t = animRef.current;
@@ -3086,6 +3111,22 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
         }
       }
     }
+    // 0.0.118 — RESOLVED-zone per-category tiles: drill to LIST
+    // view filtered by category + status=CLOSED. Tiles sit BELOW
+    // the active area (`y > activeAreaH`); they never collide
+    // with the dot/quadrant hit tests above so order here doesn't
+    // matter much — placed after the hub for symmetry.
+    if (onResolvedTileClick) {
+      for (const tile of resolvedTileHitsRef.current) {
+        if (
+          mxPx >= tile.x && mxPx <= tile.x + tile.w
+          && myPx >= tile.y && myPx <= tile.y + tile.h
+        ) {
+          onResolvedTileClick(tile.groupingId);
+          return;
+        }
+      }
+    }
     const found = findStarAt(world.x, world.y);
     if (found) {
       onSelect((found as Star).problem);
@@ -3115,7 +3156,7 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
     // No-op for `lockExpandedQuadrant` hosts (the modal owns dismissal).
     if (expandedQuadrant && !lockExpandedQuadrant) setExpandedQuadrant(null);
     onEmptyClick?.();
-  }, [size, onSelect, findStarAt, screenToWorld, onCategoryLabelClick, onHubRingClick, expandedQuadrant, onEmptyClick, detectQuadrantAt, detectLabelAt, expandedCellCategory, onQuadrantEnlarge, lockExpandedQuadrant]);
+  }, [size, onSelect, findStarAt, screenToWorld, onCategoryLabelClick, onHubRingClick, onResolvedTileClick, expandedQuadrant, onEmptyClick, detectQuadrantAt, detectLabelAt, expandedCellCategory, onQuadrantEnlarge, lockExpandedQuadrant]);
 
   const handleDoubleClick = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     // Pinned-zoom mode (modal): swallow the double-click — we don't

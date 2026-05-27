@@ -2551,6 +2551,27 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
             dataMode={dataMode}
             onQuadrantClick={onQuadrantClick}
             onCategoryLabelClick={onCategoryLabelClick}
+            onHubRingClick={(kind) => {
+              // 0.0.118 — central rings drill to the LIST view
+              // with the matching status filter. Same intent as
+              // the FILTERS strip's status chips:
+              //   total    → no status filter (TOTAL ring)
+              //   active   → status = "ACTIVE"
+              //   resolved → status = "CLOSED"
+              resetListFilters();
+              if (kind === "active")   setStatusFilter("ACTIVE");
+              else if (kind === "resolved") setStatusFilter("CLOSED");
+              else                     setStatusFilter(null);
+              setViewMode("list");
+            }}
+            onResolvedTileClick={(groupingId) => {
+              // 0.0.118 — per-category tile in the RESOLVED zone
+              // drills into LIST filtered by category + CLOSED.
+              resetListFilters();
+              setCatFilter(new Set([groupingId]));
+              setStatusFilter("CLOSED");
+              setViewMode("list");
+            }}
             onQuadrantEnlarge={(cellId, mode) => {
               setEnlargedQuadrant(cellId);
               setEnlargedQuadrantMode(mode);
