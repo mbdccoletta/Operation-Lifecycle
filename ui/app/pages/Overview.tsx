@@ -1963,21 +1963,19 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [viewMode, dataMode, timeframe, catFilter, groupByColumns, entityFilter, rceFilter, segmentFilter, statusFilter, stuckHoursFilter]);
 
-  // Clicking on a quadrant's HEADER drills into the LIST. When the
-  // clicked category is one of several leaders (multiple ★ TOP / ▲ UP
-  // quadrants), bring EVERY leader along so the list mirrors what's
-  // visually highlighted on the dashboard. Clicking a non-leader
-  // category just filters by that single category.
+  // 0.0.111 — Clicking a quadrant's HEADER opens the enlarged
+  // modal (same as clicking the count bubble). User asked: "ao
+  // clicar no nome da categoria, expandir". Previously the
+  // header click switched to LIST view; that path is still
+  // reachable via the INCIDENTS tab + filter strip, but the
+  // header click now matches the bubble + dbl-click affordance
+  // and stays in the constellation context. Mode follows the
+  // current legend selection so the modal opens focused on the
+  // same Rising/Stuck/Critical subset the user is highlighting.
   const onCategoryLabelClick = useCallback((category: string) => {
-    resetListFilters();
-    const leaders = computeLeaderCats(problems, dataMode, groupings, resolveGrouping);
-    if (leaders.has(category) && leaders.size > 1) {
-      setCatFilter(new Set(leaders));
-    } else {
-      setCatFilter(new Set([category]));
-    }
-    setViewMode("list");
-  }, [resetListFilters, problems, dataMode, groupings, resolveGrouping]);
+    setEnlargedQuadrant(category);
+    setEnlargedQuadrantMode(highlightedSubsetMode ?? undefined);
+  }, [highlightedSubsetMode]);
 
   // Wrap setViewMode so switching BACK to the constellation (the default
   // dashboard) wipes the list filters — next time the user opens the

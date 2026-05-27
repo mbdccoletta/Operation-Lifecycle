@@ -16,7 +16,12 @@ export interface Grouping {
 
 /** Default grouping: the six Davis problem categories. */
 export const CATEGORY_GROUPINGS: Grouping[] = [
-  { id: "AVAILABILITY",           label: "AVAILABILITY",         color: "#a3e635" },
+  // AVAILABILITY was lime green (#a3e635) — same rule as
+  // CUSTOM_ALERT below. User excluded green / yellow / red
+  // outright ("nao utilizar amarelo, verde ou vermelho"); pink
+  // is the slot that stays clear of every other category colour
+  // AND the active/resolved semantic palette.
+  { id: "AVAILABILITY",           label: "AVAILABILITY",         color: "#ec4899" },
   { id: "ERROR",                  label: "ERROR",                color: "#ff8b3e" },
   { id: "SLOWDOWN",               label: "SLOWDOWN",             color: "#4da6ff" },
   { id: "RESOURCE_CONTENTION",    label: "RESOURCE CONTENTION",  color: "#a855f7" },
