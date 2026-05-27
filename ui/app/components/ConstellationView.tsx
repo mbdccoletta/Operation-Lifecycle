@@ -906,29 +906,41 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
       // busy category's loaded subset is all <4h old and the scaled
       // open_time count collapses to 0.
       const realStuck = countOverrides?.stuckByCategory?.[cellId];
+      // 0.0.161 — Total bubble = ACTIVE + CLOSED in the timeframe
+      // (mirrors the category chip badge in the FILTERS strip).
+      // User: "vejo o total correto no filtro de Error por exemplo
+      // mas nao vejo um circulo de total." A category with 0 active
+      // and 59 closed in the window now surfaces a "Total 59"
+      // bubble — same number as the chip — instead of an empty cell.
+      const realResolved = countOverrides?.resolvedByCategory?.[cellId];
+      const cellTotalInWindow =
+        (typeof realTotal === "number" ? realTotal : 0)
+        + (typeof realResolved === "number" ? realResolved : 0);
       out[cellId] = SUBSET_MODES.map(({ mode, label, icon }) => {
         let count: number;
         if (mode === "rising") {
           count = risingDelta;
         } else if (mode === "open_time" && typeof realStuck === "number") {
           count = realStuck;
+        } else if (mode === "criticality") {
+          // Use the count-query sum when available; fall back to
+          // the scaled sample count for dev/standalone hosts.
+          count = (typeof realResolved === "number")
+            ? cellTotalInWindow
+            : Math.max(0, Math.round(counts[mode] * scale));
         } else {
           count = Math.max(0, Math.round(counts[mode] * scale));
         }
         return { mode, count, color: cellColor, label, icon };
       });
-      // 0.0.118 — wider-timeframe fallback. On "Last 7 days" the
-      // loaded problem list is sorted by event.start desc and
-      // truncated at the first-paint cap; a category whose 4 active
-      // problems all started before the cutoff ends up with
-      // loadedTotal = 0 + realTotal = 4 → every subset count stays
-      // zero, and the cell renders just a centered "4" fallback.
-      // User: "coloquei 7 dias e perderam alguns grupos." Recover
-      // the bubble layout by stuffing the real count into the Total
-      // bubble whenever there's nothing else to show.
-      if (loadedTotal === 0 && realTotal > 0) {
+      // 0.0.118 — wider-timeframe fallback. When the sample is fully
+      // truncated AND no count override exists, stuff the loaded
+      // active total into the Total bubble so the cell isn't
+      // empty. With the v0.0.161 override path this branch only
+      // fires in dev/standalone (no count query).
+      if (loadedTotal === 0 && cellTotalInWindow > 0) {
         const total = out[cellId].find((s) => s.mode === "criticality");
-        if (total) total.count = realTotal;
+        if (total && total.count === 0) total.count = cellTotalInWindow;
       }
     }
     return out;
