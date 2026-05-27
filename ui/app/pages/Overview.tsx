@@ -1201,24 +1201,47 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
     [groupings],
   );
 
-  // 0.0.115 — leader-cell highlight for the "Total" legend chip.
-  // When the chip is selected, find the cell(s) with the highest
-  // ACTIVE problem count (ties included) and feed that set to
-  // ConstellationView for emphasis. Prefers the count-query
-  // overrides (matches native Davis) and falls back to the loaded
-  // list. Returns undefined when Total isn't selected so the
-  // ConstellationView skips the leader-emphasis pass entirely.
-  // User: "Permitir destacar categoria/s com maior numero de
-  // problemas."
-  const totalLeaderCells = useMemo<ReadonlySet<string> | undefined>(() => {
-    if (highlightedSubsetMode !== "criticality") return undefined;
+  // 0.0.115 / 0.0.117 — leader-cell highlight for the legend chips.
+  // Whichever chip is selected (Rising / Stuck / Total), find the
+  // cell(s) tied at the highest count for that subset and feed the
+  // set to ConstellationView for emphasis. User feedback after the
+  // first cut ("apenas o Total esta destacando as categorias"):
+  // Rising and Stuck were dimming the non-matching bubbles but
+  // weren't framing the leader CELL. The same Total-leader frame
+  // pattern now extends to all three modes — predicate changes per
+  // mode, frame style stays identical.
+  //
+  // Counting logic per mode:
+  //   rising      — ACTIVE problems whose `event.start` is within
+  //                 the last hour.
+  //   open_time   — ACTIVE problems whose `event.start` is at least
+  //                 one hour ago (≈ "Stuck", matches the cell-bubble
+  //                 partition in ConstellationView.matches).
+  //   criticality — ALL ACTIVE problems (Total mode). Prefers the
+  //                 count-query override so the leader still matches
+  //                 native Davis when the loaded list is truncated.
+  const subsetLeaderCells = useMemo<ReadonlySet<string> | undefined>(() => {
+    if (highlightedSubsetMode === null) return undefined;
     const counts: Record<string, number> = {};
-    const override = constellationCountOverrides?.activeByCategory;
-    if (override) {
+    const useOverride =
+      highlightedSubsetMode === "criticality"
+      && constellationCountOverrides?.activeByCategory;
+    if (useOverride) {
+      const override = constellationCountOverrides!.activeByCategory!;
       for (const id of Object.keys(override)) counts[id] = override[id];
     } else {
+      const now = Date.now();
+      const RISING_WINDOW_MS = 3_600_000;
       for (const p of problems) {
         if (p["event.status"] !== "ACTIVE") continue;
+        if (highlightedSubsetMode === "rising") {
+          const ts = new Date(p["event.start"]).getTime();
+          if (!(ts >= now - RISING_WINDOW_MS)) continue;
+        } else if (highlightedSubsetMode === "open_time") {
+          const ts = new Date(p["event.start"]).getTime();
+          if (!(ts < now - RISING_WINDOW_MS)) continue;
+        }
+        // "criticality" without overrides: every ACTIVE counts.
         const id = resolveGrouping(p);
         if (!id) continue;
         counts[id] = (counts[id] || 0) + 1;
@@ -2538,7 +2561,7 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
             showHub={groupBy === "category"}
             countOverrides={constellationCountOverrides}
             highlightedSubsetMode={highlightedSubsetMode}
-            leaderCellIds={totalLeaderCells}
+            leaderCellIds={subsetLeaderCells}
           />
         </div>
       ) : (
