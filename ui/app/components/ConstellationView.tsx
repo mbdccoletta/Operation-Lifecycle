@@ -2358,47 +2358,39 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
       // everyone at full alpha (scoreNorm is forced to 1 in that mode).
       const baseAlpha = 0.45 + star.scoreNorm * 0.55; // 0.45 → 1.0
 
-      // Outer glow that "breathes" slowly out of phase with the pulse —
-      // top-of-category gets a more prominent glow (extra +50% radius).
-      //
-      // 0.0.136 — brighten the gradient stop for dark accents and
-      // bump the alpha for top-tier dots. Dark accents like
-      // AVAILABILITY (#3a5fa3) painted a near-black glow over the
-      // already-dark canvas — invisible. We compute a brightened
-      // hex for the inner stop so the dot reads as "lit up", but
-      // leave the fade-to-transparent edge unchanged (no harsh
-      // colour shift at the outer ring).
-      if (star.pulse > 0 || isSelected || isStarTop) {
-        const breath = (Math.sin(t * 0.7 * (star.pulse || 1) + sx * 0.013) + 1) / 2; // 0..1, slow
+      // 0.0.139 — small helper: brighten dark accents toward white
+      // via YIQ luminance. Reused for the core fill and ring stroke.
+      const brightenIfDark = (hex: string, factor: number): string => {
+        const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+        if (!m) return hex;
+        const r0 = parseInt(m[1], 16);
+        const g0 = parseInt(m[2], 16);
+        const b0 = parseInt(m[3], 16);
+        const lum = (r0 * 299 + g0 * 587 + b0 * 114) / 1000;
+        if (lum >= 140) return hex; // already vivid
+        const br = Math.round(r0 + (255 - r0) * factor);
+        const bg = Math.round(g0 + (255 - g0) * factor);
+        const bb = Math.round(b0 + (255 - b0) * factor);
+        return "#"
+          + br.toString(16).padStart(2, "0")
+          + bg.toString(16).padStart(2, "0")
+          + bb.toString(16).padStart(2, "0");
+      };
+
+      // Outer glow that "breathes" — kept for `pulse > 0` (proactive
+      // animation states) and selection, but NOT for top-tier dots.
+      // 0.0.139 — user: "remover efeito de fumaça". The radial glow
+      // on top dots blurred the canvas into a foggy halo; the user
+      // wants a crisp ring + a vivid dot, no smoke. Pulse-mode and
+      // selected dots still glow (different visual roles).
+      if (star.pulse > 0 || isSelected) {
+        const breath = (Math.sin(t * 0.7 * (star.pulse || 1) + sx * 0.013) + 1) / 2;
         const baseGlowMult = isSelected ? 4 : 2.5 + breath * 1.2;
-        const topBoost = isStarTop ? 1.8 : 1;
-        const glowR = r * baseGlowMult * topBoost;
-        // Brightened version of the accent for the inner stop.
-        let glowInnerHex = star.color;
-        const gm = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(star.color);
-        if (gm) {
-          const gr = parseInt(gm[1], 16);
-          const gg = parseInt(gm[2], 16);
-          const gb = parseInt(gm[3], 16);
-          const glum = (gr * 299 + gg * 587 + gb * 114) / 1000;
-          if (glum < 140) {
-            const gf = 0.55;
-            const br = Math.round(gr + (255 - gr) * gf);
-            const bg = Math.round(gg + (255 - gg) * gf);
-            const bb = Math.round(gb + (255 - gb) * gf);
-            glowInnerHex = "#"
-              + br.toString(16).padStart(2, "0")
-              + bg.toString(16).padStart(2, "0")
-              + bb.toString(16).padStart(2, "0");
-          }
-        }
+        const glowR = r * baseGlowMult;
         const glow = ctx.createRadialGradient(sx, sy, 0, sx, sy, glowR);
-        // Stronger floor for top-tier; modulated by scoreNorm so non-
-        // leaders don't compete visually.
-        const topMult = isStarTop ? 2.2 : 1;
-        const glowAlpha = Math.round((36 + breath * 30) * (0.5 + star.scoreNorm * 0.5) * topMult);
-        glow.addColorStop(0, glowInnerHex + Math.min(255, glowAlpha).toString(16).padStart(2, "0"));
-        glow.addColorStop(1, glowInnerHex + "00");
+        const glowAlpha = Math.round((36 + breath * 30) * (0.5 + star.scoreNorm * 0.5));
+        glow.addColorStop(0, star.color + Math.min(255, glowAlpha).toString(16).padStart(2, "0"));
+        glow.addColorStop(1, star.color + "00");
         ctx.save();
         ctx.globalAlpha = baseAlpha;
         ctx.beginPath();
@@ -2408,18 +2400,20 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
         ctx.restore();
       }
 
-      // Core
+      // Core — top-tier gets the brightened accent so the dot itself
+      // reads as vivid ("cores vivas"), not just the ring around it.
       ctx.save();
       ctx.globalAlpha = baseAlpha;
       ctx.beginPath();
       ctx.arc(sx, sy, r, 0, Math.PI * 2);
-      ctx.fillStyle = star.color;
+      ctx.fillStyle = isStarTop ? brightenIfDark(star.color, 0.55) : star.color;
       ctx.fill();
 
-      // Inner highlight
+      // Inner highlight — slightly stronger for top-tier so the dot
+      // has more "lit" depth without resorting to a halo.
       ctx.beginPath();
       ctx.arc(sx - r * 0.25, sy - r * 0.25, r * 0.35, 0, Math.PI * 2);
-      ctx.fillStyle = "rgba(255,255,255,0.4)";
+      ctx.fillStyle = isStarTop ? "rgba(255,255,255,0.6)" : "rgba(255,255,255,0.4)";
       ctx.fill();
       ctx.restore();
 
@@ -2437,41 +2431,15 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
       if (isStarTop) {
         const ringPulse = (Math.sin(t * 1.8) + 1) / 2; // 0..1
         const ringR = r + 5 + ringPulse * 2.5;
-        // Brighten when luminance is low (dark accents).
-        let strokeCol = star.color;
-        const cm = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(star.color);
-        if (cm) {
-          const cr = parseInt(cm[1], 16);
-          const cg = parseInt(cm[2], 16);
-          const cb = parseInt(cm[3], 16);
-          const lum = (cr * 299 + cg * 587 + cb * 114) / 1000;
-          if (lum < 140) {
-            const f = 0.55;
-            const br = Math.round(cr + (255 - cr) * f);
-            const bg = Math.round(cg + (255 - cg) * f);
-            const bb = Math.round(cb + (255 - cb) * f);
-            strokeCol = `rgb(${br},${bg},${bb})`;
-          }
-        }
-        // 0.0.136 — two concentric rings + strong shadow for the
-        // "luminous halo" the user asked for. Outer ring is wider,
-        // dimmer, no dash — reads as a glow corona. Inner ring is
-        // the existing dashed rotation. User: "nao vejo o destaque
-        // luminoso nas top 10 do centro."
+        // 0.0.139 — crisp dashed rotation ring, no shadowBlur, no
+        // corona. Brightened accent for legibility on dark hues
+        // (same YIQ trick the core fill uses). User wanted "cores
+        // vivas, sem efeito de fumaça" — a clean rotating ring.
+        const strokeCol = brightenIfDark(star.color, 0.55);
         ctx.save();
         ctx.strokeStyle = strokeCol;
-        ctx.shadowColor = strokeCol;
-        // Outer halo ring — solid, soft.
-        ctx.lineWidth = 1.0;
-        ctx.globalAlpha = 0.25 + ringPulse * 0.2;
-        ctx.shadowBlur  = 14 + ringPulse * 6;
-        ctx.beginPath();
-        ctx.arc(sx, sy, ringR + 5, 0, Math.PI * 2);
-        ctx.stroke();
-        // Inner dashed rotation ring — primary highlight.
         ctx.lineWidth = 2.0;
-        ctx.globalAlpha = 0.85 + ringPulse * 0.15;
-        ctx.shadowBlur  = 8 + ringPulse * 4;
+        ctx.globalAlpha = 0.9 + ringPulse * 0.1;
         ctx.setLineDash([3, 4]);
         ctx.lineDashOffset = -t * 12;
         ctx.beginPath();
