@@ -2633,13 +2633,28 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
         const hubY = cy + uy * (radius + COMET_OUTSET);
         const tx   = pos.x - ux * 12;
         const ty   = pos.y - uy * 12;
-        const curveAmount = Math.sqrt(Math.max(0, (3/8) * dist * (maxSpokeDist - dist))) * 0.75;
+        // 0.0.118 — straighter curves + horizontal clamp so the comet
+        // doesn't bow into a neighbouring cell. User: "as animacoes
+        // de cometas nao podem passar por cima de outras categorias."
+        //   - Multiplier 0.75 → 0.35: shallower bend.
+        //   - midX clamped to the TARGET CELL'S column (with a 12 px
+        //     inset) so the control point can never sit in an
+        //     adjacent cell's horizontal range.
+        //   - Perpendicular bias forced OUTWARD (away from layout
+        //     centre) so the curve flares away from the central
+        //     column instead of into it.
+        const curveAmount = Math.sqrt(Math.max(0, (3/8) * dist * (maxSpokeDist - dist))) * 0.35;
         let perpX = -uy, perpY = ux;
-        const wantPositiveY = pos.y > cy;
-        const havePositiveY = perpY > 0;
-        if (wantPositiveY !== havePositiveY) { perpX = -perpX; perpY = -perpY; }
-        const midX = (hubX + tx) / 2 + perpX * curveAmount;
-        const midY = (hubY + ty) / 2 + perpY * curveAmount;
+        const wantPositiveX = pos.x > cx;
+        if ((perpX > 0) !== wantPositiveX) { perpX = -perpX; perpY = -perpY; }
+        let midX = (hubX + tx) / 2 + perpX * curveAmount;
+        let midY = (hubY + ty) / 2 + perpY * curveAmount;
+        const slot = slotById[cat];
+        if (slot) {
+          const cellL = slot.bounds.xMin * w + 12;
+          const cellR = slot.bounds.xMax * w - 12;
+          midX = Math.max(cellL, Math.min(cellR, midX));
+        }
         spokes.push({ hubX, hubY, tx, ty, midX, midY, len: dist });
       }
 
