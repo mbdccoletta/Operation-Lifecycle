@@ -2670,19 +2670,17 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
       const trendData = catTrends[cat];
       const diff      = trendData ? trendData.recent - trendData.older : 0;
       const isRising  = diff > 0;
-      // 0.0.118 — comet trail tinted electric cyan. User: "destacar
-      // mais a animação com cor mais futurista." Red carried the
-      // "alarm" semantic but lost the sci-fi HUD feel the rest of
-      // the dashboard is going for. Cyan (#00d4ff) is the classic
-      // targeting/data-feed colour in heads-up displays and pops
-      // crisply against the dark canvas. The trail still only
-      // fires on a POSITIVE trend delta, so the meaning is still
-      // "count climbing" — only the colour and futurism dialled
-      // up. `baseColor` keeps feeding the per-dot shadow halo so
-      // each trail still carries a faint category tint where it
-      // terminates.
+      // 0.0.118 — comet trail stays RED. Tried cyan for the
+      // sci-fi feel but the user re-confirmed: "a cor da animacao
+      // cometa deve ser vermelha sempre." Red matches the ACTIVE
+      // hub ring and carries the "alarm — count climbing"
+      // semantic that's the whole point of the comet firing. The
+      // "calm cell" pulse stays cyan (different signal: monitored
+      // but quiet) — they read as distinct cues now.
+      // `baseColor` keeps feeding the per-dot shadow halo so each
+      // trail still carries a faint category tint where it ends.
       const baseColor = colorOf(cat);
-      const cR = 0, cG = 212, cB = 255;    // #00d4ff — electric cyan
+      const cR = 255, cG = 77, cB = 106;   // #ff4d6a — matches ACTIVE hub ring
 
       // Only animate spokes for rising quadrants AND only in the
       // Rising view mode — motion signals "count climbing", so it's
