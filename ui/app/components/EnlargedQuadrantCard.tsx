@@ -150,7 +150,8 @@ export const EnlargedQuadrantCard = ({
     }
   };
 
-  const TOP_N = 10;
+  // User 0.0.109: "ao fazer drilldown mostrar top 50." Was 10.
+  const TOP_N = 50;
   const drilldown = useMemo(() => {
     const now = Date.now();
     const matchingByMode: Record<SubsetMode, Problem[]> = { rising: [], open_time: [], criticality: [] };
