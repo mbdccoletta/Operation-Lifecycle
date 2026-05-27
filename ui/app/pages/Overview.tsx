@@ -353,14 +353,11 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
    *  page (recent additions deserve attention first). */
   const [highlightedSubsetMode, setHighlightedSubsetMode] = useState<
     "rising" | "open_time" | "criticality" | null
-  >(() => {
-    // 0.0.125 follow-up — only preset the Rising lens when the
-    // landing view is the constellation. On mobile (auto-flipped
-    // to list) or any URL deep-link that lands on list, start
-    // with no filter so the list opens unfiltered.
-    if (typeof window === "undefined") return "rising";
-    return window.innerWidth <= 960 ? null : "rising";
-  });
+  >(null);
+  // 0.0.127 — no chip is pre-selected on boot. Rising used to be
+  // auto-armed on desktop, but the strip is meant to be opt-in: the
+  // user picks the lens they want, and the canvas/list opens clean
+  // until then.
   /** Drives the centered HTML/SVG `<EnlargedQuadrantCard>` — a
    *  separate path from `quadrantDetail` (which opens the list-style
    *  drill-down) and from the canvas `expandedQuadrant` zoom (which
@@ -2502,24 +2499,15 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
         // visible (the "embedded into GROUP BY" duplicate strip
         // was the real complaint, which is now removed below).
         // Strip is back on mobile + desktop, both views.
-        // 0.0.126 — Total chip is now present in the list view too,
-        // but with a DIFFERENT semantic per view:
-        //   constellation → highlight cells with the most active
-        //   list          → group rows by category
-        // The hint text flips so the user reads the right meaning.
-        // Rising / Stuck behaviour unchanged: bubble highlight in
-        // constellation, row filter in list (see `filtered` memo).
-        const chips: Array<{ mode: typeof highlightedSubsetMode; label: string; hint: string }> = inList
-          ? [
-              { mode: "rising"      as const, label: "Rising", hint: "Problems opened in the last hour" },
-              { mode: "open_time"   as const, label: "Stuck",  hint: "Problems active for more than 4 hours" },
-              { mode: "criticality" as const, label: "Total",  hint: "Group rows by category" },
-            ]
-          : [
-              { mode: "rising"      as const, label: "Rising",   hint: "Problems opened in the last hour" },
-              { mode: "open_time"   as const, label: "Stuck",    hint: "Problems active for more than 4 hours" },
-              { mode: "criticality" as const, label: "Total",    hint: "Highlight categories with the most active problems" },
-            ];
+        // 0.0.127 — Total chip removed from the lifted strip in both
+        // views. Drilldown to the "all active" list is still available
+        // via the central TOTAL hub ring and the enlarged-quadrant
+        // Total pill (which carries a category filter). The strip is
+        // now strictly a Rising / Stuck triage lens.
+        const chips: Array<{ mode: typeof highlightedSubsetMode; label: string; hint: string }> = [
+          { mode: "rising"    as const, label: "Rising", hint: "Problems opened in the last hour" },
+          { mode: "open_time" as const, label: "Stuck",  hint: "Problems active for more than 4 hours" },
+        ];
         return (
           <div
             role="note"
