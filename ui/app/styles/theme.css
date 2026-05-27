@@ -1153,6 +1153,24 @@ body[data-app-view="neural"] .neo-status-filter-chip,
 body[data-app-view="neural"] .neo-category-filter-sep {
   display: none;
 }
+/* 0.0.114 — lock the constellation view to the viewport. User:
+   "remover scrolldown e up da pagina overview." The page sums to
+   ~100vh already (header + filters + histogram + legend + canvas
+   calc(100vh - 340px) + tabbar), but the .neo-page padding-bottom
+   pushed the page just over by ~64 px and surfaced a scrollbar.
+   Clipping overflow (rather than carving more height off the
+   canvas) keeps the constellation's working area maximised. Other
+   views (Incidents list, Trends) need scroll for long content —
+   they don't have `data-app-view="neural"`, so they're unaffected. */
+body[data-app-view="neural"] {
+  overflow: hidden;
+}
+body[data-app-view="neural"] .neo-page {
+  padding-bottom: 0;
+  height: 100vh;
+  min-height: 100vh;
+  overflow: hidden;
+}
 /* Mobile disclosure: hide the dedicated status row too when the
    chips themselves are hidden, otherwise the row would render an
    empty 8 px gap. */

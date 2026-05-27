@@ -32,7 +32,7 @@ export const CATEGORY_GROUPINGS: Grouping[] = [
   { id: "AVAILABILITY",           label: "AVAILABILITY",         color: "#b29ad6" }, // lilac
   { id: "ERROR",                  label: "ERROR",                color: "#e89567" }, // coral
   { id: "SLOWDOWN",               label: "SLOWDOWN",             color: "#6fa8d8" }, // steel blue
-  { id: "RESOURCE_CONTENTION",    label: "RESOURCE CONTENTION",  color: "#a888d4" }, // lavender
+  { id: "RESOURCE_CONTENTION",    label: "RESOURCE CONTENTION",  color: "#9c6fb4" }, // plum magenta
   { id: "CUSTOM_ALERT",           label: "CUSTOM ALERT",         color: "#5fb5c4" }, // soft teal
   { id: "MONITORING_UNAVAILABLE", label: "MONITORING UNAVAIL.",  color: "#cbb46a" }, // sand
 ];
