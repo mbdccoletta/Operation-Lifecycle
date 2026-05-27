@@ -1778,14 +1778,18 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
     // other. "criticality" (Total) narrows to ACTIVE-only since
     // that's the parent set the Rising / Stuck subsets share.
     if (highlightedSubsetMode) {
-      const RISING_MS = 3_600_000;
+      const RISING_MS = 3_600_000;     // 1h
+      const STUCK_MS  = 4 * 3_600_000; // 4h (canonical Stuck threshold)
       const now = Date.now();
       out = out.filter((p) => {
         if (p["event.status"] !== "ACTIVE") return false;
         if (highlightedSubsetMode === "criticality") return true;
         const startTs = new Date(p["event.start"]).getTime();
         if (highlightedSubsetMode === "rising")    return startTs >= now - RISING_MS;
-        if (highlightedSubsetMode === "open_time") return startTs <  now - RISING_MS;
+        // 0.0.133 — Stuck list filter now uses the 4h threshold so
+        // it matches TrendAnalysis + constellation. A 2h-old active
+        // problem no longer falls under Stuck in the list either.
+        if (highlightedSubsetMode === "open_time") return startTs <  now - STUCK_MS;
         return true;
       });
     }

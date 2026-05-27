@@ -793,12 +793,22 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
     // apenas o que aumentou e não o total". The `matches` predicate
     // below now only owns Stuck and Total; Rising is filled from the
     // per-category trend computed after this pass.
+    // 0.0.133 — Stuck threshold is 4 HOURS, not 1 hour. The rest of
+    // the app (TrendAnalysis KPI cards, analyticsKpis) defines Stuck
+    // as `stuckHours: 4`, and the chip's hint text already reads
+    // "Problems active for more than 4 hours". The constellation
+    // was the only place still using the 1h cutoff, so every cell
+    // with a problem older than 1h was marked Stuck — including
+    // ~1.5h-old problems that aren't yet stuck by the app's
+    // canonical definition. User feedback: "logica nao parece certa
+    // para stuck. validar."
+    const STUCK_MS = 4 * 3_600_000;
     const matches = (mode: SubsetMode, p: Problem): boolean => {
       if (p["event.status"] !== "ACTIVE") return false;
       if (mode === "criticality") return true;       // Total — all active
       if (mode === "rising")      return false;      // see post-pass below
       const startTs = new Date(p["event.start"]).getTime();
-      return startTs < now - 3_600_000;               // Stuck — active > 1h
+      return startTs < now - STUCK_MS;                // Stuck — active > 4h
     };
     // First pass: loaded-subset counts per (cell, mode). Also tally
     // the cell's TOTAL active so we can scale the per-mode counts

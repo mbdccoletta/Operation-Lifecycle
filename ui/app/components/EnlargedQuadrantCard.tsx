@@ -198,11 +198,16 @@ export const EnlargedQuadrantCard = ({
   // not a predicate match. The Rising set is built outside this
   // function by slicing the `risingDelta` newest active problems.
   // This predicate only owns Stuck + Total.
+  // 0.0.133 — Stuck = active > 4h (canonical app threshold, matches
+  // TrendAnalysis + analyticsKpis stuckHours=4 + chip hint text).
+  // Was incorrectly using 1h here; problems aged 1-4h are now in
+  // neither Rising (delta) nor Stuck and surface only via Total.
+  const STUCK_MS = 4 * 3_600_000;
   const matchesMode = (mode: SubsetMode, p: Problem, now: number): boolean => {
     if (mode === "criticality") return true;          // Total — all active
     if (mode === "rising")      return false;         // see slice below
     const startTs = new Date(p["event.start"]).getTime();
-    return startTs < now - 3_600_000;                 // Stuck — active > 1h
+    return startTs < now - STUCK_MS;                  // Stuck — active > 4h
   };
   const sortForMode = (mode: SubsetMode, list: Problem[]): Problem[] => {
     const arr = [...list];
