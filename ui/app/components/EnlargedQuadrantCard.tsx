@@ -18,7 +18,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Problem } from "../hooks/useProblems";
 import { getCategoryIcon } from "../utils/formatters";
-import { CATEGORY_GROUPINGS, resolveByCategory, SEVERITY_CATEGORIES, type Grouping } from "../utils/grouping";
+import { CATEGORY_GROUPINGS, resolveByCategory, type Grouping } from "../utils/grouping";
 import { ConstellationView, type ConstellationDataMode } from "./ConstellationView";
 
 /** Pick a high-contrast text colour for a filled pill whose
@@ -124,7 +124,7 @@ export const EnlargedQuadrantCard = ({
   const ALL_MODES: Array<{ mode: SubsetMode; label: string; hint: string }> = [
     { mode: "rising",      label: "Rising",   hint: "Opened in the last hour" },
     { mode: "open_time",   label: "Stuck",    hint: "Active for more than 4 hours" },
-    { mode: "criticality", label: "Critical", hint: "Davis Sev 1 — AVAILABILITY + MONITORING_UNAVAIL." },
+    { mode: "criticality", label: "Total",    hint: "All active problems in this category" },
   ];
   // Active subset starts from the prop (the bubble the user clicked
   // on the main-page cell) and the user can switch it via the
@@ -135,14 +135,13 @@ export const EnlargedQuadrantCard = ({
   const [currentMode, setCurrentMode] = useState<SubsetMode>(initialMode);
   useEffect(() => { setCurrentMode(initialMode); }, [initialMode]);
 
-  // Same partition rules as the page-level cellSubsetBubbles memo
-  // (ConstellationView). 0.0.114 aligned "Critical" with Davis AI
-  // Sev 1: AVAILABILITY + MONITORING_UNAVAILABLE. The old code read
-  // a numeric severity_level that doesn't exist in real DQL output.
-  const SEV1_CATS = new Set(SEVERITY_CATEGORIES[1]);
+  // 0.0.115 — third mode is now "Total" (was "Critical"). Matches
+  // all active problems in the cell regardless of category or age.
+  // Mode name stays "criticality" internally to avoid a refactor
+  // cascade — only the UI label changed.
   const matchesMode = (mode: SubsetMode, p: Problem, now: number): boolean => {
     const startTs = new Date(p["event.start"]).getTime();
-    if (SEV1_CATS.has(p["event.category"])) return mode === "criticality";
+    if (mode === "criticality") return true;          // Total — all active
     if (startTs >= now - 3_600_000) return mode === "rising";
     return mode === "open_time";
   };
@@ -160,11 +159,11 @@ export const EnlargedQuadrantCard = ({
             new Date(a["event.start"]).getTime() - new Date(b["event.start"]).getTime(),
         );
       case "criticality":
-        // Within Sev 1 problems, oldest first so the most urgent
-        // long-running outages bubble up.
+        // Total list — newest first so the most recent additions
+        // surface at the top.
         return arr.sort(
           (a, b) =>
-            new Date(a["event.start"]).getTime() - new Date(b["event.start"]).getTime(),
+            new Date(b["event.start"]).getTime() - new Date(a["event.start"]).getTime(),
         );
     }
   };

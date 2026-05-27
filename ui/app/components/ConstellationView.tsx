@@ -12,7 +12,6 @@ import {
   resolveByCategory,
   detectQuadrantAt as detectQuadrantAtLayout,
   detectLabelAt as detectLabelAtLayout,
-  SEVERITY_CATEGORIES,
 } from "../utils/grouping";
 import { getCategoryLabel } from "../utils/formatters";
 import { scoreOf, TOP_TIER_THRESHOLD } from "../utils/scoring";
@@ -47,6 +46,12 @@ interface ConstellationViewProps {
    *    active   → status = "ACTIVE"
    *    resolved → status = "CLOSED" */
   onHubRingClick?: (kind: "total" | "active" | "resolved") => void;
+  /** 0.0.115 — Cells (by grouping id) that the host wants emphasised
+   *  as leaders — i.e. the categories with the largest active count.
+   *  Used by the "Total" legend chip to "destacar categoria/s com
+   *  maior numero de problemas". When set, leader cells get a
+   *  thicker outline + a soft glow; non-leaders dim slightly. */
+  leaderCellIds?: ReadonlySet<string>;
   /** Clicking the small "expand" button anchored at each quadrant's
    *  top-left fires this. When provided, the button DOES NOT trigger
    *  the internal canvas zoom — the host page is expected to render
@@ -182,6 +187,7 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
   onQuadrantClick,
   onCategoryLabelClick,
   onHubRingClick,
+  leaderCellIds,
   onQuadrantEnlarge,
   onEmptyClick,
   groupings = CATEGORY_GROUPINGS,
@@ -739,28 +745,22 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
     icon: string;
   }>> = useMemo(() => {
     const now = Date.now();
-    // 0.0.114 — align "Critical" with the official Davis AI
-    // severity classification. Previously this read a numeric
-    // `event.severity_level` field (treated as 1..5) that does NOT
-    // exist in the live DQL response — only synthetic demo data
-    // populated it, so the bubble was always 0 in prod. The Davis
-    // spec maps SEVERITY to CATEGORY:
-    //   Sev 1 (🔴 Critical) — AVAILABILITY + MONITORING_UNAVAILABLE
-    //   Sev 2 (🟠 High)     — ERROR + SLOWDOWN + RESOURCE_CONTENTION
-    //   Sev 3 (🟡 Medium)   — CUSTOM_ALERT
-    //   Sev 4 (🔵 Low)      — INFO/WARNING (not fetched today)
-    // We surface Sev 1 ("Critical") here and let the user pick the
-    // level via the page legend strip in a later iteration. The
-    // SEVERITY_CATEGORIES map lives in utils/grouping.ts.
+    // 0.0.115 — third mode used to be "Critical" (Davis Sev 1).
+    // User replaced it with "Total" — match ALL active problems in
+    // the cell regardless of category or age. The chip's visual job
+    // is no longer partition-counting but "show me the leader
+    // cells", and the page passes `leaderCellIds` separately for
+    // that emphasis. Mode name stays "criticality" internally to
+    // avoid a refactor cascade — the UI label is what changed.
     //
-    // Partition order: Critical → Rising → Stuck. A Sev-1 problem
-    // wins over the time-based modes regardless of age, so the
-    // three mode counts still sum to the cell's active total.
-    const sev1Cats = new Set(SEVERITY_CATEGORIES[1]);
+    // Partition note: with Total matching ALL active, the Rising +
+    // Stuck + Total counts no longer sum to total (Total = Rising +
+    // Stuck + others). That's fine since only ONE chip is selected
+    // at a time and only one bubble shows; no double-count visible.
     const matches = (mode: SubsetMode, p: Problem): boolean => {
       if (p["event.status"] !== "ACTIVE") return false;
       const startTs = new Date(p["event.start"]).getTime();
-      if (sev1Cats.has(p["event.category"])) return mode === "criticality";
+      if (mode === "criticality") return true;       // Total — all active
       if (startTs >= now - 3_600_000) return mode === "rising";
       return mode === "open_time";
     };
@@ -1596,6 +1596,42 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
     // to 8 px (just enough to clear the cell's outer border).
     const LABEL_X_INSET = 8;
     const LABEL_Y_INSET = 3;
+
+    // 0.0.115 — leader-cell emphasis. When the host marks one or
+    // more cells as leaders (via the `leaderCellIds` prop, driven
+    // by the "Total" legend chip), draw a soft glow + thicker
+    // outline around each leader's bounds. Renders BEFORE the
+    // label so the label text reads on top. User asked: "Permitir
+    // destacar categoria/s com maior numero de problemas."
+    if (leaderCellIds && leaderCellIds.size > 0 && !disableAggregation) {
+      for (const s of layout) {
+        if (!leaderCellIds.has(s.id)) continue;
+        const cx0 = s.bounds.xMin * w;
+        const cy0 = s.bounds.yMin * h;
+        const cw  = (s.bounds.xMax - s.bounds.xMin) * w;
+        const ch  = (s.bounds.yMax - s.bounds.yMin) * h;
+        const accent = colorOf(s.id);
+        const [rR, gG, bB] = hexToRgb(accent);
+        // Outer glow rect — drawn slightly inside the bounds so it
+        // doesn't fight with the dashed cell dividers.
+        ctx.save();
+        ctx.strokeStyle = `rgba(${rR},${gG},${bB},0.85)`;
+        ctx.lineWidth = 2;
+        ctx.shadowColor = `rgba(${rR},${gG},${bB},0.55)`;
+        ctx.shadowBlur = 14;
+        const pad = 3;
+        const radius = 6;
+        const rx = cx0 + pad;
+        const ry = cy0 + pad;
+        const rw = Math.max(0, cw - pad * 2);
+        const rh = Math.max(0, ch - pad * 2);
+        ctx.beginPath();
+        ctx.roundRect(rx, ry, rw, rh, radius);
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
+
     // Per-slot rectangle of the rendered label text — used by the
     // rising-trail animation below so the comet starts AFTER the text.
     const labelEnd: Record<string, { x: number; y: number }> = {};
@@ -2691,7 +2727,7 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
   }, [size, dk, selectedId, problems, dataMode, stars, expandedQuadrant, hoveredLabel,
       groupings, resolveGrouping, layout, layoutBounds, slotById, colorOf, labelById, detectQuadrantAt, detectLabelAt, showHub,
       cellAggregations, cellActiveTotalAll, cellSubsetBubbles, isCellAggregated, expandedCellCategory, isMobileOrTablet,
-      highlightedCategoriesPerCell, drilledSubsets, aggregatedTopByCell, viewTransform, highlightedSubsetMode,
+      highlightedCategoriesPerCell, drilledSubsets, aggregatedTopByCell, viewTransform, highlightedSubsetMode, leaderCellIds,
       // `fontScale` drives `fsMult` inside the draw fn — re-bind so
       // a change in the Display panel triggers a fresh closure on
       // the very next render.

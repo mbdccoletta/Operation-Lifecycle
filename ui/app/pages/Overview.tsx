@@ -982,6 +982,7 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
     };
   }, [statusCategoryLoading, scenario, statusCategoryTotals, statusCategoryCounts]);
 
+
   // Hour-over-hour trend figures for the mobile headline strip.
   //
   // Two semantics, deliberately different:
@@ -1199,6 +1200,37 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
       (id && groupings.find((g) => g.id === id)?.color) || "#6366f1",
     [groupings],
   );
+
+  // 0.0.115 — leader-cell highlight for the "Total" legend chip.
+  // When the chip is selected, find the cell(s) with the highest
+  // ACTIVE problem count (ties included) and feed that set to
+  // ConstellationView for emphasis. Prefers the count-query
+  // overrides (matches native Davis) and falls back to the loaded
+  // list. Returns undefined when Total isn't selected so the
+  // ConstellationView skips the leader-emphasis pass entirely.
+  // User: "Permitir destacar categoria/s com maior numero de
+  // problemas."
+  const totalLeaderCells = useMemo<ReadonlySet<string> | undefined>(() => {
+    if (highlightedSubsetMode !== "criticality") return undefined;
+    const counts: Record<string, number> = {};
+    const override = constellationCountOverrides?.activeByCategory;
+    if (override) {
+      for (const id of Object.keys(override)) counts[id] = override[id];
+    } else {
+      for (const p of problems) {
+        if (p["event.status"] !== "ACTIVE") continue;
+        const id = resolveGrouping(p);
+        if (!id) continue;
+        counts[id] = (counts[id] || 0) + 1;
+      }
+    }
+    let max = 0;
+    for (const v of Object.values(counts)) if (v > max) max = v;
+    if (max <= 0) return new Set();
+    const out = new Set<string>();
+    for (const [id, v] of Object.entries(counts)) if (v === max) out.add(id);
+    return out;
+  }, [highlightedSubsetMode, constellationCountOverrides, problems, resolveGrouping]);
   // Display label for a grouping id — for category mode this is the
   // legacy `getCategoryLabel` mapping; for segment mode it's the
   // segment's name (which getCategoryLabel doesn't know about).
@@ -2454,7 +2486,7 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
               {([
                 { mode: "rising"      as const, label: "Rising",   hint: "Problems opened in the last hour" },
                 { mode: "open_time"   as const, label: "Stuck",    hint: "Problems active for more than 4 hours" },
-                { mode: "criticality" as const, label: "Critical", hint: "Davis Sev 1 — AVAILABILITY + MONITORING_UNAVAIL." },
+                { mode: "criticality" as const, label: "Total",    hint: "Highlight categories with the most active problems" },
               ]).map((m) => {
                 const isActive = highlightedSubsetMode === m.mode;
                 return (
@@ -2506,6 +2538,7 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
             showHub={groupBy === "category"}
             countOverrides={constellationCountOverrides}
             highlightedSubsetMode={highlightedSubsetMode}
+            leaderCellIds={totalLeaderCells}
           />
         </div>
       ) : (
