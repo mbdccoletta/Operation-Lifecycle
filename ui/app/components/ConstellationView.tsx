@@ -785,16 +785,20 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
     // that emphasis. Mode name stays "criticality" internally to
     // avoid a refactor cascade — the UI label is what changed.
     //
-    // Partition note: with Total matching ALL active, the Rising +
-    // Stuck + Total counts no longer sum to total (Total = Rising +
-    // Stuck + others). That's fine since only ONE chip is selected
-    // at a time and only one bubble shows; no double-count visible.
+    // 0.0.131 — Rising no longer counts "active AND started in last
+    // hour". It now mirrors the "▲ +N /1h" trend badge: the NET
+    // increase in active count over the last hour, i.e.
+    // max(0, recent − older). User feedback: "vejo que na ultima
+    // hora aumentou 1, ou seja o circulo de rising deveria mostrar
+    // apenas o que aumentou e não o total". The `matches` predicate
+    // below now only owns Stuck and Total; Rising is filled from the
+    // per-category trend computed after this pass.
     const matches = (mode: SubsetMode, p: Problem): boolean => {
       if (p["event.status"] !== "ACTIVE") return false;
-      const startTs = new Date(p["event.start"]).getTime();
       if (mode === "criticality") return true;       // Total — all active
-      if (startTs >= now - 3_600_000) return mode === "rising";
-      return mode === "open_time";
+      if (mode === "rising")      return false;      // see post-pass below
+      const startTs = new Date(p["event.start"]).getTime();
+      return startTs < now - 3_600_000;               // Stuck — active > 1h
     };
     // First pass: loaded-subset counts per (cell, mode). Also tally
     // the cell's TOTAL active so we can scale the per-mode counts
@@ -823,6 +827,27 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
         if (matches(mode, p)) loaded[cell][mode]++;
       }
     }
+    // 0.0.131 — per-category 1h trend used to populate the Rising
+    // bubble. Mirrors the math the trend badge already runs at draw
+    // time so the bubble number ≡ the "▲ +N /1h" delta. Sample-
+    // bound (uses the loaded `problems` array, no scaling) — same
+    // limitation as the badge above the cell, which the user has
+    // accepted as the trade for keeping the count query lean.
+    const trendCut = now - 3_600_000;
+    const cellTrend: Record<string, { recent: number; older: number }> = {};
+    for (const g of groupings) cellTrend[g.id] = { recent: 0, older: 0 };
+    for (const p of problems) {
+      const cell = resolveGrouping(p);
+      if (!cell) continue;
+      const b = (cellTrend[cell] ||= { recent: 0, older: 0 });
+      const startTs        = new Date(p["event.start"]).getTime();
+      const endTs          = p["event.end"] ? new Date(p["event.end"]).getTime() : null;
+      const isActiveNow    = p["event.status"] === "ACTIVE";
+      const wasActiveAtCut = startTs <= trendCut && (isActiveNow || (endTs !== null && endTs > trendCut));
+      if (isActiveNow)    b.recent++;
+      if (wasActiveAtCut) b.older++;
+    }
+
     // Second pass: scale to real cell totals where we have an override.
     const out: Record<string, Array<{ mode: SubsetMode; count: number; color: string; label: string; icon: string }>> = {};
     for (const [cellId, counts] of Object.entries(loaded)) {
@@ -833,9 +858,17 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
       // the loaded subset is truncated by the first-paint cap.
       const scale = loadedTotal > 0 ? realTotal / loadedTotal : 1;
       const cellColor = colorOf(cellId);
+      const trend = cellTrend[cellId] ?? { recent: 0, older: 0 };
+      const risingDelta = Math.max(0, trend.recent - trend.older);
       out[cellId] = SUBSET_MODES.map(({ mode, label, icon }) => ({
         mode,
-        count: Math.max(0, Math.round(counts[mode] * scale)),
+        // Rising shows the trend delta verbatim — no scaling, since
+        // it's already a difference of two sample counts. Stuck +
+        // Total keep the realTotal/loadedTotal scale so they agree
+        // with the cell header's authoritative count.
+        count: mode === "rising"
+          ? risingDelta
+          : Math.max(0, Math.round(counts[mode] * scale)),
         color: cellColor,
         label,
         icon,

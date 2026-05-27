@@ -188,13 +188,22 @@ Each cell has up to 3 sub-bubbles arranged left → right:
 
 | Bubble | Predicate | Visible when |
 |---|---|---|
-| **Rising** | `event.status === "ACTIVE"` AND `event.start ≥ now − 1 h` | bubble count > 0 |
+| **Rising** | `max(0, recent − older)` — net increase in active count over last 1 h | bubble count > 0 |
 | **Stuck** | `event.status === "ACTIVE"` AND `event.start < now − 1 h` | bubble count > 0 |
 | **Total** | `event.status === "ACTIVE"` (all active) | count > 0 |
 
-The three modes are mutually exclusive for Rising + Stuck (a problem
-is one or the other based on age). Total is the sum and overlaps with
-both.
+**v0.0.131 change** — Rising used to count "problems started in the
+last hour that are still active". It now mirrors the "▲ +N /1h" trend
+badge above the cell: the NET delta (`recent − older`, clamped ≥ 0).
+This means the bubble number ≡ the badge number ≡ what the eye reads
+as "the increase". A category with 2 active now and 1 active 1h ago
+shows Rising = 1 (not 2). Categories that grew by 0 or shrank show
+no Rising bubble (still no overlap with the green ▼ DOWN seal).
+
+Stuck stays "active problems older than 1 h" (a count of rows, not a
+delta) because the chip in list view filters individual rows by that
+predicate and the row-level filter has no notion of "delta". Total
+remains the count of all active in the cell.
 
 Bubble visual layers (outside → in):
 1. Halo (radial gradient, accent at ~33 % alpha) — depth.

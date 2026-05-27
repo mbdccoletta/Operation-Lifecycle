@@ -2524,7 +2524,7 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
         // Total pill (which carries a category filter). The strip is
         // now strictly a Rising / Stuck triage lens.
         const chips: Array<{ mode: typeof highlightedSubsetMode; label: string; hint: string }> = [
-          { mode: "rising"    as const, label: "Rising", hint: "Problems opened in the last hour" },
+          { mode: "rising"    as const, label: "Rising", hint: "Net increase in active count in the last hour" },
           { mode: "open_time" as const, label: "Stuck",  hint: "Problems active for more than 4 hours" },
         ];
         return (
