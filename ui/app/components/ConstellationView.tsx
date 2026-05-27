@@ -2440,20 +2440,31 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
         // removed across the board earlier; user re-asked "ao
         // destacar, manter animacao"). Non-highlighted bubbles stay
         // static (no ring at all).
+        // 0.0.118 — the rotating dashed ring's COLOUR now reflects
+        // the cell's TREND direction, not the category accent. User
+        // proposal: red ▲ / green ▼ / no ring on neutral so the
+        // animation carries operational meaning ("things are getting
+        // worse / better") instead of just repeating the category
+        // colour the rest of the cell already shows.
         if (isHighlighted) {
-          const ringPulse = (Math.sin(tc * 1.8) + 1) / 2;
-          const ringR     = r + 5 + ringPulse * 3;
-          ctx.save();
-          ctx.strokeStyle = s.color;
-          ctx.lineWidth   = 1.6;
-          ctx.globalAlpha = 0.65 + ringPulse * 0.3;
-          ctx.setLineDash([3, 4]);
-          ctx.lineDashOffset = -tc * 12;
-          ctx.beginPath();
-          ctx.arc(bubbleX, bubbleY, ringR, 0, Math.PI * 2);
-          ctx.stroke();
-          ctx.setLineDash([]);
-          ctx.restore();
+          const trendData  = catTrends[slot.id];
+          const trendDelta = trendData ? trendData.recent - trendData.older : 0;
+          if (trendDelta !== 0) {
+            const ringPulse = (Math.sin(tc * 1.8) + 1) / 2;
+            const ringR     = r + 5 + ringPulse * 3;
+            const trendColor = trendDelta > 0 ? "#ff4d6a" : "#22d3a0";
+            ctx.save();
+            ctx.strokeStyle = trendColor;
+            ctx.lineWidth   = 1.6;
+            ctx.globalAlpha = 0.65 + ringPulse * 0.3;
+            ctx.setLineDash([3, 4]);
+            ctx.lineDashOffset = -tc * 12;
+            ctx.beginPath();
+            ctx.arc(bubbleX, bubbleY, ringR, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.setLineDash([]);
+            ctx.restore();
+          }
         }
 
         // Count text — VIVID category colour (user request: "manter
@@ -2613,10 +2624,18 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
       const trendData = catTrends[cat];
       const diff      = trendData ? trendData.recent - trendData.older : 0;
       const isRising  = diff > 0;
+      // 0.0.118 — comet trail is now RED regardless of the category
+      // accent. User proposal: "alterar a cor da animacao do cometa
+      // para vermelho". The trail only fires when the cell trend is
+      // POSITIVE (more problems than 1 h ago), so red carries the
+      // "alarm — things are escalating" semantic. Identity-by-cell
+      // is preserved positionally (the comet stops at the cell's
+      // Rising bubble, so the user reads category from WHERE the
+      // trail terminates). `baseColor` is still derived for the
+      // per-dot shadow halo below — keeping a soft category tint
+      // on the glow keeps a hint of where each comet is going.
       const baseColor = colorOf(cat);
-      const cR = parseInt(baseColor.slice(1,3),16);
-      const cG = parseInt(baseColor.slice(3,5),16);
-      const cB = parseInt(baseColor.slice(5,7),16);
+      const cR = 255, cG = 77, cB = 106;   // #ff4d6a — matches ACTIVE hub ring
 
       // Only animate spokes for rising quadrants AND only in the
       // Rising view mode — motion signals "count climbing", so it's
