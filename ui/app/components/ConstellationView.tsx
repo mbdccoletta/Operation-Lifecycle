@@ -1607,23 +1607,24 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
     const LABEL_X_INSET = 8;
     const LABEL_Y_INSET = 3;
 
-    // 0.0.116 — leader-cell emphasis. User: "replicar modelo da
-    // categoria Error" + "deve destacar toda a borda, como as
-    // demais dimensoes". The frame technique is the same as the
-    // existing Rising-leader border (strokeRect + shadowBlur), but
-    // dark accents (AVAILABILITY's #3a5fa3 slate blue, luminance
-    // ~92) painted onto a dark canvas read as nearly invisible.
-    // Lift the stroke colour toward white whenever the accent's
-    // YIQ luminance falls below 140 so every leader's frame stays
-    // legible. The shadow halo keeps the original accent so the
-    // category identity still reads.
+    // 0.0.116 — leader-cell emphasis. User feedback iteration:
+    //  1. "replicar modelo da categoria Error" — match the
+    //     existing data-mode-leader border style (strokeRect +
+    //     shadowBlur 10).
+    //  2. "deve destacar toda a borda, como as demais dimensoes" —
+    //     brighten dark accents toward white so the frame stays
+    //     legible on every category, not just the warm-toned ones.
+    //  3. "eraddooooo" — earlier I used `s.bounds` (the full slot,
+    //     yMax extends down to the dashed cell divider), which made
+    //     the frame's bottom edge clip through the "Stuck"/"Total"
+    //     bubble labels. Switched to `cellRects` (the hub-band-
+    //     clamped geometry) so the frame leaves the label row
+    //     clear AND the inner divider lines aren't crossed.
     if (leaderCellIds && leaderCellIds.size > 0 && !disableAggregation) {
       for (const s of layout) {
         if (!leaderCellIds.has(s.id)) continue;
-        const cx0 = s.bounds.xMin * w;
-        const cy0 = s.bounds.yMin * h;
-        const cw  = (s.bounds.xMax - s.bounds.xMin) * w;
-        const ch  = (s.bounds.yMax - s.bounds.yMin) * h;
+        const z = cellRects[s.id];
+        if (!z) continue;
         const accent = colorOf(s.id);
         // Brighten the stroke when the accent is dark — keeps the
         // outline crisp on every category. Halo (shadowColor) uses
@@ -1651,11 +1652,11 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
         ctx.lineWidth = 2.5;
         ctx.shadowColor = `rgba(${haloRgb},0.7)`;
         ctx.shadowBlur = 14;
-        // Same geometry as the existing Rising-leader border:
-        // strokeRect inset 1.5 px on each side → sharp corners that
-        // align with the cell's outer bounds and aren't eaten by the
-        // dashed divider lines.
-        ctx.strokeRect(cx0 + 1.5, cy0 + 1.5, cw - 3, ch - 3);
+        // Same geometry/inset as the existing data-mode-leader
+        // border: strokeRect on the clamped cellRects, inset 1.5 px
+        // on each side → sharp corners aligned with the cell's
+        // working area, leaving the bottom label row untouched.
+        ctx.strokeRect(z.x + 1.5, z.y + 1.5, z.w - 3, z.h - 3);
         ctx.restore();
       }
     }
