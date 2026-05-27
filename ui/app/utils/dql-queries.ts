@@ -377,21 +377,16 @@ export function buildTrendQuery(timeframe: string, status?: string): string {
   const conds: string[] = [
     `(isNull(dt.davis.is_duplicate) or not(dt.davis.is_duplicate))`,
   ];
-  // 0.0.147 — default to ACTIVE-only, matching the native Davis
-  // Problems chart (HAR diff: native renders only the red active
-  // band, no closed stack). Without this, our stacked bars
-  // (active + closed) summed to a number bigger than the central
-  // ACTIVE ring at the same hour, because the "closed" portion
-  // of the bar represents problems that were alive AT THAT HOUR
-  // but have since closed — a valid metric, but not what the
-  // ring shows (current snapshot). User: "o valor da barra nao
-  // bate com o valor dos circulos centrais."
-  //
-  // The FILTERS strip still overrides: an explicit "Closed" chip
-  // flips the chart to CLOSED-only; "Active" reaffirms the
-  // default. Both whitelist-guarded.
-  const effectiveStatus = (status && ALLOWED_STATUSES.has(status)) ? status : "ACTIVE";
-  conds.push(`event.status == "${effectiveStatus}"`);
+  // 0.0.155 — restore the both-series default. User: "essa barra
+  // deve mostrar abertos, fechados e total." When no FILTERS chip
+  // pins a status, the chart returns ACTIVE + CLOSED series so the
+  // tooltip can list all three numbers. v0.0.147 had narrowed it to
+  // ACTIVE-only to avoid the bar-vs-ring number confusion; that's
+  // now disambiguated in the tooltip semantic ("AT THIS TIME" label
+  // + per-bucket numbers, contrasted with the cumulative ring).
+  if (status && ALLOWED_STATUSES.has(status)) {
+    conds.push(`event.status == "${status}"`);
+  }
   q += `\n| filter ${conds.join(" and ")}`;
   // 0.0.144 — `spread: timeframe(...)` is the difference that makes
   // each bar represent "count of problems alive during that bucket"

@@ -1561,11 +1561,10 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
     // zeroing) the dropped series keeps the chart legend honest and
     // lets PulseVisualizer render the remaining bars in its own
     // colour without an invisible second stack underneath.
-    // 0.0.147 — default to ACTIVE-only (matches native chart and
-    // the buildTrendQuery change for real data). CLOSED appears
-    // only when the FILTERS strip explicitly pins it. User: "o
-    // valor da barra nao bate com o valor dos circulos centrais."
-    //   • no chip       → only ACTIVE
+    // 0.0.155 — restore both series in the demo path so the chart
+    // tooltip shows Active + Closed + Total again. User: "essa
+    // barra deve mostrar abertos, fechados e total."
+    //   • no chip       → both ACTIVE and CLOSED
     //   • Active chip   → only ACTIVE
     //   • Closed chip   → only CLOSED
     const series: Array<{
@@ -1580,7 +1579,7 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
         datapoints: points.map((p) => ({ start: new Date(p.ts), value: p.active })),
       });
     }
-    if (statusFilter === "CLOSED") {
+    if (statusFilter !== "ACTIVE") {
       series.push({
         name: "CLOSED",
         dimensions: { "event.status": "CLOSED" },

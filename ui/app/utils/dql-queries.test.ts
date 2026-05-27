@@ -360,21 +360,22 @@ describe("buildTrendQuery", () => {
     expect(active).toContain('event.status == "ACTIVE"');
   });
 
-  it("defaults to ACTIVE-only when no status chip is on", () => {
-    // 0.0.147 — matches the native Davis chart (only the red
-    // active band is rendered). Without this, stacked active+closed
-    // bars summed to numbers bigger than the central ACTIVE ring at
-    // the same hour. Closed series is still available via an
-    // explicit "Closed" chip on the FILTERS strip.
+  it("keeps both series when no status chip is on", () => {
+    // 0.0.155 — restored both-series default per user request
+    // ("essa barra deve mostrar abertos, fechados e total"). The
+    // tooltip's "AT THIS TIME" caption + per-bucket numbers
+    // disambiguate from the central ring's cumulative semantic.
     const q = buildTrendQuery("7d");
-    expect(q).toContain('event.status == "ACTIVE"');
+    // No explicit event.status filter — the makeTimeseries groups
+    // by status so both series come back.
+    expect(q).not.toMatch(/\|\s*filter[^\n]*event\.status\s*==/);
   });
 
-  it("rejects an unknown status (silently dropped, defaults to ACTIVE)", () => {
-    // 0.0.147 — unknown status falls back to ACTIVE-only (the new
-    // default). The injected token is dropped, no DQL escapes.
+  it("rejects an unknown status (silently dropped, both series kept)", () => {
+    // 0.0.155 — unknown status falls back to no-filter (both series
+    // returned). The injected token is dropped, no DQL escapes.
     const q = buildTrendQuery("7d", "DROP_TABLE" as never);
     expect(q).not.toContain("DROP_TABLE");
-    expect(q).toContain('event.status == "ACTIVE"');
+    expect(q).not.toMatch(/\|\s*filter[^\n]*event\.status\s*==/);
   });
 });
