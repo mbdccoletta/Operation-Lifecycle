@@ -342,16 +342,21 @@ export function buildTrendQuery(timeframe: string, status?: string): string {
   const conds: string[] = [
     `(isNull(dt.davis.is_duplicate) or not(dt.davis.is_duplicate))`,
   ];
-  // Optional status filter — wired from the FILTERS strip so the
-  // chart visibly tracks the same subset as the list. When the
-  // strip says "Closed" we drop the ACTIVE series entirely (the
-  // bars render in a single colour); when no status chip is on,
-  // we keep both series so the user sees the ACTIVE-vs-CLOSED
-  // breakdown across the window. Whitelist-guarded for the same
-  // injection-surface reasons as the other builders.
-  if (status && ALLOWED_STATUSES.has(status)) {
-    conds.push(`event.status == "${status}"`);
-  }
+  // 0.0.147 — default to ACTIVE-only, matching the native Davis
+  // Problems chart (HAR diff: native renders only the red active
+  // band, no closed stack). Without this, our stacked bars
+  // (active + closed) summed to a number bigger than the central
+  // ACTIVE ring at the same hour, because the "closed" portion
+  // of the bar represents problems that were alive AT THAT HOUR
+  // but have since closed — a valid metric, but not what the
+  // ring shows (current snapshot). User: "o valor da barra nao
+  // bate com o valor dos circulos centrais."
+  //
+  // The FILTERS strip still overrides: an explicit "Closed" chip
+  // flips the chart to CLOSED-only; "Active" reaffirms the
+  // default. Both whitelist-guarded.
+  const effectiveStatus = (status && ALLOWED_STATUSES.has(status)) ? status : "ACTIVE";
+  conds.push(`event.status == "${effectiveStatus}"`);
   q += `\n| filter ${conds.join(" and ")}`;
   // 0.0.144 — `spread: timeframe(...)` is the difference that makes
   // each bar represent "count of problems alive during that bucket"
