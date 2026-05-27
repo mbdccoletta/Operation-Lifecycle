@@ -190,6 +190,10 @@ export function buildStuckProblemsByCategoryQuery(filters: {
   from?: string;
   to?: string;
   limit?: number;
+  /** 0.0.148 — same `stuckCutoff` semantic as
+   *  buildStatusCategoryCountsQuery — keeps the modal's drilldown
+   *  list aligned with the cell-level Stuck count. */
+  stuckCutoff?: string;
 }): string {
   if (!ALLOWED_CATEGORIES.has(filters.category)) {
     // Defense-in-depth — caller validated, but never let an
@@ -207,7 +211,11 @@ export function buildStuckProblemsByCategoryQuery(filters: {
   query += `\n| filter (isNull(dt.davis.is_duplicate) or not(dt.davis.is_duplicate))`;
   query += `\n| filter event.status == "ACTIVE"`;
   query += `\n| filter event.category == "${filters.category}"`;
-  query += `\n| filter event.start < now() - 4h`;
+  // 0.0.148 — same timeframe-aware cutoff. ISO validated up-front.
+  const stuckExpr2 = (filters.stuckCutoff && isIsoTimestamp(filters.stuckCutoff))
+    ? `toTimestamp("${filters.stuckCutoff}")`
+    : `now() - 4h`;
+  query += `\n| filter event.start < ${stuckExpr2}`;
   query += `\n| fields event.name, event.status, event.category, event.start, event.end, event.severity, affected_entity_ids, affected_entity_names, affected_entity_types, root_cause_entity_id, root_cause_entity_name, display_id, management_zones`;
   // Dedup by display_id so each problem contributes once even
   // when Davis emits multiple state-change records.
@@ -300,6 +308,14 @@ export function buildStatusCategoryCountsQuery(filters: {
   timeframe?: string;
   from?: string;
   to?: string;
+  /** 0.0.148 — ISO timestamp before which an ACTIVE problem
+   *  qualifies as "stuck". When omitted falls back to `now() - 4h`
+   *  (the legacy hardcoded threshold). Callers pass the resolved
+   *  `from` of the user-selected timeframe so Stuck respects the
+   *  observation window — a problem that started inside Today is
+   *  noise; one that's been alive since yesterday is genuinely
+   *  stuck. */
+  stuckCutoff?: string;
 }): string {
   let query: string;
   if (filters.from && filters.to && isIsoTimestamp(filters.from) && isIsoTimestamp(filters.to)) {
@@ -321,7 +337,13 @@ export function buildStatusCategoryCountsQuery(filters: {
   // Stuck whenever a busy category overflows the sample — its newest
   // 250 are mostly <4h old, so loaded.open_time = 0 and the Stuck
   // bubble disappears even when hundreds of older actives exist.
-  query += `\n| fieldsAdd is_stuck = if((event.status == "ACTIVE") and (event.start < now() - 4h), 1, else: 0)`;
+  // 0.0.148 — Stuck cutoff now honours the user-selected timeframe
+  // when provided, falling back to the legacy now()-4h floor when
+  // omitted. ISO validated up-front to keep DQL injection-safe.
+  const stuckExpr = (filters.stuckCutoff && isIsoTimestamp(filters.stuckCutoff))
+    ? `toTimestamp("${filters.stuckCutoff}")`
+    : `now() - 4h`;
+  query += `\n| fieldsAdd is_stuck = if((event.status == "ACTIVE") and (event.start < ${stuckExpr}), 1, else: 0)`;
   // Two-dimensional summarize: counts grouped by (status, category)
   // PLUS a stuck count that only fires for ACTIVE > 4h rows.
   query += `\n| summarize count = count(), stuck_count = sum(is_stuck), by: { event.status, event.category }`;

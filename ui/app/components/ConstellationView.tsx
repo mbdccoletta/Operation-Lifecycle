@@ -168,6 +168,10 @@ interface ConstellationViewProps {
      *  all < 4h old and the scaled Stuck count collapses to 0. */
     stuckByCategory?: Record<string, number>;
   };
+  /** 0.0.148 — ms timestamp before which an ACTIVE problem counts
+   *  as Stuck. Host derives this from the user-selected timeframe.
+   *  When omitted falls back to `now() - 4h` (legacy floor). */
+  stuckCutoffMs?: number;
 }
 
 interface Star {
@@ -216,6 +220,7 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
   showResolvedZone = true,
   disableMagnifierLens = false,
   countOverrides,
+  stuckCutoffMs,
   dotScale = 1,
   disableAggregation = false,
   initialExpandedQuadrant,
@@ -816,22 +821,19 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
     // apenas o que aumentou e não o total". The `matches` predicate
     // below now only owns Stuck and Total; Rising is filled from the
     // per-category trend computed after this pass.
-    // 0.0.133 — Stuck threshold is 4 HOURS, not 1 hour. The rest of
-    // the app (TrendAnalysis KPI cards, analyticsKpis) defines Stuck
-    // as `stuckHours: 4`, and the chip's hint text already reads
-    // "Problems active for more than 4 hours". The constellation
-    // was the only place still using the 1h cutoff, so every cell
-    // with a problem older than 1h was marked Stuck — including
-    // ~1.5h-old problems that aren't yet stuck by the app's
-    // canonical definition. User feedback: "logica nao parece certa
-    // para stuck. validar."
-    const STUCK_MS = 4 * 3_600_000;
+    // 0.0.148 — Stuck cutoff is now the user-selected timeframe's
+    // start instant (passed by host), with a defensive 4h fallback
+    // when no value is supplied. User: "a identificacao dos Stucks
+    // devem respeitar timeframe e nao janela utilizada para os
+    // risings." Sample-derived bubble paths use this same value;
+    // the count-query path applies the same predicate server-side.
+    const stuckCutoff = stuckCutoffMs ?? now - 4 * 3_600_000;
     const matches = (mode: SubsetMode, p: Problem): boolean => {
       if (p["event.status"] !== "ACTIVE") return false;
       if (mode === "criticality") return true;       // Total — all active
       if (mode === "rising")      return false;      // see post-pass below
       const startTs = new Date(p["event.start"]).getTime();
-      return startTs < now - STUCK_MS;                // Stuck — active > 4h
+      return startTs < stuckCutoff;                   // Stuck — started before timeframe
     };
     // First pass: loaded-subset counts per (cell, mode). Also tally
     // the cell's TOTAL active so we can scale the per-mode counts
@@ -924,7 +926,7 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
       }
     }
     return out;
-  }, [problems, resolveGrouping, countOverrides, colorOf, groupings]);
+  }, [problems, resolveGrouping, countOverrides, colorOf, groupings, stuckCutoffMs]);
 
   /** Pixel area available per cell — derived from the layout's
    *  normalised bounds and the current canvas size. Drives the

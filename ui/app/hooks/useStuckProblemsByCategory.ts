@@ -36,6 +36,10 @@ export interface UseStuckProblemsByCategoryOptions {
   to?: string;
   /** Defaults to 50 — matches the modal's TOP_N rendering cap. */
   limit?: number;
+  /** 0.0.148 — ISO timestamp passed through to the query builder
+   *  so the modal drilldown agrees with the cell-level Stuck count
+   *  (both derived from the user-selected timeframe). */
+  stuckCutoff?: string;
   /** Gate. When false the hook stays inert (no query fires, returns
    *  the empty sentinel). Used to delay the fetch until the user
    *  actually interacts with the Stuck pill. */
@@ -66,6 +70,7 @@ export function useStuckProblemsByCategory(
         from: opts.from,
         to: opts.to,
         limit: opts.limit ?? 50,
+        stuckCutoff: opts.stuckCutoff,
       });
     } catch {
       // Invalid category — keep the hook inert rather than throwing

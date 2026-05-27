@@ -821,6 +821,30 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
     // caused by the previous inline parser missing `now()-7d`.
     return parseStratoTimeframe(timeframe);
   }, [timeframe, selectedRange]);
+
+  // 0.0.148 — "Stuck" cutoff = start of the user-selected
+  // timeframe. A problem that started inside the observation window
+  // is part of normal noise; one that started before it has spilled
+  // over from a previous window and is genuinely stuck. User: "a
+  // identificacao dos Stucks devem respeitar timeframe e nao janela
+  // utilizada para os risings." Resolved here once, threaded to
+  // every Stuck-aware surface (count query, modal drilldown,
+  // cell bubble, list filter).
+  const stuckCutoffMs = useMemo(() => {
+    if (selectedRange) return selectedRange.from.getTime();
+    const fromIso = timeframe?.from?.absoluteDate;
+    if (fromIso) {
+      const t = Date.parse(fromIso);
+      if (Number.isFinite(t)) return t;
+    }
+    // Defensive fallback if Strato hasn't resolved yet — keep the
+    // legacy 4h floor so bubbles don't flicker on first paint.
+    return Date.now() - 4 * 3_600_000;
+  }, [timeframe, selectedRange]);
+  const stuckCutoffIso = useMemo(
+    () => new Date(stuckCutoffMs).toISOString(),
+    [stuckCutoffMs],
+  );
   // Pass `statusFilter` through to the DQL so the list is filtered
   // server-side. Without this, the DQL returns up to DEFAULT_INITIAL
   // (250) records sorted by `event.start desc` — mostly recently-
@@ -979,7 +1003,7 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
     counts: statusCategoryCounts,
     totals: statusCategoryTotals,
     loading: statusCategoryLoading,
-  } = useStatusCategoryCounts(timeframeFilter);
+  } = useStatusCategoryCounts({ ...timeframeFilter, stuckCutoff: stuckCutoffIso });
 
   // Constellation prop — `undefined` while loading so ConstellationView
   // falls back to list-derived counts (avoids first-paint flicker
@@ -1790,17 +1814,17 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
     // that's the parent set the Rising / Stuck subsets share.
     if (highlightedSubsetMode) {
       const RISING_MS = 3_600_000;     // 1h
-      const STUCK_MS  = 4 * 3_600_000; // 4h (canonical Stuck threshold)
       const now = Date.now();
       out = out.filter((p) => {
         if (p["event.status"] !== "ACTIVE") return false;
         if (highlightedSubsetMode === "criticality") return true;
         const startTs = new Date(p["event.start"]).getTime();
         if (highlightedSubsetMode === "rising")    return startTs >= now - RISING_MS;
-        // 0.0.133 — Stuck list filter now uses the 4h threshold so
-        // it matches TrendAnalysis + constellation. A 2h-old active
-        // problem no longer falls under Stuck in the list either.
-        if (highlightedSubsetMode === "open_time") return startTs <  now - STUCK_MS;
+        // 0.0.148 — Stuck list filter now uses the same timeframe-
+        // aware cutoff every other Stuck surface uses (count query,
+        // cell bubble, modal pill). User: "Stucks devem respeitar
+        // timeframe e nao janela utilizada para os risings."
+        if (highlightedSubsetMode === "open_time") return startTs < stuckCutoffMs;
         return true;
       });
     }
@@ -1892,7 +1916,7 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
       });
     }
     return out;
-  }, [sorted, searchDebounced, catFilter, pinnedProblemId, groupBy, segMembership, resolveGrouping, selectedRange, entityFilter, rceFilter, segmentFilter, statusFilter, stuckHoursFilter, highlightedSubsetMode, viewMode]);
+  }, [sorted, searchDebounced, catFilter, pinnedProblemId, groupBy, segMembership, resolveGrouping, selectedRange, entityFilter, rceFilter, segmentFilter, statusFilter, stuckHoursFilter, highlightedSubsetMode, viewMode, stuckCutoffMs]);
 
   const entityCount = useMemo(() => {
     const set = new Set<string>();
@@ -2787,6 +2811,7 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
             countOverrides={constellationCountOverrides}
             highlightedSubsetMode={highlightedSubsetMode}
             leaderCellIds={subsetLeaderCells}
+            stuckCutoffMs={stuckCutoffMs}
           />
         </div>
       ) : (
@@ -3665,7 +3690,8 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
           }
           // 0.0.142 — timeframe for the on-demand stuck-by-category
           // fetch (fires only when modal is on Stuck mode).
-          stuckFetch={timeframeFilter}
+          stuckFetch={{ ...timeframeFilter, stuckCutoff: stuckCutoffIso }}
+          stuckCutoffMs={stuckCutoffMs}
           // 0.0.127 — Total pill in the modal jumps to LIST
           // filtered by the modal's category. User: "o total da
           // area expandida dele levar o filtro de categoria para a

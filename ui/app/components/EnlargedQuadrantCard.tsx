@@ -94,7 +94,12 @@ export interface EnlargedQuadrantCardProps {
     timeframe?: string;
     from?: string;
     to?: string;
+    stuckCutoff?: string;
   };
+  /** 0.0.148 — ms timestamp before which an ACTIVE problem qualifies
+   *  as Stuck. Derived from the user-selected timeframe by the host.
+   *  Falls back to `now() - 4h` when omitted. */
+  stuckCutoffMs?: number;
   onClose: () => void;
 }
 
@@ -108,6 +113,7 @@ export const EnlargedQuadrantCard = ({
   onDrilldownToList,
   categoryCounts,
   stuckFetch,
+  stuckCutoffMs,
   onClose,
 }: EnlargedQuadrantCardProps) => {
   // ESC closes — same shortcut every other modal uses.
@@ -146,17 +152,21 @@ export const EnlargedQuadrantCard = ({
   // `displayedActive` so they never claim more than the headline.
   const displayedActive = categoryCounts?.active ?? activeProblems.length;
   const displayedClosed = categoryCounts?.closed ?? closedProblems.length;
+  // 0.0.148 — Stuck cutoff comes from the host (timeframe-aware) so
+  // every Stuck-aware path inside the modal (sampleStuck below,
+  // matchesMode in drilldown) reads from the same source. Defensive
+  // 4h fallback when host doesn't supply one.
+  const stuckCutoff = stuckCutoffMs ?? Date.now() - 4 * 3_600_000;
   // 0.0.145 — surface Stuck count in the modal header. Authoritative
   // value comes from useStatusCategoryCounts.STUCK (sum of ACTIVE &
-  // start < now-4h, per category). Falls back to the sample-derived
-  // matching count when no override is available.
+  // start < stuckCutoff, per category). Falls back to a sample-
+  // derived count when no override is available.
   const sampleStuck = useMemo(() => {
-    const cut = Date.now() - 4 * 3_600_000;
     return activeProblems.reduce(
-      (n, p) => (new Date(p["event.start"]).getTime() < cut ? n + 1 : n),
+      (n, p) => (new Date(p["event.start"]).getTime() < stuckCutoff ? n + 1 : n),
       0,
     );
-  }, [activeProblems]);
+  }, [activeProblems, stuckCutoff]);
   const displayedStuck = categoryCounts?.stuck ?? sampleStuck;
 
   // 0.0.118 — compute the trend `(recent, older)` from the FULL
@@ -223,16 +233,12 @@ export const EnlargedQuadrantCard = ({
   // not a predicate match. The Rising set is built outside this
   // function by slicing the `risingDelta` newest active problems.
   // This predicate only owns Stuck + Total.
-  // 0.0.133 — Stuck = active > 4h (canonical app threshold, matches
-  // TrendAnalysis + analyticsKpis stuckHours=4 + chip hint text).
-  // Was incorrectly using 1h here; problems aged 1-4h are now in
-  // neither Rising (delta) nor Stuck and surface only via Total.
-  const STUCK_MS = 4 * 3_600_000;
-  const matchesMode = (mode: SubsetMode, p: Problem, now: number): boolean => {
+  // stuckCutoff was hoisted up above for the header's sampleStuck.
+  const matchesMode = (mode: SubsetMode, p: Problem): boolean => {
     if (mode === "criticality") return true;          // Total — all active
     if (mode === "rising")      return false;         // see slice below
     const startTs = new Date(p["event.start"]).getTime();
-    return startTs < now - STUCK_MS;                  // Stuck — active > 4h
+    return startTs < stuckCutoff;                     // Stuck — started before timeframe
   };
   const sortForMode = (mode: SubsetMode, list: Problem[]): Problem[] => {
     const arr = [...list];
@@ -276,16 +282,16 @@ export const EnlargedQuadrantCard = ({
     timeframe: stuckFetch?.timeframe,
     from: stuckFetch?.from,
     to: stuckFetch?.to,
+    stuckCutoff: stuckFetch?.stuckCutoff,
     limit: TOP_N,
     enabled: stuckFetchEnabled,
   });
 
   const drilldown = useMemo(() => {
-    const now = Date.now();
     const matchingByMode: Record<SubsetMode, Problem[]> = { rising: [], open_time: [], criticality: [] };
     for (const p of activeProblems) {
       for (const { mode } of ALL_MODES) {
-        if (matchesMode(mode, p, now)) matchingByMode[mode].push(p);
+        if (matchesMode(mode, p)) matchingByMode[mode].push(p);
       }
     }
     // 0.0.132 — Rising set = the `risingDelta` newest active
@@ -321,7 +327,7 @@ export const EnlargedQuadrantCard = ({
         criticality: matchingByMode.criticality.length,
       } as Record<SubsetMode, number>,
     };
-  }, [activeProblems, currentMode, risingDelta, fetchedStuckProblems]);
+  }, [activeProblems, currentMode, risingDelta, fetchedStuckProblems, stuckCutoff]);
 
   // Inner ConstellationView receives the top 10 of the current mode
   // + the closed tail (still feeds `risingCats` / trend bookkeeping).

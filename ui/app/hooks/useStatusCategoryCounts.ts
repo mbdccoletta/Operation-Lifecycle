@@ -29,6 +29,10 @@ export interface StatusCategoryCountsFilters {
   timeframe?: string;
   from?: string;
   to?: string;
+  /** 0.0.148 — ISO timestamp passed through to the query builder.
+   *  Lets the host derive Stuck from the user-selected timeframe
+   *  instead of the hardcoded `now() - 4h` cutoff. */
+  stuckCutoff?: string;
 }
 
 interface Row {
@@ -79,7 +83,7 @@ export function useStatusCategoryCounts(
 
   const query = useMemo(
     () => buildStatusCategoryCountsQuery(filters),
-    [filters.timeframe, filters.from, filters.to],
+    [filters.timeframe, filters.from, filters.to, filters.stuckCutoff],
   );
 
   const params = useMemo(() => ({

@@ -212,13 +212,24 @@ describe("buildStatusCategoryCountsQuery", () => {
     expect(q).toContain("by: { event.status, event.category }");
   });
 
-  it("tags each row with is_stuck (ACTIVE AND start < now-4h)", () => {
+  it("tags each row with is_stuck — defaults to now()-4h cutoff", () => {
     const q = buildStatusCategoryCountsQuery({ timeframe: "7d" });
-    // 0.0.137 — fieldsAdd computes the predicate so the summarize
-    // can fold it into a per-(status, category) count without a
-    // second query. The 4h threshold matches `stuckHours: 4` in
-    // analyticsKpis.ts and the chip hint text.
+    // Without a stuckCutoff override the builder falls back to the
+    // legacy 4h floor so dev/standalone usage still works.
     expect(q).toContain('is_stuck = if((event.status == "ACTIVE") and (event.start < now() - 4h), 1, else: 0)');
+  });
+
+  it("honours a host-supplied stuckCutoff (timeframe-aware)", () => {
+    // 0.0.148 — Stuck respects the user-selected timeframe instead
+    // of a hardcoded 4h. ISO is validated; an invalid string falls
+    // back to now()-4h silently.
+    const iso = "2025-05-27T00:00:00.000Z";
+    const q = buildStatusCategoryCountsQuery({ timeframe: "7d", stuckCutoff: iso });
+    expect(q).toContain(`event.start < toTimestamp("${iso}")`);
+
+    const fallback = buildStatusCategoryCountsQuery({ timeframe: "7d", stuckCutoff: "bogus" });
+    expect(fallback).toContain('event.start < now() - 4h');
+    expect(fallback).not.toContain("bogus");
   });
 
   it("dedups BEFORE summarize", () => {
