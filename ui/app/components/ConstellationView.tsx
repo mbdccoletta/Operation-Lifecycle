@@ -1053,21 +1053,21 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
     // at the bottom (32 % of canvas) when that panel is enabled.
     // When the host hides RESOLVED, the active area expands to the
     // full canvas so the quadrant fills everything visible.
-    // RESOLVED HUD area shrunk further in 0.0.109 ("diminuir esta
-    // area") — was 0.725 (27.5 % resolved zone), now 0.80 (20 %).
-    // Row bounds in `computeQuadrantLayout` shifted in lockstep so
-    // both rows still get equal cellRect height (0.40 each, with
-    // the midpoint at 0.40).
-    const activeAreaH = showResolvedZone ? h * 0.80 : h;
+    // RESOLVED HUD area — sweet spot at 0.76 (24 % resolved zone).
+    // 0.725 wasted vertical when counts were low; 0.80 cut off the
+    // "+N /1h" trend line on each tile (user report). 0.76 leaves
+    // each tile ~24 % of canvas to render bullet + name + number +
+    // trend without truncation.
+    const activeAreaH = showResolvedZone ? h * 0.76 : h;
     // Hub band coordinates — only used when showHub is true. Kept at
     // module scope so trend / spoke / satellite code below can reference
     // them; guarded against rendering when the hub is hidden.
-    // Hub band sits in the gap between the two rows (now 0.220 →
-    // 0.580 after the row shift). 0.245-0.555 puts it ~2.5 % above
-    // and below the rows, keeping the rings ~31 % of canvas tall —
-    // same room they had before the layout tweak.
-    const hubBandTop    = h * 0.245;
-    const hubBandBottom = h * 0.555;
+    // Hub band sits in the gap between the two rows (0.210 →
+    // 0.570 after the row shift). 0.235-0.545 leaves a 2.5 %
+    // clearance on each side, keeping the rings ~31 % of canvas
+    // tall.
+    const hubBandTop    = h * 0.235;
+    const hubBandBottom = h * 0.545;
     const hubCx = w / 2;
     const hubCy = (hubBandTop + hubBandBottom) / 2;
 

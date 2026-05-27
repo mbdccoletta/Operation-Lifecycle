@@ -86,15 +86,13 @@ export function computeQuadrantLayout(
       { xMin: 0.35, xMax: 0.65, cx: 0.50 },
       { xMin: 0.68, xMax: 0.98, cx: 0.83 },
     ];
-    // Row bounds — 0.0.109 follow-up: RESOLVED HUD area shrunk
-    // ("diminuir esta area") so the bottom of the active area
-    // moves from 0.725 → 0.80. Rows also shift down/wider to
-    // stay symmetric (cellRect midpoint = 0.40), giving each row
-    // an equal 0.40 of canvas height to render in. Hub band
-    // (0.245 - 0.555 in ConstellationView) keeps its ~31 %.
+    // Row bounds — RESOLVED HUD area finalised at 0.76 (24 %).
+    // Row midpoint at 0.38 keeps both rows equal at 0.38 cellRect
+    // height each. Hub band moves to 0.235-0.545 in
+    // ConstellationView to stay clear of both rows.
     const ROWS: Array<{ yMin: number; yMax: number; cy: number }> = [
-      { yMin: 0.040, yMax: 0.220, cy: 0.130 },
-      { yMin: 0.580, yMax: 0.760, cy: 0.670 },
+      { yMin: 0.040, yMax: 0.210, cy: 0.125 },
+      { yMin: 0.570, yMax: 0.740, cy: 0.655 },
     ];
     const out: QuadrantSlot[] = [];
     const max = COLS.length * ROWS.length;
