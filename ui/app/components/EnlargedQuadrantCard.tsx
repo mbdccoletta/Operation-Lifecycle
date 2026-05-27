@@ -146,6 +146,18 @@ export const EnlargedQuadrantCard = ({
   // `displayedActive` so they never claim more than the headline.
   const displayedActive = categoryCounts?.active ?? activeProblems.length;
   const displayedClosed = categoryCounts?.closed ?? closedProblems.length;
+  // 0.0.145 — surface Stuck count in the modal header. Authoritative
+  // value comes from useStatusCategoryCounts.STUCK (sum of ACTIVE &
+  // start < now-4h, per category). Falls back to the sample-derived
+  // matching count when no override is available.
+  const sampleStuck = useMemo(() => {
+    const cut = Date.now() - 4 * 3_600_000;
+    return activeProblems.reduce(
+      (n, p) => (new Date(p["event.start"]).getTime() < cut ? n + 1 : n),
+      0,
+    );
+  }, [activeProblems]);
+  const displayedStuck = categoryCounts?.stuck ?? sampleStuck;
 
   // 0.0.118 — compute the trend `(recent, older)` from the FULL
   // category set so the inner ConstellationView's seal + comet
@@ -364,6 +376,20 @@ export const EnlargedQuadrantCard = ({
             >
               {trendDelta > 0 ? "▲" : "▼"} {trendDelta > 0 ? `+${trendDelta}` : trendDelta} /1h
             </span>
+          )}
+          {/* 0.0.145 — Stuck count (active > 4h) in the header. Tinted
+              with the chip's red accent so the eye finds it as a
+              risk signal next to the neutral Closed count. */}
+          {displayedStuck > 0 && (
+            <>
+              <span aria-hidden="true" className="neo-enlarged-quadrant-sep">·</span>
+              <span
+                className="neo-enlarged-quadrant-suffix"
+                title={`${displayedStuck} active for more than 4 hours`}
+              >
+                <strong style={{ color: "#ff4d6a" }}>{displayedStuck}</strong> stuck
+              </span>
+            </>
           )}
           {displayedClosed > 0 && (
             <>
