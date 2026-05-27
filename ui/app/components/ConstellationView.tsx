@@ -2334,15 +2334,45 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
 
       // Outer glow that "breathes" slowly out of phase with the pulse —
       // top-of-category gets a more prominent glow (extra +50% radius).
+      //
+      // 0.0.136 — brighten the gradient stop for dark accents and
+      // bump the alpha for top-tier dots. Dark accents like
+      // AVAILABILITY (#3a5fa3) painted a near-black glow over the
+      // already-dark canvas — invisible. We compute a brightened
+      // hex for the inner stop so the dot reads as "lit up", but
+      // leave the fade-to-transparent edge unchanged (no harsh
+      // colour shift at the outer ring).
       if (star.pulse > 0 || isSelected || isStarTop) {
-        const breath = (Math.sin(t * 0.7 * star.pulse + sx * 0.013) + 1) / 2; // 0..1, slow
+        const breath = (Math.sin(t * 0.7 * (star.pulse || 1) + sx * 0.013) + 1) / 2; // 0..1, slow
         const baseGlowMult = isSelected ? 4 : 2.5 + breath * 1.2;
-        const topBoost = isStarTop ? 1.5 : 1;
+        const topBoost = isStarTop ? 1.8 : 1;
         const glowR = r * baseGlowMult * topBoost;
-        const glow   = ctx.createRadialGradient(sx, sy, 0, sx, sy, glowR);
-        const glowAlpha = Math.round((36 + breath * 30) * (0.5 + star.scoreNorm * 0.5));
-        glow.addColorStop(0, star.color + Math.min(255, glowAlpha).toString(16).padStart(2, "0"));
-        glow.addColorStop(1, star.color + "00");
+        // Brightened version of the accent for the inner stop.
+        let glowInnerHex = star.color;
+        const gm = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(star.color);
+        if (gm) {
+          const gr = parseInt(gm[1], 16);
+          const gg = parseInt(gm[2], 16);
+          const gb = parseInt(gm[3], 16);
+          const glum = (gr * 299 + gg * 587 + gb * 114) / 1000;
+          if (glum < 140) {
+            const gf = 0.55;
+            const br = Math.round(gr + (255 - gr) * gf);
+            const bg = Math.round(gg + (255 - gg) * gf);
+            const bb = Math.round(gb + (255 - gb) * gf);
+            glowInnerHex = "#"
+              + br.toString(16).padStart(2, "0")
+              + bg.toString(16).padStart(2, "0")
+              + bb.toString(16).padStart(2, "0");
+          }
+        }
+        const glow = ctx.createRadialGradient(sx, sy, 0, sx, sy, glowR);
+        // Stronger floor for top-tier; modulated by scoreNorm so non-
+        // leaders don't compete visually.
+        const topMult = isStarTop ? 2.2 : 1;
+        const glowAlpha = Math.round((36 + breath * 30) * (0.5 + star.scoreNorm * 0.5) * topMult);
+        glow.addColorStop(0, glowInnerHex + Math.min(255, glowAlpha).toString(16).padStart(2, "0"));
+        glow.addColorStop(1, glowInnerHex + "00");
         ctx.save();
         ctx.globalAlpha = baseAlpha;
         ctx.beginPath();
@@ -2390,21 +2420,32 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
           const cb = parseInt(cm[3], 16);
           const lum = (cr * 299 + cg * 587 + cb * 114) / 1000;
           if (lum < 140) {
-            const f = 0.5;
+            const f = 0.55;
             const br = Math.round(cr + (255 - cr) * f);
             const bg = Math.round(cg + (255 - cg) * f);
             const bb = Math.round(cb + (255 - cb) * f);
             strokeCol = `rgb(${br},${bg},${bb})`;
           }
         }
+        // 0.0.136 — two concentric rings + strong shadow for the
+        // "luminous halo" the user asked for. Outer ring is wider,
+        // dimmer, no dash — reads as a glow corona. Inner ring is
+        // the existing dashed rotation. User: "nao vejo o destaque
+        // luminoso nas top 10 do centro."
         ctx.save();
         ctx.strokeStyle = strokeCol;
-        ctx.lineWidth = 1.8;
-        ctx.globalAlpha = 0.7 + ringPulse * 0.3;
-        // Halo — matches the unbrightened accent so the category
-        // identity still reads, while the ring stroke pops.
-        ctx.shadowColor = star.color;
-        ctx.shadowBlur  = 6 + ringPulse * 4;
+        ctx.shadowColor = strokeCol;
+        // Outer halo ring — solid, soft.
+        ctx.lineWidth = 1.0;
+        ctx.globalAlpha = 0.25 + ringPulse * 0.2;
+        ctx.shadowBlur  = 14 + ringPulse * 6;
+        ctx.beginPath();
+        ctx.arc(sx, sy, ringR + 5, 0, Math.PI * 2);
+        ctx.stroke();
+        // Inner dashed rotation ring — primary highlight.
+        ctx.lineWidth = 2.0;
+        ctx.globalAlpha = 0.85 + ringPulse * 0.15;
+        ctx.shadowBlur  = 8 + ringPulse * 4;
         ctx.setLineDash([3, 4]);
         ctx.lineDashOffset = -t * 12;
         ctx.beginPath();
