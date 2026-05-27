@@ -2344,8 +2344,11 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
     minmax(150px, 1fr)    /* Started */
     minmax(150px, 1fr)    /* End */
     96px                  /* Duration */
-    minmax(120px, 1fr)    /* Impact */
-    minmax(160px, 220px); /* Segments (filter-segment chips) */
+    minmax(120px, 1fr);   /* Impact */
+  /* 0.0.120 — Segments column removed (DPS cost + the data source
+     is gated off by SHOW_SEGMENT_VIEW). The header + cell renderers
+     in Overview.tsx were stripped in lockstep so the grid template
+     no longer reserves a slot for it. */
   /* Note: the "Metrics" column (per-problem MTTA/MTTR/MTBF/MTTF
      chips) was removed in 0.0.81. Per-problem MTTx applies the
      "Mean" prefix to a single observation (semantically wrong),

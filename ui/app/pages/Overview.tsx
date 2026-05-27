@@ -2856,29 +2856,15 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
                     </button>
                   );
                 })}
-                {/* Segments column header — sortable via the
-                    same cycle the other headers use. Multi-value
-                    cell collapses to the alphabetically-first
-                    segment for ordering. Clicking a chip inside a
-                    cell still narrows the list via `segmentFilter`
-                    (independent action — chip click stopPropagates). */}
-                {(() => {
-                  const isActive = colSort?.key === "segments";
-                  const arrow = !isActive ? "" : colSort?.dir === "asc" ? "↑" : "↓";
-                  return (
-                    <button
-                      type="button"
-                      className={`neo-tcell neo-tcell-segments-head neo-th-sort${isActive ? " neo-th-sort-active" : ""}`}
-                      role="columnheader"
-                      aria-sort={!isActive ? "none" : colSort?.dir === "asc" ? "ascending" : "descending"}
-                      onClick={() => handleColumnSort("segments")}
-                      title={`Sort by Segments${isActive && colSort?.dir === "desc" ? " — click to clear" : ""}`}
-                    >
-                      <span className="neo-th-label">Segments</span>
-                      {arrow && <span className="neo-th-arrow" aria-hidden="true">{arrow}</span>}
-                    </button>
-                  );
-                })()}
+                {/* 0.0.120 — Segments column removed from the list.
+                    The data source (`useSegmentMembership`) was the
+                    DPS-killer flagged in the cost analysis (~83 % of
+                    the per-user budget); already gated behind
+                    `SHOW_SEGMENT_VIEW = false`, but the column was
+                    still showing "—" everywhere. Drilldown by
+                    segment (?segment=<uid>) still works via deep-
+                    link / Top-Segments card on Trends; the user
+                    just can't pick it from a row chip any more. */}
               </div>
 
               {(() => {
@@ -3136,42 +3122,9 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
                           </span>
                         ) : <span className="neo-tempty">—</span>}
                       </span>
-                      {/* Segments column cell — list of filter
-                          segments the problem belongs to. Clicking
-                          a chip activates the segment drilldown
-                          filter for the whole list (mirrors how the
-                          Top Segments card on Trends drills in).
-                          stopPropagation so the row's own click
-                          (focus / expand) doesn't fire. */}
-                      <span className="neo-tcell neo-tcell-segments" data-column="segments">
-                        {(() => {
-                          const segs = segMembership.get(problem.display_id);
-                          if (!segs || segs.size === 0) {
-                            return <span className="neo-tempty">—</span>;
-                          }
-                          const items = Array.from(segs)
-                            .map((uid) => ({ uid, name: segNameByUid[uid] || uid }))
-                            .sort((a, b) => a.name.localeCompare(b.name));
-                          return (
-                            <span className="neo-row-segments-inline">
-                              {items.map(({ uid, name }) => (
-                                <button
-                                  key={uid}
-                                  type="button"
-                                  className={`neo-row-segchip${segmentFilter === uid ? " is-active" : ""}`}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setSegmentFilter(segmentFilter === uid ? null : uid);
-                                  }}
-                                  title={`Filter list to segment "${name}"`}
-                                >
-                                  {name}
-                                </button>
-                              ))}
-                            </span>
-                          );
-                        })()}
-                      </span>
+                      {/* 0.0.120 — Segments column cell removed in
+                          lockstep with the header. See header
+                          comment above for rationale. */}
                     </div>
 
                     {isExpanded && (

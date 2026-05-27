@@ -3,7 +3,7 @@
   "environmentUrl": "https://bwm98081.apps.dynatrace.com",
   "app": {
     "name": "Problem Lifecycle",
-    "version": "0.0.120",
+    "version": "0.0.121",
     "description": "Triage, prioritize, and share Dynatrace problems with multi-segment analytics.",
     "id": "my.problems.hub",
     "icon": "icon.png",
