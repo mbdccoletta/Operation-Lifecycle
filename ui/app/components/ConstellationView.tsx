@@ -2425,7 +2425,13 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
       const COMET_OUTSET = 20;
       if (isCentralCol) {
         const sgnY  = dy < 0 ? -1 : 1;
-        const sideX = dy < 0 ? 1 : -1; // top → right (ERROR), bottom → left (CUSTOM_ALERT)
+        // Both central-column cells exit the hub on the RIGHT and
+        // curve toward their respective cells (top-right for ERROR,
+        // bottom-right for CUSTOM_ALERT, both bending back toward
+        // their cell's centred bubble). User: "a animaçao para o
+        // rising do custom alert deve sair do lado direito do
+        // circulo central, fazendo a curva para a esquerda."
+        const sideX = 1;
         const hubX  = cx + sideX * (radius + COMET_OUTSET);
         const hubY  = cy;
         const tx    = pos.x;
