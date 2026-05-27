@@ -2558,7 +2558,13 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
         if (fontSize !== naturalFont) {
           ctx.font = `700 ${fontSize}px "Roboto Mono", "SF Mono", monospace`;
         }
-        ctx.fillStyle = s.color;
+        // 0.0.118 — bubble count number is now theme-neutral
+        // (white in dark, slate-900 in light). User: "alterar
+        // cor do numero e nome dos grupos." Category identity
+        // still reads via the bubble's coloured ring + halo +
+        // accent label of the cell title; the digit itself
+        // belongs to the "metric" semantic layer (white/slate).
+        ctx.fillStyle = dk ? "#ffffff" : "#0f172a";
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
         ctx.fillText(countStr, bubbleX, bubbleY);
@@ -2570,14 +2576,15 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
         // ("não sei o que significam os emojis") and overlapping
         // the cell title strip. Plain English labels under the
         // bubble fix both.
+        //
+        // 0.0.118 — same theme-neutral fill as the count digit
+        // above so the bubble's text layer reads as a unit. The
+        // bubble ring already carries the category accent.
         ctx.save();
         ctx.font = `600 ${(11 * fsMult).toFixed(2)}px "Inter", system-ui, sans-serif`;
         ctx.textAlign = "center";
         ctx.textBaseline = "top";
-        // Vivid category colour, CRISP (no shadowBlur). The
-        // labels were faint and slightly blurry — now full alpha
-        // (modulated only by the dim/active state) and no shadow.
-        ctx.fillStyle = s.color;
+        ctx.fillStyle = dk ? "rgba(255,255,255,0.85)" : "rgba(15,23,42,0.85)";
         ctx.globalAlpha = bubbleAlpha;
         // Label sits below the bubble at a fixed offset from the
         // SAFE-BOTTOM position so it always lands inside LABEL_PAD
