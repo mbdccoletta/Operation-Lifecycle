@@ -2825,9 +2825,21 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
       // "missing data" — a slow electric-cyan pulse breathes at the
       // cell centre and says "monitored, currently calm". Cells
       // with new arrivals keep the existing comet + ring animation.
+      //
+      // 0.0.154 — also require the cell to be TRULY empty (no
+      // active problems via the count override). User: "apareceram
+      // elementos nao definidos alterando para 7 dias." On the 7d
+      // view, AVAILABILITY's 4 active are stuck >4h and fall
+      // outside the 250-newest sample, so `catTrends.recent` was 0
+      // and the cyan pulse fired right next to the legitimate
+      // Stuck/Total bubbles. Gating on the authoritative
+      // activeByCategory count keeps the pulse to genuinely-calm
+      // cells.
       if (highlightedSubsetMode === "rising") {
         const recentNow = catTrends[slot.id]?.recent ?? 0;
-        if (recentNow === 0) {
+        const realActive = countOverrides?.activeByCategory?.[slot.id]
+          ?? cellActiveTotalAll[slot.id] ?? 0;
+        if (recentNow === 0 && realActive === 0) {
           const cxCell = cell.x + cell.w / 2;
           const cyCell = (safeTop + safeBot) / 2;
           const pulse  = (Math.sin(tc * 1.3) + 1) / 2;       // 0..1, slow
