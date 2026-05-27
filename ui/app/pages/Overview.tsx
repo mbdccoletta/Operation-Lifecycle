@@ -353,7 +353,14 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
    *  page (recent additions deserve attention first). */
   const [highlightedSubsetMode, setHighlightedSubsetMode] = useState<
     "rising" | "open_time" | "criticality" | null
-  >("rising");
+  >(() => {
+    // 0.0.125 follow-up — only preset the Rising lens when the
+    // landing view is the constellation. On mobile (auto-flipped
+    // to list) or any URL deep-link that lands on list, start
+    // with no filter so the list opens unfiltered.
+    if (typeof window === "undefined") return "rising";
+    return window.innerWidth <= 960 ? null : "rising";
+  });
   /** Drives the centered HTML/SVG `<EnlargedQuadrantCard>` — a
    *  separate path from `quadrantDetail` (which opens the list-style
    *  drill-down) and from the canvas `expandedQuadrant` zoom (which
@@ -2095,6 +2102,19 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
     if (mode === "neural") {
       resetListFilters();
       setStatusFilter(null);
+    }
+    // 0.0.125 follow-up — user: "ao abrir a list, nao pre carregar
+    // filtro de Rising. Apenas a tela de overview deve fazer isso."
+    // The Rising chip is the Overview's natural default (most
+    // actionable lens for triage on a canvas). In list view it
+    // doubles as a row filter (v0.0.125), so leaving it pre-set
+    // would mean the list opens already narrowed — surprising
+    // when the user clicks ≡ expecting "all problems". Clear the
+    // subset mode on switch-to-list. User can still click the
+    // chip in list to apply it; the chip is just no longer
+    // pre-selected when entering the view.
+    if (mode === "list") {
+      setHighlightedSubsetMode(null);
     }
     setViewMode(mode);
   }, [resetListFilters, setStatusFilter]);
