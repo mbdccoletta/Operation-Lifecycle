@@ -31,7 +31,10 @@ import { MttrByCategory } from "../components/analytics/MttrByCategory";
 import { TeamMetricsCard } from "../components/analytics/TeamMetricsCard";
 import { useTeamMetrics } from "../hooks/useTeamMetrics";
 import { AgingBuckets } from "../components/analytics/AgingBuckets";
-import { TopSegmentsByCategory } from "../components/analytics/TopSegmentsByCategory";
+// 0.0.121 — `TopSegmentsByCategory` import removed alongside the
+// section that used it. The component file remains in
+// `components/analytics/` for future re-enable.
+// import { TopSegmentsByCategory } from "../components/analytics/TopSegmentsByCategory";
 import { useFilterSegments } from "../hooks/useFilterSegments";
 import { useSegmentMembership } from "../hooks/useSegmentMembership";
 import {
@@ -597,19 +600,15 @@ export const TrendAnalysis = () => {
         </div>
       </section>
 
-      {/* ═══ TOP SEGMENTS BY CATEGORY ═══ */}
-      <section className="neo-analytics-section">
-        <div className="neo-analytics-section-title">
-          Top segments
-          <span className="neo-analytics-section-sub">segments with the most problems in the window · category mix</span>
-        </div>
-        <TopSegmentsByCategory
-          problems={problems}
-          segCatalog={segCatalog}
-          membership={segMembership}
-          loading={segSectionLoading}
-        />
-      </section>
+      {/* 0.0.121 — Top Segments section removed. User asked to drop
+          it in lockstep with the v0.0.120 / v0.0.121 segment
+          cleanup (DPS gate on useSegmentMembership + removal of
+          the Segments column on the incidents list). With those
+          two changes the membership map is empty in production,
+          so this section would render an empty card anyway. The
+          underlying `<TopSegmentsByCategory>` component stays in
+          the repo for future re-enable when segments are wired
+          back through a leaner data path. */}
     </div>
   );
 };
