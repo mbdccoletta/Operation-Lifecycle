@@ -1586,7 +1586,18 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
     //    quadrant modal). The closing `}` lives a few hundred lines
     //    down, right after the per-grouping forEach.
     if (showResolvedZone) {
-    const resolvedY = activeAreaH + 8;
+    // 0.0.109 follow-up — responsive RESOLVED tile layout. The
+    // tile's intrinsic content height is ~120 px (5 stacked rows
+    // with fixed font sizes). When the canvas grows on tall
+    // viewports the RESOLVED zone gets taller too, leaving the
+    // tile content hugging the top with a fat empty band below.
+    // Centring the content vertically inside the zone keeps the
+    // tile compact and uses the extra room as symmetric padding
+    // top + bottom instead of dead space.
+    const zoneH = h - activeAreaH;
+    const TILE_INTRINSIC_H = 120;
+    const zonePad = Math.max(8, (zoneH - TILE_INTRINSIC_H) / 2);
+    const resolvedY = activeAreaH + zonePad;
 
     // Section header — bigger, with a subtle "▼" hint and thin accent line
     ctx.font = `600 ${(16 * fsMult).toFixed(2)}px "Roboto Mono", "Roboto Mono", "SF Mono", monospace`;
