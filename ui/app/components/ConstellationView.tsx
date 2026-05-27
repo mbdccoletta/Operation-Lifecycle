@@ -2485,21 +2485,47 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
         // animation carries operational meaning ("things are getting
         // worse / better") instead of just repeating the category
         // colour the rest of the cell already shows.
+        // 0.0.118 follow-up — user: "Dar mais ênfase na animação
+        // ring." The original 1.6 px dashed ring at 0.65 alpha was
+        // reading as a subtle accent; bumped up so the rotation is
+        // obvious from across the canvas. Three layers stack now:
+        //   1. soft outer halo via shadowBlur → glow ~14 px out
+        //   2. thicker dashed primary ring (2.4 px stroke)
+        //   3. inner counter-rotating fine-dash inset ring
+        // Rotation speed also doubled so the motion reads as a
+        // running animation, not a slow drift.
         if (isHighlighted) {
           const trendData  = catTrends[slot.id];
           const trendDelta = trendData ? trendData.recent - trendData.older : 0;
           if (trendDelta !== 0) {
-            const ringPulse = (Math.sin(tc * 1.8) + 1) / 2;
-            const ringR     = r + 5 + ringPulse * 3;
+            const ringPulse = (Math.sin(tc * 2.2) + 1) / 2;
+            const ringR     = r + 6 + ringPulse * 4;
             const trendColor = trendDelta > 0 ? "#ff4d6a" : "#22d3a0";
+            const trendRgb   = trendDelta > 0 ? "255,77,106" : "34,211,160";
+
+            // Primary dashed ring — thick, halo via shadow.
             ctx.save();
             ctx.strokeStyle = trendColor;
-            ctx.lineWidth   = 1.6;
-            ctx.globalAlpha = 0.65 + ringPulse * 0.3;
-            ctx.setLineDash([3, 4]);
-            ctx.lineDashOffset = -tc * 12;
+            ctx.lineWidth   = 2.4;
+            ctx.globalAlpha = 0.85 + ringPulse * 0.15;
+            ctx.shadowColor = `rgba(${trendRgb},${0.55 + ringPulse * 0.30})`;
+            ctx.shadowBlur  = 10 + ringPulse * 6;
+            ctx.setLineDash([6, 5]);
+            ctx.lineDashOffset = -tc * 26;        // faster rotation
             ctx.beginPath();
             ctx.arc(bubbleX, bubbleY, ringR, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.restore();
+
+            // Inner counter-rotating ring — finer dash, no halo.
+            ctx.save();
+            ctx.strokeStyle = trendColor;
+            ctx.lineWidth   = 1.2;
+            ctx.globalAlpha = 0.55 + ringPulse * 0.25;
+            ctx.setLineDash([2, 4]);
+            ctx.lineDashOffset = tc * 18;         // counter-rotation
+            ctx.beginPath();
+            ctx.arc(bubbleX, bubbleY, r + 2, 0, Math.PI * 2);
             ctx.stroke();
             ctx.setLineDash([]);
             ctx.restore();
