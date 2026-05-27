@@ -162,7 +162,13 @@ const PulseVisualizerImpl: React.FC<PulseVisualizerProps> = ({
 
     if (visibleBars.length === 0) return;
 
-    const maxVal = Math.max(...visibleBars.map((b) => b.total), 1);
+    // 25 % headroom on the Y axis so saturated charts ("everything
+    // active for the whole window") don't render as a solid red
+    // wall pressing against the legend. Empty space above tells the
+    // user "yes, this is the data; bars just happen to be at the
+    // current ceiling." 0.0.109 user feedback.
+    const rawMax = Math.max(...visibleBars.map((b) => b.total), 1);
+    const maxVal = Math.max(rawMax + 1, Math.ceil(rawMax * 1.25));
     // padT reserves space for the legend at the very top + the
     // status strip (a thin horizontal band, segmented per bar slot,
     // that signals which bars belong to leader categories).
