@@ -21,6 +21,23 @@ import { getCategoryIcon } from "../utils/formatters";
 import { CATEGORY_GROUPINGS, resolveByCategory, type Grouping } from "../utils/grouping";
 import { ConstellationView, type ConstellationDataMode } from "./ConstellationView";
 
+/** Pick a high-contrast text colour for a filled pill whose
+ *  background is the category accent. Uses the YIQ luminance
+ *  approximation — bright accents (lime, yellow, cyan around the
+ *  140-200 band) keep navy text; darker accents (saturated blue,
+ *  violet) flip to white. Threshold tuned for our 6 category
+ *  palette so AVAILABILITY (#a3e635) and CUSTOM_ALERT (#22d3ee)
+ *  both clear the bar with dark text. */
+const pickActiveTextColor = (hex: string): string => {
+  const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex || "");
+  if (!m) return "#0b0f1a";
+  const r = parseInt(m[1], 16);
+  const g = parseInt(m[2], 16);
+  const b = parseInt(m[3], 16);
+  const yiq = (r * 299 + g * 587 + b * 114) / 1000;
+  return yiq >= 150 ? "#0b0f1a" : "#ffffff";
+};
+
 export interface EnlargedQuadrantCardProps {
   /** ID of the grouping being expanded — matches one of the entries
    *  in the `groupings` array. For category mode this is a Davis
@@ -269,6 +286,19 @@ export const EnlargedQuadrantCard = ({
                   const count = drilldown.counts[m.mode];
                   const isActive = m.mode === currentMode;
                   const shownTop = isActive ? Math.min(TOP_N, count) : 0;
+                  // 0.0.109 follow-up — pick the active pill's text
+                  // colour by accent luminance (YIQ). User reported
+                  // "não consigo ler" on AVAILABILITY's lime green
+                  // because dark navy at 10-12 px against a bright
+                  // saturated accent was illegible. Bright accents
+                  // (lime, yellow, cyan) keep dark navy; darker
+                  // accents (blue, purple) flip to white. The "TOP N"
+                  // inset gets a stronger backplate so it stands
+                  // apart from the pill body regardless of accent.
+                  const activeTextColor = pickActiveTextColor(accent);
+                  const insetBg = activeTextColor === "#0b0f1a"
+                    ? "rgba(0,0,0,0.32)"
+                    : "rgba(255,255,255,0.22)";
                   return (
                     <button
                       key={m.mode}
@@ -280,8 +310,8 @@ export const EnlargedQuadrantCard = ({
                       style={{
                         display: "inline-flex",
                         alignItems: "center",
-                        gap: 6,
-                        padding: isActive ? "8px 14px" : "6px 12px",
+                        gap: 7,
+                        padding: isActive ? "9px 15px" : "7px 13px",
                         borderRadius: 999,
                         // Fully opaque pill backgrounds + backdrop
                         // blur so canvas animation behind the strip
@@ -295,9 +325,9 @@ export const EnlargedQuadrantCard = ({
                         WebkitBackdropFilter: "blur(6px)",
                         border: `1px solid ${accent}`,
                         color: isActive
-                          ? "#0b0f1a"
+                          ? activeTextColor
                           : (count > 0 ? "var(--neo-text)" : "var(--neo-text-3)"),
-                        font: '600 12px/1.2 "Inter", system-ui, sans-serif',
+                        font: '600 13px/1.2 "Inter", system-ui, sans-serif',
                         cursor: isActive ? "default" : (count > 0 ? "pointer" : "default"),
                         opacity: count > 0 ? 1 : 0.55,
                         // No box-shadow glow on the active pill —
@@ -313,11 +343,11 @@ export const EnlargedQuadrantCard = ({
                     >
                       {isActive && (
                         <span style={{
-                          font: '700 10px/1 "SF Mono","JetBrains Mono",monospace',
-                          padding: "2px 6px",
+                          font: '700 11px/1 "SF Mono","JetBrains Mono",monospace',
+                          padding: "3px 7px",
                           borderRadius: 4,
-                          background: "rgba(0,0,0,0.18)",
-                          letterSpacing: "0.04em",
+                          background: insetBg,
+                          letterSpacing: "0.05em",
                         }}>
                           TOP {shownTop}
                         </span>
