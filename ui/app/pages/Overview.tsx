@@ -983,13 +983,24 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
   //     subset — matches what users care about when triaging an
   //     unfiltered view).
   const countsStatus = statusFilter ?? "ACTIVE";
-  const { counts: activeCountsByCategory } = useCategoryCounts({
+  // 0.0.157 — kept useCategoryCounts as a fallback source (still
+  // pings the Grail count for status=Active or Closed under the
+  // current timeframe) but the chip badges now PREFER the
+  // constellationCountOverrides values when available. Reason:
+  // constellationCountOverrides is the only source that is both
+  // timeframe-aware AND demo-aware in lockstep — under a synthetic
+  // scenario the chip badges previously showed real-tenant counts
+  // while the rings/cells showed the simulated dataset, breaking
+  // parity. User: "count destes filtros tambem devem ser com base
+  // timeframe master."
+  const { counts: activeCountsByCategoryFallback } = useCategoryCounts({
     status: countsStatus,
     ...timeframeFilter,
   });
-  useEffect(() => {
-    setCategoryCounts(activeCountsByCategory);
-  }, [activeCountsByCategory, setCategoryCounts]);
+  // The setCategoryCounts effect lives a bit further down, AFTER
+  // constellationCountOverrides is declared — that's the source it
+  // prefers. Keeps the data flow easy to follow without a forward
+  // reference.
 
   // Authoritative counts for the constellation's central rings + per-
   // category panels. A single DQL `summarize by {status, category}`
@@ -1121,6 +1132,18 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
     };
   }, [scenario, statusCategoryLoading, statusCategoryTotals, statusCategoryCounts, rawProblems, timeframe, selectedRange, stuckCutoffMs]);
 
+  // 0.0.157 — chip badges feed from constellationCountOverrides
+  // (timeframe-aware AND demo-aware) when present, with the
+  // useCategoryCounts fallback covering first-paint / loading
+  // states. Keeps chip totals in lockstep with the hub rings.
+  useEffect(() => {
+    const fromOverride = constellationCountOverrides
+      ? (countsStatus === "CLOSED"
+          ? constellationCountOverrides.resolvedByCategory
+          : constellationCountOverrides.activeByCategory)
+      : undefined;
+    setCategoryCounts(fromOverride ?? activeCountsByCategoryFallback);
+  }, [constellationCountOverrides, countsStatus, activeCountsByCategoryFallback, setCategoryCounts]);
 
   // Hour-over-hour trend figures for the mobile headline strip.
   //
