@@ -1053,12 +1053,19 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
     // at the bottom (32 % of canvas) when that panel is enabled.
     // When the host hides RESOLVED, the active area expands to the
     // full canvas so the quadrant fills everything visible.
-    // RESOLVED HUD area — sweet spot at 0.76 (24 % resolved zone).
-    // 0.725 wasted vertical when counts were low; 0.80 cut off the
-    // "+N /1h" trend line on each tile (user report). 0.76 leaves
-    // each tile ~24 % of canvas to render bullet + name + number +
-    // trend without truncation.
-    const activeAreaH = showResolvedZone ? h * 0.76 : h;
+    // 0.0.110 — RESOLVED zone is now a FIXED 132 px tall (8 pad +
+    // ~110 tile content + ~14 bottom margin) instead of a ratio of
+    // canvas height. Earlier the ratio (0.24 × h) ballooned on tall
+    // viewports leaving a fat empty band under the tile. User
+    // reported the band twice; centring the content clipped it on
+    // short viewports, so the right answer is to STOP the zone from
+    // growing with the canvas. ACTIVE area absorbs the extra height.
+    // Floor activeAreaH at 70 % so on tiny canvases (h < 440 px)
+    // we don't starve the ACTIVE cells of vertical room.
+    const RESOLVED_ZONE_H = 132;
+    const activeAreaH = showResolvedZone
+      ? Math.max(h * 0.70, h - RESOLVED_ZONE_H)
+      : h;
     // Hub band coordinates — only used when showHub is true. Kept at
     // module scope so trend / spoke / satellite code below can reference
     // them; guarded against rendering when the hub is hidden.
