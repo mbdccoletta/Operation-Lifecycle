@@ -18,6 +18,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Problem } from "../hooks/useProblems";
 import { useStuckProblemsByCategory } from "../hooks/useStuckProblemsByCategory";
+import { useRisingProblemsByCategory } from "../hooks/useRisingProblemsByCategory";
 import { getCategoryIcon } from "../utils/formatters";
 import { CATEGORY_GROUPINGS, resolveByCategory, type Grouping } from "../utils/grouping";
 import { ConstellationView, type ConstellationDataMode } from "./ConstellationView";
@@ -83,7 +84,12 @@ export interface EnlargedQuadrantCardProps {
    *  modal headline show "6 active" (whatever made it into the first
    *  250-row first-paint sample). Optional so dev/test hosts that
    *  don't run the count query still render. */
-  categoryCounts?: { active: number; closed: number; stuck?: number };
+  /** 0.0.169 — `rising` added: server-authoritative count of
+   *  newly arrived ACTIVE problems (= ACTIVE - OLDER per category).
+   *  Used by the Rising pill so its number always matches the cell
+   *  bubble even when the 250-row sample misses the actual rising
+   *  rows. */
+  categoryCounts?: { active: number; closed: number; stuck?: number; rising?: number };
   /** 0.0.142 — timeframe context for the on-demand stuck-by-category
    *  fetch. Same shape useProblems accepts. When the user lands on
    *  the Stuck pill the modal fires a focused DQL to retrieve the
@@ -95,6 +101,15 @@ export interface EnlargedQuadrantCardProps {
     from?: string;
     to?: string;
     stuckCutoff?: string;
+  };
+  /** 0.0.169 — timeframe context for the on-demand rising-by-category
+   *  fetch. Mirrors `stuckFetch` — sample-bound Rising slice is
+   *  augmented by this focused fetch so the canvas shows the real
+   *  newly-arrived problems even when the global sample missed them. */
+  risingFetch?: {
+    timeframe?: string;
+    from?: string;
+    to?: string;
   };
   /** 0.0.148 — ms timestamp before which an ACTIVE problem qualifies
    *  as Stuck. Derived from the user-selected timeframe by the host.
@@ -113,6 +128,7 @@ export const EnlargedQuadrantCard = ({
   onDrilldownToList,
   categoryCounts,
   stuckFetch,
+  risingFetch,
   stuckCutoffMs,
   onClose,
 }: EnlargedQuadrantCardProps) => {
@@ -292,6 +308,24 @@ export const EnlargedQuadrantCard = ({
     enabled: stuckFetchEnabled,
   });
 
+  // 0.0.169 — on-demand fetch of the newest active problems
+  // (Rising). Same gating pattern: only fires when modal is on the
+  // Rising pill AND the count override says there's something to
+  // show. Bridges the 250-row sample gap for busy categories where
+  // the global newest-N doesn't include this category's recent
+  // arrivals.
+  const risingFetchEnabled =
+    currentMode === "rising" &&
+    (categoryCounts?.rising ?? 0) > 0;
+  const { problems: fetchedRisingProblems } = useRisingProblemsByCategory({
+    category: quadrantId,
+    timeframe: risingFetch?.timeframe,
+    from: risingFetch?.from,
+    to: risingFetch?.to,
+    limit: TOP_N,
+    enabled: risingFetchEnabled,
+  });
+
   const drilldown = useMemo(() => {
     const matchingByMode: Record<SubsetMode, Problem[]> = { rising: [], open_time: [], criticality: [] };
     for (const p of activeProblems) {
@@ -299,17 +333,18 @@ export const EnlargedQuadrantCard = ({
         if (matchesMode(mode, p)) matchingByMode[mode].push(p);
       }
     }
-    // 0.0.132 — Rising set = the `risingDelta` newest active
-    // problems. Mirrors the canvas cell's Rising bubble (which now
-    // shows the +N delta). When delta is 0 the modal shows zero
-    // rising dots, matching the cell's absence of a Rising bubble.
-    // User: "se tenho 3 ativos e 2 rising, destacar os 2 rising no
-    // top central" — exactly this slice.
+    // 0.0.132 — Rising set = the newest active problems. Prefer the
+    // server-authoritative count (`categoryCounts.rising`) when
+    // available so the slice size matches the cell bubble even on
+    // tenants where the 250-row sample undercounts.
+    const authoritativeRising = (typeof categoryCounts?.rising === "number")
+      ? categoryCounts.rising
+      : risingDelta;
     const activeByStartDesc = [...activeProblems].sort(
       (a, b) =>
         new Date(b["event.start"]).getTime() - new Date(a["event.start"]).getTime(),
     );
-    matchingByMode.rising = activeByStartDesc.slice(0, risingDelta);
+    matchingByMode.rising = activeByStartDesc.slice(0, authoritativeRising);
 
     // 0.0.142 — overlay the focused stuck-fetch result onto the
     // sample-derived list. Dedup by display_id so a problem present
@@ -318,6 +353,15 @@ export const EnlargedQuadrantCard = ({
       const sampleStuckIds = new Set(matchingByMode.open_time.map((p) => p.display_id));
       const extras = fetchedStuckProblems.filter((p) => !sampleStuckIds.has(p.display_id));
       matchingByMode.open_time = [...matchingByMode.open_time, ...extras];
+    }
+
+    // 0.0.169 — same overlay pattern for Rising. The focused fetch
+    // returns the top-N newest ACTIVE rows for this category from
+    // Grail; merging fills any gap left by the global sample.
+    if (fetchedRisingProblems.length > 0) {
+      const sampleRisingIds = new Set(matchingByMode.rising.map((p) => p.display_id));
+      const extras = fetchedRisingProblems.filter((p) => !sampleRisingIds.has(p.display_id));
+      matchingByMode.rising = [...matchingByMode.rising, ...extras];
     }
 
     const matchingForCurrent = sortForMode(currentMode, matchingByMode[currentMode]);
@@ -332,7 +376,7 @@ export const EnlargedQuadrantCard = ({
         criticality: matchingByMode.criticality.length,
       } as Record<SubsetMode, number>,
     };
-  }, [activeProblems, currentMode, risingDelta, fetchedStuckProblems, stuckCutoff]);
+  }, [activeProblems, currentMode, risingDelta, fetchedStuckProblems, fetchedRisingProblems, stuckCutoff, categoryCounts?.rising]);
 
   // Inner ConstellationView receives the top 10 of the current mode
   // + the closed tail (still feeds `risingCats` / trend bookkeeping).
@@ -535,15 +579,20 @@ export const EnlargedQuadrantCard = ({
                   // v0.0.161 and the FILTERS-strip chip since
                   // v0.0.160). User: "ao expandir, o total mostra
                   // apenas os ativos."
-                  // Stuck pill keeps the authoritative count from the
-                  // count query (categoryCounts.stuck); Rising stays
-                  // sample-derived since the count query doesn't
-                  // carry a 1h split for the delta.
+                  // 0.0.169 — Rising pill ALSO uses the authoritative
+                  // count when available (categoryCounts.rising =
+                  // ACTIVE - OLDER per category, server-side). This
+                  // closes the last sample-bound surface in the
+                  // modal — pill matches the cell bubble exactly,
+                  // even on tenants where the 250-row sample
+                  // undercounted Rising.
                   const count = m.mode === "criticality"
                     ? displayedActive + displayedClosed
                     : (m.mode === "open_time" && typeof categoryCounts?.stuck === "number"
                         ? categoryCounts.stuck
-                        : drilldown.counts[m.mode]);
+                        : (m.mode === "rising" && typeof categoryCounts?.rising === "number"
+                            ? categoryCounts.rising
+                            : drilldown.counts[m.mode]));
                   const isActive = m.mode === currentMode;
                   const shownTop = isActive ? Math.min(TOP_N, count) : 0;
                   // 0.0.109 follow-up — pick the active pill's text

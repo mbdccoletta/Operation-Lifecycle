@@ -3574,12 +3574,20 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
                   // 0.0.137 — pass authoritative Stuck count too so
                   // the modal pill agrees with the cell bubble.
                   stuck: constellationCountOverrides.stuckByCategory?.[enlargedQuadrant],
+                  // 0.0.169 — same for Rising. ACTIVE - OLDER from
+                  // the count query, computed once in Overview's
+                  // constellationCountOverrides and reused by the
+                  // cell bubble + modal pill.
+                  rising: constellationCountOverrides.risingDeltaByCategory?.[enlargedQuadrant],
                 }
               : undefined
           }
           // 0.0.142 — timeframe for the on-demand stuck-by-category
           // fetch (fires only when modal is on Stuck mode).
           stuckFetch={{ ...timeframeFilter, stuckCutoff: stuckCutoffIso }}
+          // 0.0.169 — same for the on-demand rising-by-category
+          // fetch (fires only when modal is on Rising mode).
+          risingFetch={timeframeFilter}
           stuckCutoffMs={stuckCutoffMs}
           // 0.0.127 — Total pill in the modal jumps to LIST
           // filtered by the modal's category. User: "o total da

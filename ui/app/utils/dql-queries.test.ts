@@ -9,6 +9,7 @@ import {
   buildCategoryCountsQuery,
   buildStatusCategoryCountsQuery,
   buildTrendQuery,
+  buildRisingProblemsByCategoryQuery,
 } from "./dql-queries";
 
 describe("buildFilteredQuery", () => {
@@ -377,5 +378,45 @@ describe("buildTrendQuery", () => {
     const q = buildTrendQuery("7d", "DROP_TABLE" as never);
     expect(q).not.toContain("DROP_TABLE");
     expect(q).not.toMatch(/\|\s*filter[^\n]*event\.status\s*==/);
+  });
+});
+
+describe("buildRisingProblemsByCategoryQuery", () => {
+  it("filters by ACTIVE + category + start in last hour", () => {
+    const q = buildRisingProblemsByCategoryQuery({ category: "ERROR", timeframe: "7d" });
+    expect(q).toContain('event.status == "ACTIVE"');
+    expect(q).toContain('event.category == "ERROR"');
+    expect(q).toContain("event.start >= now() - 1h");
+  });
+
+  it("sorts newest first and limits to N", () => {
+    const q = buildRisingProblemsByCategoryQuery({ category: "ERROR", timeframe: "7d", limit: 25 });
+    expect(q).toContain("sort event.start desc");
+    expect(q).toContain("| limit 25");
+  });
+
+  it("defaults limit to 10", () => {
+    const q = buildRisingProblemsByCategoryQuery({ category: "ERROR", timeframe: "7d" });
+    expect(q).toContain("| limit 10");
+  });
+
+  it("clamps limit to [1, 200]", () => {
+    expect(buildRisingProblemsByCategoryQuery({ category: "ERROR", timeframe: "7d", limit: 500 }))
+      .toContain("| limit 200");
+    expect(buildRisingProblemsByCategoryQuery({ category: "ERROR", timeframe: "7d", limit: 0 }))
+      .toContain("| limit 10");
+  });
+
+  it("throws on invalid category (defense-in-depth)", () => {
+    expect(() => buildRisingProblemsByCategoryQuery({ category: "DROP_TABLE" as never, timeframe: "7d" }))
+      .toThrow(/Invalid category/);
+  });
+
+  it("dedups by display_id BEFORE the limit", () => {
+    const q = buildRisingProblemsByCategoryQuery({ category: "ERROR", timeframe: "7d" });
+    const dedupIdx = q.indexOf("| dedup display_id");
+    const limitIdx = q.indexOf("| limit");
+    expect(dedupIdx).toBeGreaterThan(-1);
+    expect(limitIdx).toBeGreaterThan(dedupIdx);
   });
 });

@@ -229,6 +229,54 @@ export function buildStuckProblemsByCategoryQuery(filters: {
   return query;
 }
 
+/** 0.0.169 — Top-N most recently opened ACTIVE problems per
+ *  category (started in the last 1 hour). Mirrors the
+ *  buildStuckProblemsByCategoryQuery pattern. Fires ONLY when the
+ *  enlarged-quadrant modal opens on the Rising pill so the DPS cost
+ *  is paid on user interaction, not on every refresh. Without this
+ *  the modal's Rising slice was bounded by the 250-row first-paint
+ *  sample, so the pill number (server-authoritative once we wire
+ *  this up) and the visible dots could drift.
+ *
+ *  Payload: ≤ 10 rows × ~300 B = ~3 KB. Bytes scanned scale with
+ *  the timeframe filtered to one category + ACTIVE + 1h cutoff,
+ *  ~3-5 MB compressed for an xlarge tenant. ≈ 0.05 DPS per modal
+ *  open with Rising selected. */
+export function buildRisingProblemsByCategoryQuery(filters: {
+  category: string;
+  timeframe?: string;
+  from?: string;
+  to?: string;
+  limit?: number;
+}): string {
+  if (!ALLOWED_CATEGORIES.has(filters.category)) {
+    throw new Error(`Invalid category: ${filters.category}`);
+  }
+  let query: string;
+  if (filters.from && filters.to && isIsoTimestamp(filters.from) && isIsoTimestamp(filters.to)) {
+    query = `fetch dt.davis.problems, from: "${filters.from}", to: "${filters.to}"`;
+  } else if (filters.timeframe && TIMEFRAME_RE.test(filters.timeframe)) {
+    query = `fetch dt.davis.problems, from: now() - ${filters.timeframe}`;
+  } else {
+    query = `fetch dt.davis.problems, from: now() - 72h`;
+  }
+  query += `\n| filter (isNull(dt.davis.is_duplicate) or not(dt.davis.is_duplicate))`;
+  query += `\n| filter event.status == "ACTIVE"`;
+  query += `\n| filter event.category == "${filters.category}"`;
+  // Rising = newly arrived ACTIVE problems (started in the last
+  // hour, i.e. wasn't alive 1h ago).
+  query += `\n| filter event.start >= now() - 1h`;
+  query += `\n| fields event.name, event.status, event.category, event.start, event.end, event.severity, affected_entity_ids, affected_entity_names, affected_entity_types, root_cause_entity_id, root_cause_entity_name, display_id, management_zones`;
+  query += `\n| sort event.start desc`; // newest first → most "rising"
+  query += `\n| dedup display_id`;
+  const requested = filters.limit;
+  const safeLimit = (typeof requested === "number" && Number.isFinite(requested) && requested > 0)
+    ? Math.min(Math.floor(requested), 200)
+    : 10;
+  query += `\n| limit ${safeLimit}`;
+  return query;
+}
+
 /** Build a cheap aggregation query that returns one row per
  *  category with its problem count inside the same window/segment
  *  filters as the main list — but **without** the category filter
