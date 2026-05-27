@@ -265,6 +265,29 @@ export const EnlargedQuadrantCard = ({
                 initialExpandedQuadrant={quadrantId}
                 lockExpandedQuadrant
               />
+              {/* 0.0.117 — gradient backdrop strip behind the mode
+                  pills. Without it, dots placed near the bottom-right
+                  of the canvas peek through the gaps BETWEEN pills
+                  and look like the chip is sitting on top of a dot
+                  ("bolinha sobreposta"). The gradient fades the
+                  background to opaque toward the bottom so the dot
+                  field appears to recede into a hud strip rather
+                  than being abruptly cut. Sits below the pills in
+                  the z-stack (zIndex 1 vs 2). */}
+              <div
+                aria-hidden="true"
+                style={{
+                  position: "absolute",
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  height: 72,
+                  background:
+                    "linear-gradient(to top, var(--neo-bg) 55%, rgba(11,15,26,0) 100%)",
+                  pointerEvents: "none",
+                  zIndex: 1,
+                }}
+              />
               {/* Mode strip — ALL three mode pills shown, with the
                   active one filled + labelled "TOP 10 of N" so the
                   user can't miss what they're looking at (was just
