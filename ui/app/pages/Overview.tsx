@@ -532,6 +532,7 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
   const {
     filter: categoryFilter,
     clear: clearCategoryFilter,
+    set: setCategoryFilterCtx,
     status: statusFilter,
     setStatus: setStatusFilter,
   } = useCategoryFilterOnly();
@@ -1831,6 +1832,20 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
   /** Clears every LIST-specific filter so the list returns to its
    *  default unfiltered state. Leaves the chart's brushed range
    *  alone (that's not list-only). */
+  // 0.0.168 — mirror local catFilter → context.categoryFilter so
+  // the server-side DQL `event.category` clause reflects every
+  // drilldown that set the local state (resolved tile, hub ring,
+  // modal Total pill, URL hydration). Without this the server
+  // returned the 250 newest problems globally and the user lost
+  // older categories. User: "ainda nao consigo ver os dois
+  // problemas reportados nos ultimos 365 dias na list."
+  useEffect(() => {
+    const sameSize = categoryFilter.size === catFilter.size;
+    const same = sameSize && Array.from(catFilter).every((c) => categoryFilter.has(c));
+    if (!same) setCategoryFilterCtx(catFilter);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [catFilter]);
+
   const resetListFilters = useCallback(() => {
     setSearch("");
     setCatFilter(new Set());

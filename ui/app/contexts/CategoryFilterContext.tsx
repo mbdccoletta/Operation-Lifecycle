@@ -32,6 +32,14 @@ interface CategoryFilterContextValue {
   /** Whether any category is currently selected (size > 0). */
   isFiltering: boolean;
   toggle: (catId: string) => void;
+  /** 0.0.168 — idempotent assignment for drilldowns (e.g. resolved
+   *  tile click → "narrow the list to category X"). Replaces the
+   *  current set wholesale. Pages used to keep a duplicate local
+   *  catFilter for this purpose; they can now route everything
+   *  through the context so the server-side category filter (which
+   *  reads `categoryFilter` for the DQL `event.category` clause)
+   *  stays in lockstep with the visible chip state. */
+  set: (next: Set<string>) => void;
   clear: () => void;
   /** Open/closed problem-status filter. `null` = no constraint. */
   status: StatusFilter;
@@ -90,6 +98,10 @@ export const CategoryFilterProvider: React.FC<{ children: React.ReactNode }> = (
     });
   }, []);
   const clear = useCallback(() => setFilter(new Set()), []);
+  // 0.0.168 — wholesale assignment for drilldown handlers.
+  const set = useCallback((next: Set<string>) => {
+    setFilter(new Set(next));
+  }, []);
 
   // Idempotent setter — used by URL hydration. Always assigns the
   // value passed; never toggles. Keeps URL → state sync safe even
@@ -111,12 +123,13 @@ export const CategoryFilterProvider: React.FC<{ children: React.ReactNode }> = (
     filter,
     isFiltering: filter.size > 0,
     toggle,
+    set,
     clear,
     status,
     setStatus,
     toggleStatus,
     clearAll,
-  }), [filter, toggle, clear, status, setStatus, toggleStatus, clearAll]);
+  }), [filter, toggle, set, clear, status, setStatus, toggleStatus, clearAll]);
 
   const countsValue = useMemo<CategoryCountsContextValue>(() => ({
     counts,
