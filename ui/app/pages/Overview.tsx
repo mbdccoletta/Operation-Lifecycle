@@ -3586,6 +3586,19 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
           dataMode={enlargedQuadrantMode ?? dataMode}
           onClose={closeEnlargedQuadrant}
           onSelectProblem={onQuadrantProblemSelect}
+          // 0.0.130 — pass the count-query override so the modal
+          // headline + Total pill agree with the canvas cell. Without
+          // this the modal would derive counts from the first-paint
+          // `problems` sample (capped at 250) and a 1 574-active
+          // category would show "6 active" in the header.
+          categoryCounts={
+            constellationCountOverrides
+              ? {
+                  active: constellationCountOverrides.activeByCategory?.[enlargedQuadrant] ?? 0,
+                  closed: constellationCountOverrides.resolvedByCategory?.[enlargedQuadrant] ?? 0,
+                }
+              : undefined
+          }
           // 0.0.127 — Total pill in the modal jumps to LIST
           // filtered by the modal's category. User: "o total da
           // area expandida dele levar o filtro de categoria para a

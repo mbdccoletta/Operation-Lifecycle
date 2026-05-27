@@ -73,6 +73,16 @@ export interface EnlargedQuadrantCardProps {
    *  should be cleared. The user reads Total as "see every
    *  problem from THIS category, regardless of Rising/Stuck split". */
   onDrilldownToList?: (groupingId: string) => void;
+  /** 0.0.130 — authoritative active/closed counts for this category
+   *  pulled from the count-query (`useStatusCategoryCounts`). When
+   *  provided, the modal headline + Total pill use these instead of
+   *  deriving from the (capped) `problems` array. Without this prop
+   *  a tenant with 1 574 active RESOURCE_CONTENTION problems would
+   *  see the canvas cell show "1 574 active" (count-query) but the
+   *  modal headline show "6 active" (whatever made it into the first
+   *  250-row first-paint sample). Optional so dev/test hosts that
+   *  don't run the count query still render. */
+  categoryCounts?: { active: number; closed: number };
   onClose: () => void;
 }
 
@@ -84,6 +94,7 @@ export const EnlargedQuadrantCard = ({
   dataMode = "criticality",
   onSelectProblem,
   onDrilldownToList,
+  categoryCounts,
   onClose,
 }: EnlargedQuadrantCardProps) => {
   // ESC closes — same shortcut every other modal uses.
@@ -113,6 +124,15 @@ export const EnlargedQuadrantCard = ({
   );
   const activeProblems = quadProblems.filter((p) => p["event.status"] === "ACTIVE");
   const closedProblems = quadProblems.filter((p) => p["event.status"] === "CLOSED");
+  // 0.0.130 — authoritative counts when the host passes the
+  // count-query override (matches what the canvas cell prints).
+  // Falls back to list-derived numbers so dev/standalone uses still
+  // work. Rising/Stuck pills below still derive from `activeProblems`
+  // because the count query doesn't carry the 1h split — they
+  // remain "sample of the list" numbers and are bounded above by
+  // `displayedActive` so they never claim more than the headline.
+  const displayedActive = categoryCounts?.active ?? activeProblems.length;
+  const displayedClosed = categoryCounts?.closed ?? closedProblems.length;
 
   // ── Drill-down: explode top 10 + keep other modes as bubbles ────
   // 0.0.109 follow-up. User asked: "Ao fazer drill down, explodir
@@ -254,7 +274,7 @@ export const EnlargedQuadrantCard = ({
           <h2 className="neo-enlarged-quadrant-title" style={{ color: accent }}>
             {grouping.label}
           </h2>
-          <span className="neo-enlarged-quadrant-bignum">{activeProblems.length}</span>
+          <span className="neo-enlarged-quadrant-bignum">{displayedActive}</span>
           <span className="neo-enlarged-quadrant-suffix">active</span>
           {/* 0.0.118 — surface the same ▲/▼ trend the main view
               shows, computed from the FULL category set (not the
@@ -272,11 +292,11 @@ export const EnlargedQuadrantCard = ({
               {trendDelta > 0 ? "▲" : "▼"} {trendDelta > 0 ? `+${trendDelta}` : trendDelta} /1h
             </span>
           )}
-          {closedProblems.length > 0 && (
+          {displayedClosed > 0 && (
             <>
               <span aria-hidden="true" className="neo-enlarged-quadrant-sep">·</span>
               <span className="neo-enlarged-quadrant-suffix">
-                <strong>{closedProblems.length}</strong> closed
+                <strong>{displayedClosed}</strong> closed
               </span>
             </>
           )}
@@ -358,7 +378,18 @@ export const EnlargedQuadrantCard = ({
                 }}
               >
                 {ALL_MODES.map((m) => {
-                  const count = drilldown.counts[m.mode];
+                  // 0.0.130 — for the Total ("criticality") pill, swap
+                  // the sample-derived count for the authoritative
+                  // category total when the host provided one. Keeps
+                  // the modal headline (1 574 active) and the Total
+                  // pill (1 574) reading the same number. Rising and
+                  // Stuck pills still show the sample count because
+                  // the count query carries ACTIVE/CLOSED only — no
+                  // 1h split — and a separate DPS-hungry query just
+                  // for the modal would defeat first-paint budgets.
+                  const count = m.mode === "criticality"
+                    ? displayedActive
+                    : drilldown.counts[m.mode];
                   const isActive = m.mode === currentMode;
                   const shownTop = isActive ? Math.min(TOP_N, count) : 0;
                   // 0.0.109 follow-up — pick the active pill's text
