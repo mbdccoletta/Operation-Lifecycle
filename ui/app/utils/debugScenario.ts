@@ -207,25 +207,39 @@ function pushClosed(out: Problem[], cat: Cat, n: number, recent: boolean, now: n
 }
 
 // ── Size config + builder ────────────────────────────────────────
+type TrendBias = "up" | "down" | "flat";
 interface SizeConfig {
   /** Active problems per category. */
   active: Record<Cat, number>;
-  /** Fraction of active that should be Rising (<1 h). Rest are Stuck. */
-  risingPct: number;
   /** Closed problems per category. */
   closed: Record<Cat, number>;
-  /** Fraction of closed with end<1h ago (feeds RESOLVED +N /1h). */
-  recentClosedPct: number;
+  /** Per-category trend direction. Drives the rising / recent-closed
+   *  mix so the trend ribbon at the top of each cell (▲/▼ /1h) and
+   *  the hub-to-cell comet animation behave as the user expects.
+   *  - "up"   → high rising fraction + low recent-closed
+   *             → trend.recent > trend.older → ▲ + comet fires
+   *  - "down" → low rising + high recent-closed
+   *             → trend.recent < trend.older → ▼ + no comet
+   *  - "flat" → balanced → trend ≈ 0 → "neutral" + no comet
+   */
+  trend: Record<Cat, TrendBias>;
 }
+
+// Per-trend mix coefficients. Tuned so the resulting
+// (recent - older) deltas read as obviously up/down/flat regardless
+// of the absolute active/closed counts for the size.
+const RISING_BY_TREND:        Record<TrendBias, number> = { up: 0.40, down: 0.10, flat: 0.22 };
+const RECENT_CLOSED_BY_TREND: Record<TrendBias, number> = { up: 0.05, down: 0.30, flat: 0.15 };
 
 function buildSized(config: SizeConfig, now: number): Problem[] {
   const out: Problem[] = [];
   for (const cat of SIM_CATEGORIES) {
-    const a  = config.active[cat] || 0;
-    const c  = config.closed[cat] || 0;
-    const r  = Math.round(a * config.risingPct);
+    const a    = config.active[cat] || 0;
+    const c    = config.closed[cat] || 0;
+    const bias = config.trend[cat] || "flat";
+    const r  = Math.round(a * RISING_BY_TREND[bias]);
     const s  = a - r;
-    const rc = Math.round(c * config.recentClosedPct);
+    const rc = Math.round(c * RECENT_CLOSED_BY_TREND[bias]);
     const hc = c - rc;
     pushActive(out, cat, r, tsRising, now);
     pushActive(out, cat, s, tsStuck,  now);
@@ -239,30 +253,37 @@ function buildSized(config: SizeConfig, now: number): Problem[] {
 // Distribution mirrors real-world weight: ERROR dominates (~30-40 %),
 // AVAILABILITY is scarce (~5-10 %), the rest fall in between. The
 // shape is preserved across all sizes — only magnitudes scale.
+// Trend mix is scenario-specific so each size tells a recognisable
+// operational story (calm SRE day vs cascading incident vs
+// enterprise crisis).
 const SMALL: SizeConfig = {
-  active:  { AVAILABILITY: 1, ERROR: 4, SLOWDOWN: 3, RESOURCE_CONTENTION: 2, CUSTOM_ALERT: 2, MONITORING_UNAVAILABLE: 1 },
-  closed:  { AVAILABILITY: 3, ERROR: 8, SLOWDOWN: 6, RESOURCE_CONTENTION: 4, CUSTOM_ALERT: 3, MONITORING_UNAVAILABLE: 2 },
-  risingPct: 0.20,
-  recentClosedPct: 0.35,
+  active: { AVAILABILITY: 1, ERROR: 4, SLOWDOWN: 3, RESOURCE_CONTENTION: 2, CUSTOM_ALERT: 2, MONITORING_UNAVAILABLE: 1 },
+  closed: { AVAILABILITY: 3, ERROR: 8, SLOWDOWN: 6, RESOURCE_CONTENTION: 4, CUSTOM_ALERT: 3, MONITORING_UNAVAILABLE: 2 },
+  // Story: quiet day, one hot service (ERROR) and otherwise stable.
+  trend: { AVAILABILITY: "flat", ERROR: "up",   SLOWDOWN: "down", RESOURCE_CONTENTION: "flat", CUSTOM_ALERT: "flat", MONITORING_UNAVAILABLE: "down" },
 };
 const MEDIUM: SizeConfig = {
-  active:  { AVAILABILITY: 8,  ERROR: 35,  SLOWDOWN: 20, RESOURCE_CONTENTION: 15, CUSTOM_ALERT: 8,  MONITORING_UNAVAILABLE: 4  },
-  closed:  { AVAILABILITY: 15, ERROR: 60,  SLOWDOWN: 40, RESOURCE_CONTENTION: 30, CUSTOM_ALERT: 15, MONITORING_UNAVAILABLE: 10 },
-  risingPct: 0.25,
-  recentClosedPct: 0.30,
+  active: { AVAILABILITY: 8,  ERROR: 35,  SLOWDOWN: 20, RESOURCE_CONTENTION: 15, CUSTOM_ALERT: 8,  MONITORING_UNAVAILABLE: 4  },
+  closed: { AVAILABILITY: 15, ERROR: 60,  SLOWDOWN: 40, RESOURCE_CONTENTION: 30, CUSTOM_ALERT: 15, MONITORING_UNAVAILABLE: 10 },
+  // Story: busier day — ERROR + SLOWDOWN both climbing (two
+  // comets); RC + MONITORING coming down.
+  trend: { AVAILABILITY: "flat", ERROR: "up",   SLOWDOWN: "up",   RESOURCE_CONTENTION: "down", CUSTOM_ALERT: "flat", MONITORING_UNAVAILABLE: "down" },
 };
 const LARGE: SizeConfig = {
-  active:  { AVAILABILITY: 50, ERROR: 250, SLOWDOWN: 100, RESOURCE_CONTENTION: 80,  CUSTOM_ALERT: 40, MONITORING_UNAVAILABLE: 30 },
-  closed:  { AVAILABILITY: 80, ERROR: 400, SLOWDOWN: 180, RESOURCE_CONTENTION: 150, CUSTOM_ALERT: 80, MONITORING_UNAVAILABLE: 60 },
-  risingPct: 0.30,
-  recentClosedPct: 0.25,
+  active: { AVAILABILITY: 50, ERROR: 250, SLOWDOWN: 100, RESOURCE_CONTENTION: 80,  CUSTOM_ALERT: 40, MONITORING_UNAVAILABLE: 30 },
+  closed: { AVAILABILITY: 80, ERROR: 400, SLOWDOWN: 180, RESOURCE_CONTENTION: 150, CUSTOM_ALERT: 80, MONITORING_UNAVAILABLE: 60 },
+  // Story: incident in progress — AVAILABILITY just started failing,
+  // ERROR cascading, SLOWDOWN spreading; CUSTOM_ALERT noise calming.
+  trend: { AVAILABILITY: "up",   ERROR: "up",   SLOWDOWN: "up",   RESOURCE_CONTENTION: "flat", CUSTOM_ALERT: "down", MONITORING_UNAVAILABLE: "flat" },
 };
 // >3000 active per category. ~22 k active total, ~53 k overall.
 const XLARGE: SizeConfig = {
-  active:  { AVAILABILITY: 3200, ERROR: 5500, SLOWDOWN: 3800, RESOURCE_CONTENTION: 3500, CUSTOM_ALERT: 3100, MONITORING_UNAVAILABLE: 3000 },
-  closed:  { AVAILABILITY: 4500, ERROR: 8000, SLOWDOWN: 5500, RESOURCE_CONTENTION: 4800, CUSTOM_ALERT: 4200, MONITORING_UNAVAILABLE: 4000 },
-  risingPct: 0.18,
-  recentClosedPct: 0.15,
+  active: { AVAILABILITY: 3200, ERROR: 5500, SLOWDOWN: 3800, RESOURCE_CONTENTION: 3500, CUSTOM_ALERT: 3100, MONITORING_UNAVAILABLE: 3000 },
+  closed: { AVAILABILITY: 4500, ERROR: 8000, SLOWDOWN: 5500, RESOURCE_CONTENTION: 4800, CUSTOM_ALERT: 4200, MONITORING_UNAVAILABLE: 4000 },
+  // Story: enterprise crisis after peak — ERROR + SLOWDOWN still
+  // accelerating (two big comets), AVAILABILITY peaked and rolling
+  // back, RC + MONITORING winding down, CUSTOM_ALERT flat.
+  trend: { AVAILABILITY: "down", ERROR: "up",   SLOWDOWN: "up",   RESOURCE_CONTENTION: "down", CUSTOM_ALERT: "flat", MONITORING_UNAVAILABLE: "down" },
 };
 
 // ── Scenarios ────────────────────────────────────────────────────

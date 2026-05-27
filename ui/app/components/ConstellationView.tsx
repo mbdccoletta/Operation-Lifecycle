@@ -2428,14 +2428,31 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
         // High contrast comes from the dark backplate above (in
         // light theme: light backplate); the category colour sits
         // cleanly on top.
+        //
+        // 0.0.117 — measure-then-shrink so 4-digit counts (5500,
+        // 4510, etc.) don't overflow the bubble edge. The bubble's
+        // usable inner diameter is ≈ r × 1.7 (allow 15 % padding on
+        // each side); if the text would render wider than that at
+        // the natural size, scale the font down proportionally
+        // until it fits. Floor at 10 px so even six-digit counts
+        // stay readable.
         ctx.save();
         ctx.globalAlpha = bubbleAlpha;
-        const fontSize = Math.max(13, Math.min(22, r * 0.85)) * fsMult;
-        ctx.font = `700 ${fontSize}px "Roboto Mono", "SF Mono", monospace`;
+        const countStr = String(s.count);
+        const naturalFont = Math.max(13, Math.min(22, r * 0.85)) * fsMult;
+        ctx.font = `700 ${naturalFont}px "Roboto Mono", "SF Mono", monospace`;
+        const innerDiameter = r * 1.7;
+        const naturalWidth  = ctx.measureText(countStr).width;
+        const fontSize = naturalWidth > innerDiameter
+          ? Math.max(10, naturalFont * (innerDiameter / naturalWidth))
+          : naturalFont;
+        if (fontSize !== naturalFont) {
+          ctx.font = `700 ${fontSize}px "Roboto Mono", "SF Mono", monospace`;
+        }
         ctx.fillStyle = s.color;
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
-        ctx.fillText(String(s.count), bubbleX, bubbleY);
+        ctx.fillText(countStr, bubbleX, bubbleY);
         ctx.restore();
 
         // Mode label BELOW the bubble — "Rising", "Stuck",
