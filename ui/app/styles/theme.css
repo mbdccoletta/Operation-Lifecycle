@@ -1230,12 +1230,14 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   /* Fill remaining viewport so the full dashboard fits without scroll.
      Reserves ~280px for: sticky header (44) + filter bar (40) + pulse (74) +
      show-by (28) + tabbar (50) + paddings/margins (~44).
-     0.0.109 — max-height tightened 560 → 500 so the canvas doesn't
-     leave a dark strip below the RESOLVED tiles ("remover este
-     espaço"). */
+     0.0.109 — max-height raised back to 900 so on tall viewports
+     (1080p+) the canvas grows to fill the empty space between
+     RESOLVED and the tabbar ("remover este espaço"). The 500-px
+     cap left a dead strip on big screens; the canvas's internal
+     layout is %-based and just scales up. */
   height: calc(100vh - 280px);
   min-height: 360px;
-  max-height: 500px;
+  max-height: 900px;
   position: relative;
   border-radius: var(--neo-radius);
   border: 1px solid var(--neo-border);
