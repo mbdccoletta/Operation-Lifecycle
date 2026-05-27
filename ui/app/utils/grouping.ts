@@ -29,7 +29,7 @@ export interface Grouping {
  *    • no yellow      (user excluded outright)
  *    • each hue >40°  apart so dots stay distinguishable. */
 export const CATEGORY_GROUPINGS: Grouping[] = [
-  { id: "AVAILABILITY",           label: "AVAILABILITY",         color: "#b29ad6" }, // lilac
+  { id: "AVAILABILITY",           label: "AVAILABILITY",         color: "#3a5fa3" }, // dark slate blue
   { id: "ERROR",                  label: "ERROR",                color: "#e89567" }, // coral
   { id: "SLOWDOWN",               label: "SLOWDOWN",             color: "#6fa8d8" }, // steel blue
   { id: "RESOURCE_CONTENTION",    label: "RESOURCE CONTENTION",  color: "#9c6fb4" }, // plum magenta
