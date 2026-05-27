@@ -40,6 +40,7 @@ interface Row {
   "event.category": string;
   count: number;
   stuck_count?: number; // 0.0.137 — sum of ACTIVE & start < now-4h
+  older_count?: number; // 0.0.150 — sum of "was active 1h ago" rows
 }
 
 export interface StatusCategoryCounts {
@@ -53,6 +54,12 @@ export interface StatusCategoryCounts {
      *  first-paint sample (which biases toward newest and
      *  underestimates Stuck for busy cells). */
     STUCK: Record<string, number>;
+    /** 0.0.150 — number of problems per category that were alive
+     *  1 h ago (ACTIVE now AND started ≥ 1h ago, plus CLOSED
+     *  whose end is after the 1h cutoff). Lets the Rising bubble
+     *  read `max(0, ACTIVE - OLDER)` from server data instead of
+     *  the 250-row sample. */
+    OLDER: Record<string, number>;
   };
   /** Aggregate totals derived from the same response so the rings
    *  and the per-category panels can never disagree. */
@@ -72,7 +79,7 @@ export interface StatusCategoryCounts {
   error: Error | null;
 }
 
-const EMPTY_COUNTS = { ACTIVE: {}, CLOSED: {}, STUCK: {} } as const;
+const EMPTY_COUNTS = { ACTIVE: {}, CLOSED: {}, STUCK: {}, OLDER: {} } as const;
 
 export function useStatusCategoryCounts(
   filters: StatusCategoryCountsFilters = {},
@@ -111,10 +118,12 @@ export function useStatusCategoryCounts(
       ACTIVE: Record<string, number>;
       CLOSED: Record<string, number>;
       STUCK: Record<string, number>;
+      OLDER: Record<string, number>;
     } = {
       ACTIVE: {},
       CLOSED: {},
       STUCK: {},
+      OLDER: {},
     };
     let active = 0;
     let closed = 0;
@@ -127,8 +136,6 @@ export function useStatusCategoryCounts(
       if (status === "ACTIVE") {
         counts.ACTIVE[cat] = n;
         active += n;
-        // stuck_count is only populated for ACTIVE rows (the
-        // is_stuck predicate already gates on status == ACTIVE).
         const sRaw = r.stuck_count;
         const s = typeof sRaw === "number" ? sRaw : Number(sRaw ?? 0);
         if (Number.isFinite(s) && s > 0) {
@@ -138,6 +145,15 @@ export function useStatusCategoryCounts(
       } else if (status === "CLOSED") {
         counts.CLOSED[cat] = n;
         closed += n;
+      }
+      // 0.0.150 — OLDER counts both statuses: ACTIVE problems that
+      // started ≥1h ago AND CLOSED problems whose end is after the
+      // 1h cutoff. Add per category across status rows so the final
+      // OLDER[cat] is the number of problems alive 1h ago.
+      const oRaw = r.older_count;
+      const o = typeof oRaw === "number" ? oRaw : Number(oRaw ?? 0);
+      if (Number.isFinite(o) && o > 0) {
+        counts.OLDER[cat] = (counts.OLDER[cat] || 0) + o;
       }
     }
     return {
@@ -157,6 +173,7 @@ export function useStatusCategoryCounts(
         ACTIVE: Record<string, number>;
         CLOSED: Record<string, number>;
         STUCK: Record<string, number>;
+        OLDER: Record<string, number>;
       },
       totals: { active: 0, closed: 0, stuck: 0, total: 0 },
       loading: true,

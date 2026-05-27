@@ -204,12 +204,23 @@ describe("buildCategoryCountsQuery", () => {
 describe("buildStatusCategoryCountsQuery", () => {
   it("aggregates by BOTH status and category", () => {
     const q = buildStatusCategoryCountsQuery({ timeframe: "7d" });
-    // 0.0.137 added a `stuck_count = sum(is_stuck)` column to the
-    // same summarize so the constellation Stuck bubble has an
-    // authoritative number (not a sample-biased extrapolation).
+    // 0.0.137 added `stuck_count`, 0.0.150 added `older_count`
+    // so the Rising bubble can read max(0, active - older) from
+    // server data and bypass the 250-row sample cap.
     expect(q).toContain("summarize count = count()");
     expect(q).toContain("stuck_count = sum(is_stuck)");
+    expect(q).toContain("older_count = sum(was_active_1h_ago)");
     expect(q).toContain("by: { event.status, event.category }");
+  });
+
+  it("tags each row with was_active_1h_ago", () => {
+    const q = buildStatusCategoryCountsQuery({ timeframe: "7d" });
+    // 0.0.150 — predicate covers ACTIVE problems that started
+    // before the 1h cutoff AND CLOSED problems that ended after
+    // it (i.e., were alive 1h ago across both statuses).
+    expect(q).toContain("was_active_1h_ago = if(");
+    expect(q).toContain("event.start <= now() - 1h");
+    expect(q).toContain("event.end > now() - 1h");
   });
 
   it("tags each row with is_stuck — defaults to now()-4h cutoff", () => {

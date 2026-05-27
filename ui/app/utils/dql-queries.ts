@@ -344,9 +344,22 @@ export function buildStatusCategoryCountsQuery(filters: {
     ? `toTimestamp("${filters.stuckCutoff}")`
     : `now() - 4h`;
   query += `\n| fieldsAdd is_stuck = if((event.status == "ACTIVE") and (event.start < ${stuckExpr}), 1, else: 0)`;
-  // Two-dimensional summarize: counts grouped by (status, category)
-  // PLUS a stuck count that only fires for ACTIVE > 4h rows.
-  query += `\n| summarize count = count(), stuck_count = sum(is_stuck), by: { event.status, event.category }`;
+  // 0.0.150 — `was_active_1h_ago` lets the count query report how
+  // many problems were alive an hour ago across BOTH statuses
+  // (ACTIVE-now problems that started ≥ 1h ago, plus CLOSED
+  // problems whose end is after the 1h cutoff). Summed per category
+  // it yields a server-authoritative "older" baseline so the Rising
+  // bubble can be `max(0, active - older)` without the 250-row
+  // sample bias. User: "os calculos estao limitados a 250 ... deve
+  // respeitar timeframe padrao."
+  query += `\n| fieldsAdd was_active_1h_ago = if(`
+         + `(event.start <= now() - 1h) and `
+         + `((event.status == "ACTIVE") or (isNotNull(event.end) and (event.end > now() - 1h))),`
+         + ` 1, else: 0)`;
+  // Three-dimensional summarize: total count, stuck count (ACTIVE
+  // & older than the timeframe-aware cutoff), and the 1h-ago
+  // baseline (both statuses contribute).
+  query += `\n| summarize count = count(), stuck_count = sum(is_stuck), older_count = sum(was_active_1h_ago), by: { event.status, event.category }`;
   return query;
 }
 

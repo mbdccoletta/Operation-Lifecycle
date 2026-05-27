@@ -1023,6 +1023,19 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
       // Real tenant → use the count query (already timeframe-bounded
       // server-side via from/to in buildStatusCategoryCountsQuery).
       if (statusCategoryLoading) return undefined;
+      // 0.0.150 — Rising bubble used to derive from the 250-row
+      // sample (`recent - older` computed client-side over the
+      // loaded problems). For busy tenants where the sample is
+      // truncated, the delta collapsed regardless of timeframe.
+      // Now compute it from the server-side `OLDER` count instead:
+      // risingDelta = max(0, ACTIVE - OLDER) per category.
+      const risingDeltaByCategory: Record<string, number> = {};
+      for (const cat of Object.keys(statusCategoryCounts.ACTIVE)) {
+        const a = statusCategoryCounts.ACTIVE[cat] || 0;
+        const o = statusCategoryCounts.OLDER[cat] || 0;
+        const d = a - o;
+        if (d > 0) risingDeltaByCategory[cat] = d;
+      }
       return {
         total: statusCategoryTotals.total,
         active: statusCategoryTotals.active,
@@ -1032,6 +1045,7 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
         // 0.0.137 — authoritative Stuck count per category, server-
         // side. Now timeframe-aware (0.0.148).
         stuckByCategory: statusCategoryCounts.STUCK,
+        risingDeltaByCategory,
       };
     }
     // 0.0.149 — DEMO scenarios bypass DQL entirely. Compute the same
@@ -1065,15 +1079,19 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
     const activeBy: Record<string, number> = {};
     const closedBy: Record<string, number> = {};
     const stuckBy:  Record<string, number> = {};
+    const olderBy:  Record<string, number> = {};
+    const oneHourAgo = Date.now() - 3_600_000;
     for (const p of rawProblems) {
       const startTs = new Date(p["event.start"]).getTime();
       if (!Number.isFinite(startTs) || startTs > tfToMs) continue;
       const isActive = p["event.status"] === "ACTIVE";
       const endTs = p["event.end"] ? new Date(p["event.end"]).getTime() : null;
-      // Closed problems must have ended after the timeframe start to
-      // count — otherwise the closure happened before the window.
       if (!isActive && endTs !== null && endTs < tfFromMs) continue;
       const cat = p["event.category"];
+      // Was alive 1h ago? (ACTIVE & started before 1h ago) OR
+      // (CLOSED & ended after 1h ago).
+      const wasOlder = startTs <= oneHourAgo && (isActive || (endTs !== null && endTs > oneHourAgo));
+      if (wasOlder) olderBy[cat] = (olderBy[cat] || 0) + 1;
       if (isActive) {
         active++;
         activeBy[cat] = (activeBy[cat] || 0) + 1;
@@ -1085,6 +1103,11 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
         closedBy[cat] = (closedBy[cat] || 0) + 1;
       }
     }
+    const risingDeltaByCategory: Record<string, number> = {};
+    for (const cat of Object.keys(activeBy)) {
+      const d = (activeBy[cat] || 0) - (olderBy[cat] || 0);
+      if (d > 0) risingDeltaByCategory[cat] = d;
+    }
     return {
       total: active + closed,
       active,
@@ -1092,6 +1115,7 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
       activeByCategory: activeBy,
       resolvedByCategory: closedBy,
       stuckByCategory: stuckBy,
+      risingDeltaByCategory,
     };
   }, [scenario, statusCategoryLoading, statusCategoryTotals, statusCategoryCounts, rawProblems, timeframe, selectedRange, stuckCutoffMs]);
 

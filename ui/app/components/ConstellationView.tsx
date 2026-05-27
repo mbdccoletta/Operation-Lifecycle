@@ -167,6 +167,11 @@ interface ConstellationViewProps {
      *  cell's first-paint loaded subset (250 newest globally) is
      *  all < 4h old and the scaled Stuck count collapses to 0. */
     stuckByCategory?: Record<string, number>;
+    /** 0.0.150 — authoritative Rising delta per category, computed
+     *  from the count query's OLDER baseline (active 1h ago).
+     *  Replaces the sample-derived `recent - older` math that
+     *  capped at the 250-row first paint. */
+    risingDeltaByCategory?: Record<string, number>;
   };
   /** 0.0.148 — ms timestamp before which an ACTIVE problem counts
    *  as Stuck. Host derives this from the user-selected timeframe.
@@ -894,7 +899,14 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
       const scale = loadedTotal > 0 ? realTotal / loadedTotal : 1;
       const cellColor = colorOf(cellId);
       const trend = cellTrend[cellId] ?? { recent: 0, older: 0 };
-      const risingDelta = Math.max(0, trend.recent - trend.older);
+      // 0.0.150 — prefer the server-side Rising delta when the host
+      // provides one (uncapped, full timeframe). Falls back to the
+      // sample-derived `recent - older` math for dev/standalone
+      // contexts that don't run the count query.
+      const overrideDelta = countOverrides?.risingDeltaByCategory?.[cellId];
+      const risingDelta = (typeof overrideDelta === "number")
+        ? overrideDelta
+        : Math.max(0, trend.recent - trend.older);
       // 0.0.137 — authoritative Stuck from the count query when the
       // host provides it. Avoids the sample-bias problem where a
       // busy category's loaded subset is all <4h old and the scaled
