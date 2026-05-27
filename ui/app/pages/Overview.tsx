@@ -2657,6 +2657,18 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
               setEnlargedQuadrant(cellId);
               setEnlargedQuadrantMode(mode);
             }}
+            // 0.0.164 — Total bubble bypasses the modal and lands
+            // on the LIST view filtered ONLY by category. User: "o
+            // drilldown do grupo Total deve apenas direcionar o
+            // usuario para a list levando apenas o filtro de
+            // categoria." Same closure the modal Total pill uses.
+            onCellTotalDrilldown={(groupingId) => {
+              resetListFilters();
+              setStatusFilter(null);
+              setHighlightedSubsetMode(null);
+              setCatFilter(new Set([groupingId]));
+              setViewMode("list");
+            }}
             onEmptyClick={handleEmptyClick}
             groupings={groupings}
             resolveGrouping={resolveGrouping}

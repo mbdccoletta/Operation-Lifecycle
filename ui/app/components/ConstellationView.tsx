@@ -78,6 +78,13 @@ interface ConstellationViewProps {
    *  a global Show By chip. Omitted when the enlarge was triggered
    *  by a non-bubble path (cell label, double-click). */
   onQuadrantEnlarge?: (groupingId: string, subsetMode?: ConstellationDataMode) => void;
+  /** 0.0.164 — click on a cell's TOTAL bubble. When provided, the
+   *  Total bubble bypasses the enlarged modal and routes the user
+   *  straight to the list with ONLY the category filter applied.
+   *  Falls back to `onQuadrantEnlarge` when omitted. User: "o
+   *  drilldown do grupo Total deve apenas direcionar o usuario
+   *  para a list levando apenas o filtro de categoria." */
+  onCellTotalDrilldown?: (groupingId: string) => void;
   /** Clicking on EMPTY canvas (no dot, no label) fires this so the parent
    *  can clear page-level state — pinned problem, expanded cards, etc. */
   onEmptyClick?: () => void;
@@ -218,6 +225,7 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
   leaderCellIds,
   catTrendOverride,
   onQuadrantEnlarge,
+  onCellTotalDrilldown,
   onEmptyClick,
   groupings = CATEGORY_GROUPINGS,
   resolveGrouping = resolveByCategory,
@@ -3372,7 +3380,13 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
     // when no enlarge handler is wired (defensive).
     for (const b of bubbleHitsRef.current) {
       if (Math.hypot(mxPx - b.cx, myPx - b.cy) <= b.r) {
-        if (onQuadrantEnlarge) {
+        // 0.0.164 — Total bubble bypasses the modal and drills to
+        // the list with just the category filter when the host
+        // wires `onCellTotalDrilldown`. Rising / Stuck still open
+        // the modal so users can see the per-mode top-N dots.
+        if (b.subsetMode === "criticality" && onCellTotalDrilldown) {
+          onCellTotalDrilldown(b.cellId);
+        } else if (onQuadrantEnlarge) {
           onQuadrantEnlarge(b.cellId, b.subsetMode);
         } else {
           // Fallback: drill inline. We don't have a per-mode inline
@@ -3440,7 +3454,7 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
     // No-op for `lockExpandedQuadrant` hosts (the modal owns dismissal).
     if (expandedQuadrant && !lockExpandedQuadrant) setExpandedQuadrant(null);
     onEmptyClick?.();
-  }, [size, onSelect, findStarAt, screenToWorld, onCategoryLabelClick, onHubRingClick, onResolvedTileClick, expandedQuadrant, onEmptyClick, detectQuadrantAt, detectLabelAt, expandedCellCategory, onQuadrantEnlarge, lockExpandedQuadrant]);
+  }, [size, onSelect, findStarAt, screenToWorld, onCategoryLabelClick, onHubRingClick, onResolvedTileClick, expandedQuadrant, onEmptyClick, detectQuadrantAt, detectLabelAt, expandedCellCategory, onQuadrantEnlarge, onCellTotalDrilldown, lockExpandedQuadrant]);
 
   const handleDoubleClick = useCallback((_e: React.MouseEvent<HTMLCanvasElement>) => {
     // 0.0.127 — double-click on a cell no longer opens the enlarged
