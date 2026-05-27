@@ -1672,16 +1672,36 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
         default:         return getUrgencyScore(b) - getUrgencyScore(a);
       }
     };
-    // Grouping modes (segment / entity) mix actives + resolved
-    // together so the per-group cohorts are contiguous. Other modes
-    // keep the canonical active-first split for at-a-glance triage.
-    if (sortMode === "segment" || sortMode === "entity") {
-      return [...problems].sort(cmp);
+    // 0.0.126 — wrap the comparator with a category prefix when the
+    // Total chip is active in list view. Same intent as sortMode
+    // "segment"/"entity": cluster rows by their grouping field so
+    // the dividers from the multi-level renderer emit clean
+    // section breaks instead of fragmenting across the table.
+    // Within each category cohort the existing comparator still
+    // decides order (so URGENCY default keeps actives-first inside
+    // each cohort, etc.).
+    const wrappedCmp = (viewMode === "list" && highlightedSubsetMode === "criticality")
+      ? (a: Problem, b: Problem) => {
+          const ca = a["event.category"] || "";
+          const cb = b["event.category"] || "";
+          const catCmp = ca.localeCompare(cb);
+          if (catCmp !== 0) return catCmp;
+          return cmp(a, b);
+        }
+      : cmp;
+    // Grouping modes (segment / entity / category-via-Total) mix
+    // actives + resolved together so the per-group cohorts are
+    // contiguous. Other modes keep the canonical active-first split
+    // for at-a-glance triage.
+    const groupingActive = sortMode === "segment" || sortMode === "entity"
+      || (viewMode === "list" && highlightedSubsetMode === "criticality");
+    if (groupingActive) {
+      return [...problems].sort(wrappedCmp);
     }
-    const a = [...active].sort(cmp);
-    const r = [...resolved].sort(cmp);
+    const a = [...active].sort(wrappedCmp);
+    const r = [...resolved].sort(wrappedCmp);
     return [...a, ...r];
-  }, [problems, active, resolved, sortMode, colSort, segMembership, segNameByUid]);
+  }, [problems, active, resolved, sortMode, colSort, segMembership, segNameByUid, viewMode, highlightedSubsetMode]);
 
   const filtered = useMemo(() => {
     let out = sorted;
@@ -2477,10 +2497,18 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
           filter (see the `filtered` useMemo below). */}
       {(() => {
         const inList = viewMode === "list";
+        // 0.0.126 — Total chip is now present in the list view too,
+        // but with a DIFFERENT semantic per view:
+        //   constellation → highlight cells with the most active
+        //   list          → group rows by category
+        // The hint text flips so the user reads the right meaning.
+        // Rising / Stuck behaviour unchanged: bubble highlight in
+        // constellation, row filter in list (see `filtered` memo).
         const chips: Array<{ mode: typeof highlightedSubsetMode; label: string; hint: string }> = inList
           ? [
-              { mode: "rising"    as const, label: "Rising", hint: "Problems opened in the last hour" },
-              { mode: "open_time" as const, label: "Stuck",  hint: "Problems active for more than 4 hours" },
+              { mode: "rising"      as const, label: "Rising", hint: "Problems opened in the last hour" },
+              { mode: "open_time"   as const, label: "Stuck",  hint: "Problems active for more than 4 hours" },
+              { mode: "criticality" as const, label: "Total",  hint: "Group rows by category" },
             ]
           : [
               { mode: "rising"      as const, label: "Rising",   hint: "Problems opened in the last hour" },
@@ -2993,12 +3021,21 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
                    running label per level across renderRow calls.
 
                    levels[i].kind identifies the lookup type:
-                     • "segment" → first alpha segment name (via
-                                   segMembership + segNameByUid)
-                     • "entity"  → first affected-entity name (or id)
-                     • "root"    → root cause entity name (or id) */
-                type LevelKind = "segment" | "entity" | "root";
+                     • "segment"  → first alpha segment name (via
+                                    segMembership + segNameByUid)
+                     • "entity"   → first affected-entity name (or id)
+                     • "root"     → root cause entity name (or id)
+                     • "category" → Davis problem category (added
+                                    v0.0.126 — driven by the "Total"
+                                    chip in list mode). */
+                type LevelKind = "segment" | "entity" | "root" | "category";
                 const levels: { kind: LevelKind; label: string }[] = [];
+                // 0.0.126 — Total chip in list view = group by
+                // category. Outermost level (above entity / root)
+                // so category sections wrap the other groupings.
+                if (viewMode === "list" && highlightedSubsetMode === "criticality") {
+                  levels.push({ kind: "category", label: "Category" });
+                }
                 if (sortMode === "segment" || colSort?.key === "segments") {
                   levels.push({ kind: "segment", label: "Segment" });
                 }
@@ -3022,12 +3059,18 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
                     const names = p.affected_entity_names || [];
                     return names[0] || ids[0] || "(unknown)";
                   }
-                  // root
-                  const rcName = p.root_cause_entity_name?.trim();
-                  const rcId   = p.root_cause_entity_id?.trim();
-                  if (rcName) return rcName;
-                  if (rcId)   return rcId;
-                  return "(no root cause)";
+                  if (kind === "root") {
+                    const rcName = p.root_cause_entity_name?.trim();
+                    const rcId   = p.root_cause_entity_id?.trim();
+                    if (rcName) return rcName;
+                    if (rcId)   return rcId;
+                    return "(no root cause)";
+                  }
+                  // category — Davis category id, lifted via the
+                  // page's grouping resolver so segment-mode users
+                  // also see meaningful labels.
+                  const cat = p["event.category"];
+                  return labelForGrouping(cat) || cat || "(no category)";
                 };
 
                 // Running labels per level — first row triggers ALL
