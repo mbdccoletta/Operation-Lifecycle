@@ -831,6 +831,19 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
         label,
         icon,
       }));
+      // 0.0.118 — wider-timeframe fallback. On "Last 7 days" the
+      // loaded problem list is sorted by event.start desc and
+      // truncated at the first-paint cap; a category whose 4 active
+      // problems all started before the cutoff ends up with
+      // loadedTotal = 0 + realTotal = 4 → every subset count stays
+      // zero, and the cell renders just a centered "4" fallback.
+      // User: "coloquei 7 dias e perderam alguns grupos." Recover
+      // the bubble layout by stuffing the real count into the Total
+      // bubble whenever there's nothing else to show.
+      if (loadedTotal === 0 && realTotal > 0) {
+        const total = out[cellId].find((s) => s.mode === "criticality");
+        if (total) total.count = realTotal;
+      }
     }
     return out;
   }, [problems, resolveGrouping, countOverrides, colorOf, groupings]);
