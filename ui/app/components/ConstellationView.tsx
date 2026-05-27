@@ -724,18 +724,21 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
     icon: string;
   }>> = useMemo(() => {
     const now = Date.now();
+    // 0.0.109 follow-up — partition active problems so the three
+    // mode counts add up to the cell's active total ("Conta nao
+    // esta batendo"). Priority Critical → Rising → Stuck:
+    //   • Critical wins on severity ≥ 4, regardless of age.
+    //   • Rising = recent (< 1h) AND not Critical.
+    //   • Stuck  = everything else active (≥ 1h, low severity).
+    // Each active problem ends up in exactly one mode, so
+    // Rising + Stuck + Critical = total active.
     const matches = (mode: SubsetMode, p: Problem): boolean => {
       if (p["event.status"] !== "ACTIVE") return false;
-      switch (mode) {
-        case "rising":
-          return new Date(p["event.start"]).getTime() >= now - 3_600_000;
-        case "open_time":
-          return new Date(p["event.start"]).getTime() <= now - 4 * 3_600_000;
-        case "criticality":
-          return Number((p as { "event.severity_level"?: number | string })["event.severity_level"] ?? 0) >= 4;
-        default:
-          return false;
-      }
+      const sev = Number((p as { "event.severity_level"?: number | string })["event.severity_level"] ?? 0);
+      const startTs = new Date(p["event.start"]).getTime();
+      if (sev >= 4) return mode === "criticality";
+      if (startTs >= now - 3_600_000) return mode === "rising";
+      return mode === "open_time";
     };
     // First pass: loaded-subset counts per (cell, mode). Also tally
     // the cell's TOTAL active so we can scale the per-mode counts

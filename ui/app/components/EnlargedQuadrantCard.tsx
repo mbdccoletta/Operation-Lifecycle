@@ -118,15 +118,15 @@ export const EnlargedQuadrantCard = ({
   const [currentMode, setCurrentMode] = useState<SubsetMode>(initialMode);
   useEffect(() => { setCurrentMode(initialMode); }, [initialMode]);
 
+  // Same partition rules as the page-level cellSubsetBubbles memo:
+  // Critical > Rising > Stuck (mutually exclusive). Keeps the
+  // modal's TOP_N filter aligned with the cell's bubble counts.
   const matchesMode = (mode: SubsetMode, p: Problem, now: number): boolean => {
-    switch (mode) {
-      case "rising":
-        return new Date(p["event.start"]).getTime() >= now - 3_600_000;
-      case "open_time":
-        return new Date(p["event.start"]).getTime() <= now - 4 * 3_600_000;
-      case "criticality":
-        return Number((p as { "event.severity_level"?: number | string })["event.severity_level"] ?? 0) >= 4;
-    }
+    const sev = Number((p as { "event.severity_level"?: number | string })["event.severity_level"] ?? 0);
+    const startTs = new Date(p["event.start"]).getTime();
+    if (sev >= 4) return mode === "criticality";
+    if (startTs >= now - 3_600_000) return mode === "rising";
+    return mode === "open_time";
   };
   const sortForMode = (mode: SubsetMode, list: Problem[]): Problem[] => {
     const arr = [...list];
