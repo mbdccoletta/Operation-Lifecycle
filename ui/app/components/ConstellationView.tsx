@@ -1053,22 +1053,21 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
     // at the bottom (32 % of canvas) when that panel is enabled.
     // When the host hides RESOLVED, the active area expands to the
     // full canvas so the quadrant fills everything visible.
-    // 0.0.109 follow-up — was h*0.68, leaving the bottom row's
-    // cellRect ~5 % shorter than the top row (cellRect math: top
-    // row spans 0..midpoint, bottom spans midpoint..activeAreaH).
-    // 0.725 puts the activeArea ceiling at the symmetric distance
-    // from the row midpoint, so both rows get equal cellRect
-    // height. The RESOLVED HUD panel just below shrinks from 32 %
-    // to 27.5 % of canvas — still plenty for the four stat tiles.
-    const activeAreaH = showResolvedZone ? h * 0.725 : h;
+    // RESOLVED HUD area shrunk further in 0.0.109 ("diminuir esta
+    // area") — was 0.725 (27.5 % resolved zone), now 0.80 (20 %).
+    // Row bounds in `computeQuadrantLayout` shifted in lockstep so
+    // both rows still get equal cellRect height (0.40 each, with
+    // the midpoint at 0.40).
+    const activeAreaH = showResolvedZone ? h * 0.80 : h;
     // Hub band coordinates — only used when showHub is true. Kept at
     // module scope so trend / spoke / satellite code below can reference
     // them; guarded against rendering when the hub is hidden.
-    // 0.0.109 follow-up — shifted slightly down from 0.18/0.50 to
-    // 0.205/0.520 to stay clear of the new (taller) cell rows in
-    // computeQuadrantLayout (rows now 0.040-0.195 / 0.530-0.685).
-    const hubBandTop    = h * 0.205;
-    const hubBandBottom = h * 0.520;
+    // Hub band sits in the gap between the two rows (now 0.220 →
+    // 0.580 after the row shift). 0.245-0.555 puts it ~2.5 % above
+    // and below the rows, keeping the rings ~31 % of canvas tall —
+    // same room they had before the layout tweak.
+    const hubBandTop    = h * 0.245;
+    const hubBandBottom = h * 0.555;
     const hubCx = w / 2;
     const hubCy = (hubBandTop + hubBandBottom) / 2;
 
