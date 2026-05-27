@@ -468,6 +468,24 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
           && !risingCats.has(cat)
           && !disableAggregation
         ) return;
+        // 0.0.138 — inside the modal (`disableAggregation`), every
+        // active problem the host passed in is meant to be
+        // highlighted. The host already curated the slice (e.g.
+        // top-N newest for Rising, top-50 oldest for Stuck), so
+        // re-applying a 95 %-of-max score filter discards 7 of 8
+        // dots when their start times spread across 60 minutes.
+        // User: "Vejo 8 rising e destacando apenas 1". Skip the
+        // score-tier filter in modal mode — flag every active dot
+        // as top-tier so the focus ring fires for the full slice.
+        if (disableAggregation) {
+          const ids = probs
+            .filter((p) => p["event.status"] === "ACTIVE")
+            .slice(0, MAX_TIER_PER_CAT)
+            .map((p) => p.display_id);
+          topListByCat[cat] = ids;
+          ids.forEach((id, i) => { tierIndexById[id] = i; });
+          return;
+        }
         const scored = probs
           .map((p) => ({ p, s: scoreFn(p) }))
           .filter(({ s }) => s > 0)                      // skip zero-score dots
