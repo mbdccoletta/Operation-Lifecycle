@@ -483,19 +483,17 @@ export const EnlargedQuadrantCard = ({
                 }}
               >
                 {ALL_MODES.map((m) => {
-                  // 0.0.130 — for the Total ("criticality") pill, swap
-                  // the sample-derived count for the authoritative
-                  // category total when the host provided one. Keeps
-                  // the modal headline (1 574 active) and the Total
-                  // pill (1 574) reading the same number.
-                  // 0.0.137 — Stuck pill also gets the authoritative
-                  // count (categoryCounts.stuck) from the same query,
-                  // so it stops collapsing to 0 when the cell's
-                  // loaded sample is all <4h (busy categories).
-                  // Rising stays sample-derived since the count query
-                  // doesn't carry a 1h split for the delta.
+                  // 0.0.163 — Total pill = ACTIVE + CLOSED for the
+                  // timeframe (matches the cell's Total bubble since
+                  // v0.0.161 and the FILTERS-strip chip since
+                  // v0.0.160). User: "ao expandir, o total mostra
+                  // apenas os ativos."
+                  // Stuck pill keeps the authoritative count from the
+                  // count query (categoryCounts.stuck); Rising stays
+                  // sample-derived since the count query doesn't
+                  // carry a 1h split for the delta.
                   const count = m.mode === "criticality"
-                    ? displayedActive
+                    ? displayedActive + displayedClosed
                     : (m.mode === "open_time" && typeof categoryCounts?.stuck === "number"
                         ? categoryCounts.stuck
                         : drilldown.counts[m.mode]);
