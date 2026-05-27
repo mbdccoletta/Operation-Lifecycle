@@ -1368,14 +1368,24 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
         // cell in colour; the leader cue now comes from the glow
         // border alone (below).
 
-        // Solid glow border — distinct from the dashed grid dividers
-        ctx.save();
-        ctx.strokeStyle = `rgba(${rgb},${0.7 + ringPulse * 0.25})`;
-        ctx.lineWidth = 2;
-        ctx.shadowColor = `rgba(${rgb},0.65)`;
-        ctx.shadowBlur = 10;
-        ctx.strokeRect(z.x + 1.5, z.y + 1.5, z.w - 3, z.h - 3);
-        ctx.restore();
+        // Solid glow border — distinct from the dashed grid dividers.
+        // 0.0.116 — suppressed when the host passes `leaderCellIds`
+        // (Total mode). User saw TWO concentric rectangles per cell
+        // ("remover o retangulo central e deixar apenas o superior")
+        // because the new Total-leader frame (outer, uses slot
+        // bounds) and this old data-mode-leader border (inner, uses
+        // the hub-clamped cellRects) both fired. Keep only the
+        // outer frame when Total is active. The ★ TOP / ▲ UP seal
+        // below still draws so the leader cue isn't lost.
+        if (!leaderCellIds || leaderCellIds.size === 0) {
+          ctx.save();
+          ctx.strokeStyle = `rgba(${rgb},${0.7 + ringPulse * 0.25})`;
+          ctx.lineWidth = 2;
+          ctx.shadowColor = `rgba(${rgb},0.65)`;
+          ctx.shadowBlur = 10;
+          ctx.strokeRect(z.x + 1.5, z.y + 1.5, z.w - 3, z.h - 3);
+          ctx.restore();
+        }
 
         // ── Leader seal — semantics depend on the active Show By mode ──
         // Rising mode → "▲ UP" with directional motion (bobbing + rising sparks)
