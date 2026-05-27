@@ -1049,6 +1049,32 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
     setCategoryCounts(fromOverride ?? activeCountsByCategoryFallback);
   }, [constellationCountOverrides, statusFilter, activeCountsByCategoryFallback, setCategoryCounts]);
 
+  // 0.0.172 — authoritative count of problems matching the current
+  // category + status filter, from the count query. The list loads
+  // in 250-row batches via useProblems pagination (`hasMore` /
+  // `loadMore`); this value tells the user the TRUE size of the
+  // matching set so the "250 problems" badge doesn't look like a
+  // hard cap. Client-side narrowing (search, pinned problem,
+  // Rising/Stuck chip, brush) is NOT included here — by design,
+  // since those add ad-hoc filters on top of the server-side query.
+  // User: "deixar claro que a list renderiza de 250 em 250, mas
+  // conta todos os problemas."
+  const expectedListTotal = useMemo<number | null>(() => {
+    if (!constellationCountOverrides) return null;
+    const cats = Array.from(catFilter);
+    const activeBy = constellationCountOverrides.activeByCategory ?? {};
+    const closedBy = constellationCountOverrides.resolvedByCategory ?? {};
+    const sum = (m: Record<string, number>): number => {
+      if (cats.length === 0) {
+        return Object.values(m).reduce((acc, n) => acc + (Number.isFinite(n) ? n : 0), 0);
+      }
+      return cats.reduce((acc, c) => acc + (m[c] || 0), 0);
+    };
+    if (statusFilter === "ACTIVE") return sum(activeBy);
+    if (statusFilter === "CLOSED") return sum(closedBy);
+    return sum(activeBy) + sum(closedBy);
+  }, [constellationCountOverrides, catFilter, statusFilter]);
+
   // Hour-over-hour trend figures for the mobile headline strip.
   //
   // Two semantics, deliberately different:
@@ -2721,14 +2747,27 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
               big enough that the list and KPIs degrade. Real customer
               tenants stay below this cap because `useProblems.HARD_CEILING`
               limits the source to 10k. Belt-and-braces in case a future
-              regression lifts the source cap. */}
-          {(filtered.length > MAX_RENDER_ROWS || !teamMetricsEnabled) && (
+              regression lifts the source cap.
+              0.0.172 — also surfaces when more matches exist server-
+              side than the current batch (`hasMore`). Tells the user
+              the list paginates 250 at a time and points at the
+              "Load more" affordance at the bottom. */}
+          {(filtered.length > MAX_RENDER_ROWS || !teamMetricsEnabled || (hasMore && expectedListTotal !== null && expectedListTotal > filtered.length)) && (
             <div className="neo-large-dataset-banner" role="status">
-              <strong>Large dataset detected</strong>{" "}
-              ({filtered.length.toLocaleString()} problems matched).
-              {filtered.length > MAX_RENDER_ROWS && (
-                <> Showing the first {MAX_RENDER_ROWS.toLocaleString()} rows — refine the filter / search / timeframe to narrow.</>
-              )}
+              {filtered.length > MAX_RENDER_ROWS ? (
+                <>
+                  <strong>Large dataset detected</strong>{" "}
+                  ({filtered.length.toLocaleString()} problems matched).{" "}
+                  Showing the first {MAX_RENDER_ROWS.toLocaleString()} rows — refine the filter / search / timeframe to narrow.
+                </>
+              ) : (hasMore && expectedListTotal !== null && expectedListTotal > filtered.length) ? (
+                <>
+                  <strong>Showing {filtered.length.toLocaleString()} of {expectedListTotal.toLocaleString()}</strong>{" "}
+                  matching problems. The list loads in batches of 250 —
+                  use <strong>Load more</strong> at the bottom of the list to fetch the next batch,
+                  or refine the timeframe / filters to narrow.
+                </>
+              ) : null}
               {!teamMetricsEnabled && (
                 <> Team-metrics KPIs are paused above {TEAM_METRICS_CAP.toLocaleString()} problems — they re-enable automatically once you filter down.</>
               )}
@@ -2800,9 +2839,29 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
               <option value="segment">Segment (grouped)</option>
               <option value="entity">Affected entity (grouped)</option>
             </select>
-            <span className="neo-list-count" aria-live="polite">
-              <strong>{filtered.length}</strong>
-              <span> {filtered.length === 1 ? "problem" : "problems"}</span>
+            {/* 0.0.172 — show "X of Y problems" when the loaded
+                subset is smaller than the authoritative total. Y
+                comes from the count query, so it reflects every
+                problem matching the current category / status
+                filter — not just the 250-row batch the list
+                currently renders. Hover tooltip explains the
+                pagination + the Load more affordance. */}
+            <span
+              className="neo-list-count"
+              aria-live="polite"
+              title={
+                expectedListTotal !== null && expectedListTotal > filtered.length
+                  ? `Showing the first ${filtered.length.toLocaleString()} of ${expectedListTotal.toLocaleString()} problems matching the current filters. Use "Load more" at the bottom of the list to fetch the next batch.`
+                  : undefined
+              }
+            >
+              <strong>{filtered.length.toLocaleString()}</strong>
+              {expectedListTotal !== null && expectedListTotal > filtered.length && (
+                <span style={{ opacity: 0.75 }}>
+                  {" "}of <strong>{expectedListTotal.toLocaleString()}</strong>
+                </span>
+              )}
+              <span> {(expectedListTotal ?? filtered.length) === 1 ? "problem" : "problems"}</span>
             </span>
           </div>
 
