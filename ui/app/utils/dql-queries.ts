@@ -172,6 +172,55 @@ export function buildFilteredQuery(filters: {
   return query;
 }
 
+/** 0.0.142 — Top-N oldest ACTIVE problems per category, restricted
+ *  to age > 4 h (the canonical Stuck threshold). Fires ONLY when the
+ *  user opens the enlarged-quadrant modal and lands on the Stuck
+ *  pill (on-demand, not on every refresh) — without this the modal
+ *  has no Stuck dots to render whenever the first-paint sample (250
+ *  newest globally) doesn't include any 4h+ active problems for
+ *  this category, which is the common case for busy cells.
+ *
+ *  Payload: ≤ 50 rows × ~300 bytes ≈ 15 KB. Bytes scanned scale with
+ *  the timeframe (filtered server-side to one category + ACTIVE +
+ *  age cutoff), so the DPS hit is modest and only paid on user
+ *  interaction. */
+export function buildStuckProblemsByCategoryQuery(filters: {
+  category: string;
+  timeframe?: string;
+  from?: string;
+  to?: string;
+  limit?: number;
+}): string {
+  if (!ALLOWED_CATEGORIES.has(filters.category)) {
+    // Defense-in-depth — caller validated, but never let an
+    // unknown category interpolate into a DQL string.
+    throw new Error(`Invalid category: ${filters.category}`);
+  }
+  let query: string;
+  if (filters.from && filters.to && isIsoTimestamp(filters.from) && isIsoTimestamp(filters.to)) {
+    query = `fetch dt.davis.problems, from: "${filters.from}", to: "${filters.to}"`;
+  } else if (filters.timeframe && TIMEFRAME_RE.test(filters.timeframe)) {
+    query = `fetch dt.davis.problems, from: now() - ${filters.timeframe}`;
+  } else {
+    query = `fetch dt.davis.problems, from: now() - 72h`;
+  }
+  query += `\n| filter (isNull(dt.davis.is_duplicate) or not(dt.davis.is_duplicate))`;
+  query += `\n| filter event.status == "ACTIVE"`;
+  query += `\n| filter event.category == "${filters.category}"`;
+  query += `\n| filter event.start < now() - 4h`;
+  query += `\n| fields event.name, event.status, event.category, event.start, event.end, event.severity, affected_entity_ids, affected_entity_names, affected_entity_types, root_cause_entity_id, root_cause_entity_name, display_id, management_zones`;
+  // Dedup by display_id so each problem contributes once even
+  // when Davis emits multiple state-change records.
+  query += `\n| sort event.start asc`; // oldest first → most stuck
+  query += `\n| dedup display_id`;
+  const requested = filters.limit;
+  const safeLimit = (typeof requested === "number" && Number.isFinite(requested) && requested > 0)
+    ? Math.min(Math.floor(requested), 200)
+    : 50;
+  query += `\n| limit ${safeLimit}`;
+  return query;
+}
+
 /** Build a cheap aggregation query that returns one row per
  *  category with its problem count inside the same window/segment
  *  filters as the main list — but **without** the category filter

@@ -17,6 +17,7 @@
 //   • ESC → close.
 import React, { useEffect, useMemo, useState } from "react";
 import { Problem } from "../hooks/useProblems";
+import { useStuckProblemsByCategory } from "../hooks/useStuckProblemsByCategory";
 import { getCategoryIcon } from "../utils/formatters";
 import { CATEGORY_GROUPINGS, resolveByCategory, type Grouping } from "../utils/grouping";
 import { ConstellationView, type ConstellationDataMode } from "./ConstellationView";
@@ -83,6 +84,17 @@ export interface EnlargedQuadrantCardProps {
    *  250-row first-paint sample). Optional so dev/test hosts that
    *  don't run the count query still render. */
   categoryCounts?: { active: number; closed: number; stuck?: number };
+  /** 0.0.142 — timeframe context for the on-demand stuck-by-category
+   *  fetch. Same shape useProblems accepts. When the user lands on
+   *  the Stuck pill the modal fires a focused DQL to retrieve the
+   *  oldest active problems in this category (the main list's first-
+   *  paint sample is heavily biased toward fresh problems and rarely
+   *  contains any 4h+ rows for busy cells). */
+  stuckFetch?: {
+    timeframe?: string;
+    from?: string;
+    to?: string;
+  };
   onClose: () => void;
 }
 
@@ -95,6 +107,7 @@ export const EnlargedQuadrantCard = ({
   onSelectProblem,
   onDrilldownToList,
   categoryCounts,
+  stuckFetch,
   onClose,
 }: EnlargedQuadrantCardProps) => {
   // ESC closes — same shortcut every other modal uses.
@@ -234,6 +247,27 @@ export const EnlargedQuadrantCard = ({
 
   // User 0.0.109: "ao fazer drilldown mostrar top 50." Was 10.
   const TOP_N = 50;
+
+  // 0.0.142 — on-demand fetch of the oldest active problems for
+  // this category. Only fires when the modal is open AND the user
+  // has the Stuck pill selected — pays the ~0.05 DPS hit on user
+  // interaction, not on every page refresh. Without this hook the
+  // modal had no Stuck dots to render whenever the first-paint
+  // sample (250 newest globally) contained no 4h+ rows for the
+  // category, which is the common case on busy cells like ERROR.
+  // User: "Nao esta mostrando os stucks."
+  const stuckFetchEnabled =
+    currentMode === "open_time" &&
+    (categoryCounts?.stuck ?? 0) > 0;
+  const { problems: fetchedStuckProblems } = useStuckProblemsByCategory({
+    category: quadrantId,
+    timeframe: stuckFetch?.timeframe,
+    from: stuckFetch?.from,
+    to: stuckFetch?.to,
+    limit: TOP_N,
+    enabled: stuckFetchEnabled,
+  });
+
   const drilldown = useMemo(() => {
     const now = Date.now();
     const matchingByMode: Record<SubsetMode, Problem[]> = { rising: [], open_time: [], criticality: [] };
@@ -254,6 +288,15 @@ export const EnlargedQuadrantCard = ({
     );
     matchingByMode.rising = activeByStartDesc.slice(0, risingDelta);
 
+    // 0.0.142 — overlay the focused stuck-fetch result onto the
+    // sample-derived list. Dedup by display_id so a problem present
+    // in BOTH the global sample and the focused fetch counts once.
+    if (fetchedStuckProblems.length > 0) {
+      const sampleStuckIds = new Set(matchingByMode.open_time.map((p) => p.display_id));
+      const extras = fetchedStuckProblems.filter((p) => !sampleStuckIds.has(p.display_id));
+      matchingByMode.open_time = [...matchingByMode.open_time, ...extras];
+    }
+
     const matchingForCurrent = sortForMode(currentMode, matchingByMode[currentMode]);
     const top = matchingForCurrent.slice(0, TOP_N);
     const restOfCurrent = Math.max(0, matchingForCurrent.length - TOP_N);
@@ -266,7 +309,7 @@ export const EnlargedQuadrantCard = ({
         criticality: matchingByMode.criticality.length,
       } as Record<SubsetMode, number>,
     };
-  }, [activeProblems, currentMode, risingDelta]);
+  }, [activeProblems, currentMode, risingDelta, fetchedStuckProblems]);
 
   // Inner ConstellationView receives the top 10 of the current mode
   // + the closed tail (still feeds `risingCats` / trend bookkeeping).

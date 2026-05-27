@@ -3631,6 +3631,9 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
                 }
               : undefined
           }
+          // 0.0.142 — timeframe for the on-demand stuck-by-category
+          // fetch (fires only when modal is on Stuck mode).
+          stuckFetch={timeframeFilter}
           // 0.0.127 — Total pill in the modal jumps to LIST
           // filtered by the modal's category. User: "o total da
           // area expandida dele levar o filtro de categoria para a
