@@ -2144,6 +2144,77 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
       }
     });
 
+    // 0.0.127 — anti-overlap relaxation pass for the enlarged-
+    // quadrant MODAL. User: "top 50 problemas na area expandida
+    // nao podem ser sobrepostos." The natural star scatter places
+    // dots randomly inside the slot bounds with rejection sampling
+    // only around the top-tier ANCHORS; nothing prevents two
+    // non-top dots from drifting into each other. A single pairwise
+    // pass per frame pushes any pair closer than `MIN_GAP` apart.
+    // O(n²) is fine here — modal caps the visible set at TOP_N=50
+    // plus closed tail (~100 dots total). Gated on
+    // disableAggregation so the main page (which aggregates to
+    // bubbles above CROWD_THRESHOLD) is untouched.
+    if (disableAggregation) {
+      const visible: typeof currentStars = [];
+      for (const s of currentStars) {
+        if (s.problem["event.status"] !== "ACTIVE") continue;
+        visible.push(s);
+      }
+      // Run 2 relaxation iterations per frame — converges fast
+      // because we move the dots only halfway out of overlap each
+      // pass, so the position stays smooth across frames.
+      for (let pass = 0; pass < 2; pass++) {
+        for (let i = 0; i < visible.length; i++) {
+          const a = visible[i];
+          const ax = a.x * w;
+          const ay = a.y * h;
+          for (let j = i + 1; j < visible.length; j++) {
+            const b = visible[j];
+            const bx = b.x * w;
+            const by = b.y * h;
+            const dx = bx - ax;
+            const dy = by - ay;
+            const distSq = dx * dx + dy * dy;
+            const minGap = a.radius + b.radius + 6;  // 6 px breathing room
+            if (distSq >= minGap * minGap) continue;
+            const dist = Math.sqrt(distSq) || 0.0001;
+            const overlap = (minGap - dist) * 0.5;   // half-move per pass
+            const ux = dx / dist;
+            const uy = dy / dist;
+            // Push apart in NORMALISED coordinates (the star
+            // positions live in [0,1] × [0,1]).
+            const pxN = (ux * overlap) / w;
+            const pyN = (uy * overlap) / h;
+            a.x -= pxN;
+            a.y -= pyN;
+            b.x += pxN;
+            b.y += pyN;
+            // Re-clamp to slot bounds so the push doesn't shove a
+            // dot out of its quadrant.
+            const ab = slotById[a.cluster]?.bounds;
+            if (ab) {
+              const rxN = a.radius / w;
+              const ryN = a.radius / h;
+              if (a.x < ab.xMin + rxN) a.x = ab.xMin + rxN;
+              if (a.x > ab.xMax - rxN) a.x = ab.xMax - rxN;
+              if (a.y < ab.yMin + ryN) a.y = ab.yMin + ryN;
+              if (a.y > ab.yMax - ryN) a.y = ab.yMax - ryN;
+            }
+            const bb = slotById[b.cluster]?.bounds;
+            if (bb) {
+              const rxN = b.radius / w;
+              const ryN = b.radius / h;
+              if (b.x < bb.xMin + rxN) b.x = bb.xMin + rxN;
+              if (b.x > bb.xMax - rxN) b.x = bb.xMax - rxN;
+              if (b.y < bb.yMin + ryN) b.y = bb.yMin + ryN;
+              if (b.y > bb.yMax - ryN) b.y = bb.yMax - ryN;
+            }
+          }
+        }
+      }
+    }
+
     // Electric arcs between stars removed — trend is now shown only via the hub spokes.
 
     // Same-cluster star connections removed — they were adding visual noise.

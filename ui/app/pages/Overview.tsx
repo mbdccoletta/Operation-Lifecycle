@@ -2495,8 +2495,17 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
                row list — semantically empty there.)
           When in list view the Rising/Stuck chip ALSO acts as a row
           filter (see the `filtered` useMemo below). */}
-      {(() => {
+      {!isMobileOrTablet && (() => {
         const inList = viewMode === "list";
+        // 0.0.127 — chip strip hidden in mobile. User: "Na versao
+        // mobile, remover do group by as opcoes Rising, Stuck e
+        // total." Mobile already has a compact card layout and a
+        // separate GroupBy chip strip (Affected entity / Root
+        // cause); stacking ANOTHER strip with Rising/Stuck/Total
+        // crowded the top of the screen. Desktop keeps the strip
+        // unchanged.
+        // ── Below this gate the original v0.0.125/0.0.126 logic
+        //    is preserved as-is.
         // 0.0.126 — Total chip is now present in the list view too,
         // but with a DIFFERENT semantic per view:
         //   constellation → highlight cells with the most active
