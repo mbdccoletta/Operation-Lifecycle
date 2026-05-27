@@ -2440,32 +2440,11 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
         // removed across the board earlier; user re-asked "ao
         // destacar, manter animacao"). Non-highlighted bubbles stay
         // static (no ring at all).
-        // 0.0.118 — the rotating dashed ring's COLOUR now reflects
-        // the cell's TREND direction, not the category accent. User
-        // proposal: red ▲ / green ▼ / no ring on neutral so the
-        // animation carries operational meaning ("things are getting
-        // worse / better") instead of just repeating the category
-        // colour the rest of the cell already shows.
-        if (isHighlighted) {
-          const trendData  = catTrends[slot.id];
-          const trendDelta = trendData ? trendData.recent - trendData.older : 0;
-          if (trendDelta !== 0) {
-            const ringPulse = (Math.sin(tc * 1.8) + 1) / 2;
-            const ringR     = r + 5 + ringPulse * 3;
-            const trendColor = trendDelta > 0 ? "#ff4d6a" : "#22d3a0";
-            ctx.save();
-            ctx.strokeStyle = trendColor;
-            ctx.lineWidth   = 1.6;
-            ctx.globalAlpha = 0.65 + ringPulse * 0.3;
-            ctx.setLineDash([3, 4]);
-            ctx.lineDashOffset = -tc * 12;
-            ctx.beginPath();
-            ctx.arc(bubbleX, bubbleY, ringR, 0, Math.PI * 2);
-            ctx.stroke();
-            ctx.setLineDash([]);
-            ctx.restore();
-          }
-        }
+        // 0.0.118 Option B — the rotating ring is now a CELL-LEVEL
+        // trend indicator (see the dual-ring pass after this for-loop)
+        // instead of a per-bubble chip-highlight cue. Removed from
+        // the inner loop so multiple bubbles in the same cell don't
+        // each draw their own ring.
 
         // Count text — VIVID category colour (user request: "manter
         // icones com cores vivas"). Stays CRISP — no shadowBlur.
@@ -2519,6 +2498,69 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
         // (defined above as 28 px) — clear of the cell divider line.
         ctx.fillText(s.label, bubbleX, safeBot + 4);
         ctx.restore();
+      }
+
+      // 0.0.118 — futuristic trend ring (Option B). Fires on EVERY
+      // cell whose recent-vs-older delta is non-zero, regardless of
+      // which legend chip the user has selected. Lands on the
+      // dominant bubble (highest count) so the cue tracks the
+      // cell's main signal. Two concentric dashed rings counter-
+      // rotating + a soft halo make it read as an HUD targeting
+      // indicator rather than a generic ring.
+      //   ▲ delta > 0 → red  #ff4d6a (alarm, count climbing)
+      //   ▼ delta < 0 → green #22d3a0 (relief, count falling)
+      //   delta = 0   → no ring (no signal to convey)
+      const trendCell = catTrends[slot.id];
+      const trendDelta = trendCell ? trendCell.recent - trendCell.older : 0;
+      if (trendDelta !== 0) {
+        // Pick the bubble with the highest count to anchor the ring.
+        let topIdx = 0;
+        for (let i = 1; i < subsets.length; i++) {
+          if (subsets[i].count > subsets[topIdx].count) topIdx = i;
+        }
+        const top = subsets[topIdx];
+        const ringX = cell.x + 12 + spacing * (topIdx + 0.5);
+        const ringY = bubbleY;
+        const ringR0 = baseR + 7;     // outer ring base radius
+        const ringR1 = baseR + 2.5;   // inner ring base radius
+        const pulse = (Math.sin(tc * 1.8) + 1) / 2;
+        const isUp = trendDelta > 0;
+        const trendColor = isUp ? "#ff4d6a" : "#22d3a0";
+        const trendRgb   = isUp ? "255,77,106" : "34,211,160";
+
+        ctx.save();
+        // Soft halo behind the rings — gives the indicator depth
+        // without flooding the cell.
+        ctx.shadowColor = `rgba(${trendRgb},0.55)`;
+        ctx.shadowBlur  = 10 + pulse * 6;
+
+        // Outer dashed ring — rotates clockwise.
+        ctx.strokeStyle = trendColor;
+        ctx.lineWidth   = 1.8;
+        ctx.globalAlpha = 0.70 + pulse * 0.25;
+        ctx.setLineDash([6, 5]);
+        ctx.lineDashOffset = -tc * 14;
+        ctx.beginPath();
+        ctx.arc(ringX, ringY, ringR0 + pulse * 2, 0, Math.PI * 2);
+        ctx.stroke();
+
+        // Inner dashed ring — counter-rotates with a finer dash
+        // pattern; reads as a second mechanical part of the same
+        // device. Shadow blur dropped to keep total glow modest.
+        ctx.shadowBlur  = 4 + pulse * 4;
+        ctx.lineWidth   = 1.2;
+        ctx.globalAlpha = 0.55 + pulse * 0.30;
+        ctx.setLineDash([2, 4]);
+        ctx.lineDashOffset = tc * 22;     // counter-rotation
+        ctx.beginPath();
+        ctx.arc(ringX, ringY, ringR1, 0, Math.PI * 2);
+        ctx.stroke();
+
+        ctx.setLineDash([]);
+        ctx.restore();
+        // Suppress the "top" variable from unused-warning — kept
+        // for future "cite the bubble's mode in a tooltip" hook.
+        void top;
       }
     }
     } // close `if (!disableAggregation)` bubble-pass gate
