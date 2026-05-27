@@ -1538,19 +1538,17 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
     };
 
     const points: Array<{ ts: number; active: number; closed: number; total: number }> = [];
-    // Pre-compute `closedEnds < ts` once per bucket boundary — both
-    // `activeAtT` and `closedInBucket` need it, and it's the same
-    // value reused across the active/closed terms.
-    let prevClosedBeforeTs = countLess(closedEnds, from);
+    // 0.0.156 — Active is the snapshot ("how many are alive at time
+    // ts"); Closed is CUMULATIVE ("how many had already resolved by
+    // time ts"). The rightmost bar's Closed therefore equals the
+    // RESOLVED ring's total, and Active + Closed = TOTAL ring. User:
+    // "valores deveriam ser 7 ativos, 14 fechados e 21 total."
     for (let ts = from; ts <= to; ts += bucketMs) {
-      const bucketEnd = ts + bucketMs;
       const startsBeforeOrAt   = countLessOrEqual(starts, ts);
-      const closedEndsBeforeTs = prevClosedBeforeTs; // == countLess(closedEnds, ts)
-      const closedEndsBeforeBe = countLess(closedEnds, bucketEnd);
-      const activeAtT = startsBeforeOrAt - closedEndsBeforeTs;
-      const closedInBucket = closedEndsBeforeBe - closedEndsBeforeTs;
-      points.push({ ts, active: activeAtT, closed: closedInBucket, total: activeAtT + closedInBucket });
-      prevClosedBeforeTs = closedEndsBeforeBe;
+      const closedEndsBeforeTs = countLess(closedEnds, ts);
+      const activeAtT       = startsBeforeOrAt - closedEndsBeforeTs;
+      const closedCumulative = closedEndsBeforeTs;
+      points.push({ ts, active: activeAtT, closed: closedCumulative, total: activeAtT + closedCumulative });
     }
     // Repackage as a single "series" so PulseVisualizer's existing
     // unstacking logic doesn't fight us: emit two series tagged ACTIVE

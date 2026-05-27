@@ -388,24 +388,28 @@ export function buildTrendQuery(timeframe: string, status?: string): string {
     conds.push(`event.status == "${status}"`);
   }
   q += `\n| filter ${conds.join(" and ")}`;
-  // 0.0.144 — `spread: timeframe(...)` is the difference that makes
-  // each bar represent "count of problems alive during that bucket"
-  // instead of "count of problems whose start fell in that bucket".
-  // Mirrors the native Davis Problems chart (confirmed via HAR diff
-  // on tenant bwm98081). Without `spread`, a problem that started
-  // yesterday and is still active today never shows up on today's
-  // chart — its event.start lands outside the visible window.
-  //
-  // `coalesce(event.end, now())` handles still-active rows: their
-  // event.end is null, so the spread extends to "right now" — the
-  // bar at the current bucket includes them, matching the headline
-  // "N active" badge.
-  //
+  // 0.0.156 — per-row spread so the chart's last bar matches the
+  // central rings (ACTIVE / RESOLVED / TOTAL) exactly.
+  //   • ACTIVE row → spread (event.start, now()). Each ACTIVE bar
+  //     = count of problems alive at that bucket. The latest bar
+  //     equals the ACTIVE ring.
+  //   • CLOSED row → spread (event.end, now()). The closed series
+  //     becomes CUMULATIVE: each bar counts problems that had
+  //     already been resolved by that time. The latest bar equals
+  //     the RESOLVED ring, so Total (ACTIVE + CLOSED) at the latest
+  //     bar equals the TOTAL ring.
+  // User: "valores deveriam ser 7 ativos, 14 fechados e 21 total,
+  // como representato nos circulos centrais." The previous spread
+  // (event.start, coalesce(end, now)) made CLOSED a "alive-at-time"
+  // metric that contradicted the ring.
+  q += `\n| fieldsAdd`
+     + ` spread_start = if(event.status == "ACTIVE", event.start, else: coalesce(event.end, now())),`
+     + ` spread_end   = now()`;
   // bins: 20 matches the native chart's pick (~20 bars regardless
   // of timeframe). Previously we let DQL auto-pick which produced
   // finer buckets (~50) that diverged visually from the standard.
   q += `\n| makeTimeseries count = count(),`
-     + ` spread: timeframe(from: event.start, to: coalesce(event.end, now())),`
+     + ` spread: timeframe(from: spread_start, to: spread_end),`
      + ` by: { event.status },`
      + ` bins: 20`;
   return q;

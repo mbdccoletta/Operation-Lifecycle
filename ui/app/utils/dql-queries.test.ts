@@ -321,13 +321,18 @@ describe("buildTrendQuery", () => {
     expect(q).toContain("bins: 20");
   });
 
-  it("uses `spread: timeframe(...)` to count actives across buckets", () => {
-    // The critical bit that makes the chart agree with native: a
-    // problem alive for 6h contributes +1 to all 6 buckets, not
-    // just the one containing event.start. Confirmed via HAR diff
-    // against the native Davis Problems chart.
+  it("uses per-row spread so closed becomes cumulative", () => {
+    // 0.0.156 — ACTIVE rows spread (start → now) so each bar
+    // counts problems alive at that bucket. CLOSED rows spread
+    // (end → now) so the closed series is CUMULATIVE — the
+    // rightmost bar's closed = RESOLVED ring; active + closed =
+    // TOTAL ring. User: "valores deveriam ser 7 ativos, 14
+    // fechados e 21 total, como representato nos circulos
+    // centrais."
     const q = buildTrendQuery("72h");
-    expect(q).toContain("spread: timeframe(from: event.start, to: coalesce(event.end, now()))");
+    expect(q).toContain('spread_start = if(event.status == "ACTIVE", event.start, else: coalesce(event.end, now()))');
+    expect(q).toContain("spread_end   = now()");
+    expect(q).toContain("spread: timeframe(from: spread_start, to: spread_end)");
   });
 
   it("falls back to 72h on malformed input", () => {
