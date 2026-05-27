@@ -2370,13 +2370,41 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
       // Top-of-category focus ring — pulsing dashed ring that calls attention
       // to the leader of the active metric in each quadrant (or each
       // drilled (cell, category) subset).
+      //
+      // 0.0.134 — same YIQ-brightening + halo trick the leader-cell
+      // corner-brackets use (see line 1729). AVAILABILITY's accent
+      // (#3a5fa3 slate-blue) was nearly invisible against the dark
+      // canvas, so users opening the modal in Stuck mode saw the
+      // ring "missing". Brighten dark accents toward white and add a
+      // shadow halo so the rotation reads even at low alpha. User:
+      // "Nao vejo a animacao de destaque no stuck."
       if (isStarTop) {
         const ringPulse = (Math.sin(t * 1.8) + 1) / 2; // 0..1
         const ringR = r + 5 + ringPulse * 2.5;
+        // Brighten when luminance is low (dark accents).
+        let strokeCol = star.color;
+        const cm = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(star.color);
+        if (cm) {
+          const cr = parseInt(cm[1], 16);
+          const cg = parseInt(cm[2], 16);
+          const cb = parseInt(cm[3], 16);
+          const lum = (cr * 299 + cg * 587 + cb * 114) / 1000;
+          if (lum < 140) {
+            const f = 0.5;
+            const br = Math.round(cr + (255 - cr) * f);
+            const bg = Math.round(cg + (255 - cg) * f);
+            const bb = Math.round(cb + (255 - cb) * f);
+            strokeCol = `rgb(${br},${bg},${bb})`;
+          }
+        }
         ctx.save();
-        ctx.strokeStyle = star.color;
-        ctx.lineWidth = 1.3;
-        ctx.globalAlpha = 0.55 + ringPulse * 0.35;
+        ctx.strokeStyle = strokeCol;
+        ctx.lineWidth = 1.8;
+        ctx.globalAlpha = 0.7 + ringPulse * 0.3;
+        // Halo — matches the unbrightened accent so the category
+        // identity still reads, while the ring stroke pops.
+        ctx.shadowColor = star.color;
+        ctx.shadowBlur  = 6 + ringPulse * 4;
         ctx.setLineDash([3, 4]);
         ctx.lineDashOffset = -t * 12;
         ctx.beginPath();
