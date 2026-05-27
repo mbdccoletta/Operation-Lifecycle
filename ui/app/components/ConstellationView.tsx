@@ -2504,6 +2504,9 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
             const trendRgb   = trendDelta > 0 ? "255,77,106" : "34,211,160";
 
             // Primary dashed ring — thick, halo via shadow.
+            // 0.0.118 — inner counter-rotating ring removed per user
+            // request ("remover ring interno, manter externo"). The
+            // outer ring + halo carry enough emphasis on their own.
             ctx.save();
             ctx.strokeStyle = trendColor;
             ctx.lineWidth   = 2.4;
@@ -2511,21 +2514,9 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
             ctx.shadowColor = `rgba(${trendRgb},${0.55 + ringPulse * 0.30})`;
             ctx.shadowBlur  = 10 + ringPulse * 6;
             ctx.setLineDash([6, 5]);
-            ctx.lineDashOffset = -tc * 26;        // faster rotation
+            ctx.lineDashOffset = -tc * 26;
             ctx.beginPath();
             ctx.arc(bubbleX, bubbleY, ringR, 0, Math.PI * 2);
-            ctx.stroke();
-            ctx.restore();
-
-            // Inner counter-rotating ring — finer dash, no halo.
-            ctx.save();
-            ctx.strokeStyle = trendColor;
-            ctx.lineWidth   = 1.2;
-            ctx.globalAlpha = 0.55 + ringPulse * 0.25;
-            ctx.setLineDash([2, 4]);
-            ctx.lineDashOffset = tc * 18;         // counter-rotation
-            ctx.beginPath();
-            ctx.arc(bubbleX, bubbleY, r + 2, 0, Math.PI * 2);
             ctx.stroke();
             ctx.setLineDash([]);
             ctx.restore();
