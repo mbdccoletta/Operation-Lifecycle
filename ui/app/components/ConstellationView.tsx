@@ -1598,14 +1598,15 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
     const LABEL_Y_INSET = 3;
 
     // 0.0.116 — leader-cell emphasis. User: "replicar modelo da
-    // categoria Error" — the existing Rising-leader border (drawn
-    // ~150 lines above for cells in `leaderCats`) uses a sharp
-    // `strokeRect` with shadowBlur 10 and prints as a clean solid
-    // frame. The previous version of this block used roundRect +
-    // shadowBlur 18, which read as "fuzzy" next to that crisp
-    // border. Match the exact technique so a Total-leader cell
-    // looks identical in form (only the source of the leader
-    // set differs).
+    // categoria Error" + "deve destacar toda a borda, como as
+    // demais dimensoes". The frame technique is the same as the
+    // existing Rising-leader border (strokeRect + shadowBlur), but
+    // dark accents (AVAILABILITY's #3a5fa3 slate blue, luminance
+    // ~92) painted onto a dark canvas read as nearly invisible.
+    // Lift the stroke colour toward white whenever the accent's
+    // YIQ luminance falls below 140 so every leader's frame stays
+    // legible. The shadow halo keeps the original accent so the
+    // category identity still reads.
     if (leaderCellIds && leaderCellIds.size > 0 && !disableAggregation) {
       for (const s of layout) {
         if (!leaderCellIds.has(s.id)) continue;
@@ -1614,12 +1615,32 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
         const cw  = (s.bounds.xMax - s.bounds.xMin) * w;
         const ch  = (s.bounds.yMax - s.bounds.yMin) * h;
         const accent = colorOf(s.id);
-        const rgb = hexToRgb(accent);
+        // Brighten the stroke when the accent is dark — keeps the
+        // outline crisp on every category. Halo (shadowColor) uses
+        // the un-brightened accent so the colour identity reads.
+        const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(accent);
+        let rS = 180, gS = 200, bS = 255;
+        let haloRgb = "180,200,255";
+        if (m) {
+          const r = parseInt(m[1], 16);
+          const g = parseInt(m[2], 16);
+          const b = parseInt(m[3], 16);
+          haloRgb = `${r},${g},${b}`;
+          const lum = (r * 299 + g * 587 + b * 114) / 1000;
+          if (lum < 140) {
+            const factor = 0.5; // lift halfway to white
+            rS = Math.round(r + (255 - r) * factor);
+            gS = Math.round(g + (255 - g) * factor);
+            bS = Math.round(b + (255 - b) * factor);
+          } else {
+            rS = r; gS = g; bS = b;
+          }
+        }
         ctx.save();
-        ctx.strokeStyle = `rgba(${rgb},0.9)`;
-        ctx.lineWidth = 2;
-        ctx.shadowColor = `rgba(${rgb},0.65)`;
-        ctx.shadowBlur = 10;
+        ctx.strokeStyle = `rgba(${rS},${gS},${bS},1.0)`;
+        ctx.lineWidth = 2.5;
+        ctx.shadowColor = `rgba(${haloRgb},0.7)`;
+        ctx.shadowBlur = 14;
         // Same geometry as the existing Rising-leader border:
         // strokeRect inset 1.5 px on each side → sharp corners that
         // align with the cell's outer bounds and aren't eaten by the
