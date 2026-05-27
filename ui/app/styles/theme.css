@@ -1154,19 +1154,20 @@ body[data-app-view="neural"] .neo-category-filter-sep {
   display: none;
 }
 /* 0.0.114 — lock the constellation view to the viewport. User:
-   "remover scrolldown e up da pagina overview." The page sums to
-   ~100vh already (header + filters + histogram + legend + canvas
-   calc(100vh - 340px) + tabbar), but the .neo-page padding-bottom
-   pushed the page just over by ~64 px and surfaced a scrollbar.
-   Clipping overflow (rather than carving more height off the
-   canvas) keeps the constellation's working area maximised. Other
-   views (Incidents list, Trends) need scroll for long content —
-   they don't have `data-app-view="neural"`, so they're unaffected. */
+   "remover scrolldown e up da pagina overview." Strategy:
+     • body  overflow:hidden  → kills the page scrollbar entirely
+     • page  height:100vh     → upper bound on the flow box
+     • page  overflow:hidden  → clip anything that escapes
+   Keep the 64-px padding-bottom intact — the tabbar is FIXED at
+   the bottom of the viewport, and that padding is the clearance
+   that prevents the tabbar from covering the canvas's RESOLVED
+   strip (user follow-up: "sobrepos" after I'd zeroed the pad).
+   Other views (Incidents, Trends) don't get `data-app-view=neural`
+   so they keep normal scrolling for long content. */
 body[data-app-view="neural"] {
   overflow: hidden;
 }
 body[data-app-view="neural"] .neo-page {
-  padding-bottom: 0;
   height: 100vh;
   min-height: 100vh;
   overflow: hidden;
