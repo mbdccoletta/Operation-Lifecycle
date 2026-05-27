@@ -82,7 +82,7 @@ export interface EnlargedQuadrantCardProps {
    *  modal headline show "6 active" (whatever made it into the first
    *  250-row first-paint sample). Optional so dev/test hosts that
    *  don't run the count query still render. */
-  categoryCounts?: { active: number; closed: number };
+  categoryCounts?: { active: number; closed: number; stuck?: number };
   onClose: () => void;
 }
 
@@ -412,14 +412,18 @@ export const EnlargedQuadrantCard = ({
                   // the sample-derived count for the authoritative
                   // category total when the host provided one. Keeps
                   // the modal headline (1 574 active) and the Total
-                  // pill (1 574) reading the same number. Rising and
-                  // Stuck pills still show the sample count because
-                  // the count query carries ACTIVE/CLOSED only — no
-                  // 1h split — and a separate DPS-hungry query just
-                  // for the modal would defeat first-paint budgets.
+                  // pill (1 574) reading the same number.
+                  // 0.0.137 — Stuck pill also gets the authoritative
+                  // count (categoryCounts.stuck) from the same query,
+                  // so it stops collapsing to 0 when the cell's
+                  // loaded sample is all <4h (busy categories).
+                  // Rising stays sample-derived since the count query
+                  // doesn't carry a 1h split for the delta.
                   const count = m.mode === "criticality"
                     ? displayedActive
-                    : drilldown.counts[m.mode];
+                    : (m.mode === "open_time" && typeof categoryCounts?.stuck === "number"
+                        ? categoryCounts.stuck
+                        : drilldown.counts[m.mode]);
                   const isActive = m.mode === currentMode;
                   const shownTop = isActive ? Math.min(TOP_N, count) : 0;
                   // 0.0.109 follow-up — pick the active pill's text

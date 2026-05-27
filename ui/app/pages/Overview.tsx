@@ -1003,6 +1003,12 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
       resolved: statusCategoryTotals.closed,
       activeByCategory: statusCategoryCounts.ACTIVE,
       resolvedByCategory: statusCategoryCounts.CLOSED,
+      // 0.0.137 — authoritative Stuck count (ACTIVE & start < now-4h)
+      // per category, derived from the same count query. Lets the
+      // constellation Stuck bubble report a true number instead of
+      // a scaled-from-sample estimate that collapses to 0 when the
+      // category overflows the first-paint sample.
+      stuckByCategory: statusCategoryCounts.STUCK,
     };
   }, [statusCategoryLoading, scenario, statusCategoryTotals, statusCategoryCounts]);
 
@@ -3619,6 +3625,9 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
               ? {
                   active: constellationCountOverrides.activeByCategory?.[enlargedQuadrant] ?? 0,
                   closed: constellationCountOverrides.resolvedByCategory?.[enlargedQuadrant] ?? 0,
+                  // 0.0.137 — pass authoritative Stuck count too so
+                  // the modal pill agrees with the cell bubble.
+                  stuck: constellationCountOverrides.stuckByCategory?.[enlargedQuadrant],
                 }
               : undefined
           }

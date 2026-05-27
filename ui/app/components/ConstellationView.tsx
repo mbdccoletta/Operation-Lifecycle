@@ -162,6 +162,11 @@ interface ConstellationViewProps {
     /** Per-category `event.status == "CLOSED"` counts. Same shape +
      *  semantics as `activeByCategory`. */
     resolvedByCategory?: Record<string, number>;
+    /** 0.0.137 — authoritative count of ACTIVE problems aged > 4h
+     *  per category. Bypasses the sample-bias problem where a busy
+     *  cell's first-paint loaded subset (250 newest globally) is
+     *  all < 4h old and the scaled Stuck count collapses to 0. */
+    stuckByCategory?: Record<string, number>;
   };
 }
 
@@ -870,19 +875,22 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
       const cellColor = colorOf(cellId);
       const trend = cellTrend[cellId] ?? { recent: 0, older: 0 };
       const risingDelta = Math.max(0, trend.recent - trend.older);
-      out[cellId] = SUBSET_MODES.map(({ mode, label, icon }) => ({
-        mode,
-        // Rising shows the trend delta verbatim — no scaling, since
-        // it's already a difference of two sample counts. Stuck +
-        // Total keep the realTotal/loadedTotal scale so they agree
-        // with the cell header's authoritative count.
-        count: mode === "rising"
-          ? risingDelta
-          : Math.max(0, Math.round(counts[mode] * scale)),
-        color: cellColor,
-        label,
-        icon,
-      }));
+      // 0.0.137 — authoritative Stuck from the count query when the
+      // host provides it. Avoids the sample-bias problem where a
+      // busy category's loaded subset is all <4h old and the scaled
+      // open_time count collapses to 0.
+      const realStuck = countOverrides?.stuckByCategory?.[cellId];
+      out[cellId] = SUBSET_MODES.map(({ mode, label, icon }) => {
+        let count: number;
+        if (mode === "rising") {
+          count = risingDelta;
+        } else if (mode === "open_time" && typeof realStuck === "number") {
+          count = realStuck;
+        } else {
+          count = Math.max(0, Math.round(counts[mode] * scale));
+        }
+        return { mode, count, color: cellColor, label, icon };
+      });
       // 0.0.118 — wider-timeframe fallback. On "Last 7 days" the
       // loaded problem list is sorted by event.start desc and
       // truncated at the first-paint cap; a category whose 4 active

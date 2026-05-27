@@ -204,7 +204,21 @@ describe("buildCategoryCountsQuery", () => {
 describe("buildStatusCategoryCountsQuery", () => {
   it("aggregates by BOTH status and category", () => {
     const q = buildStatusCategoryCountsQuery({ timeframe: "7d" });
-    expect(q).toContain("summarize count = count(), by: { event.status, event.category }");
+    // 0.0.137 added a `stuck_count = sum(is_stuck)` column to the
+    // same summarize so the constellation Stuck bubble has an
+    // authoritative number (not a sample-biased extrapolation).
+    expect(q).toContain("summarize count = count()");
+    expect(q).toContain("stuck_count = sum(is_stuck)");
+    expect(q).toContain("by: { event.status, event.category }");
+  });
+
+  it("tags each row with is_stuck (ACTIVE AND start < now-4h)", () => {
+    const q = buildStatusCategoryCountsQuery({ timeframe: "7d" });
+    // 0.0.137 — fieldsAdd computes the predicate so the summarize
+    // can fold it into a per-(status, category) count without a
+    // second query. The 4h threshold matches `stuckHours: 4` in
+    // analyticsKpis.ts and the chip hint text.
+    expect(q).toContain('is_stuck = if((event.status == "ACTIVE") and (event.start < now() - 4h), 1, else: 0)');
   });
 
   it("dedups BEFORE summarize", () => {
@@ -233,8 +247,14 @@ describe("buildStatusCategoryCountsQuery", () => {
     // (TOTAL / ACTIVE / RESOLVED) can never disagree across
     // staggered query landings. If this assertion fails the rings
     // will go back to under-counting the trimmed list.
+    //
+    // 0.0.137 — the `is_stuck` predicate references event.status,
+    // but it's inside a `fieldsAdd if(...)` expression, NOT a
+    // `| filter` step. Assert specifically that no filter step
+    // narrows by status, while allowing the predicate inside the
+    // tagging expression.
     const q = buildStatusCategoryCountsQuery({ timeframe: "7d" });
-    expect(q).not.toMatch(/event\.status\s*==/);
+    expect(q).not.toMatch(/\|\s*filter[^\n]*event\.status\s*==/);
   });
 
   it("rejects garbage timeframe via fallback (no injection)", () => {

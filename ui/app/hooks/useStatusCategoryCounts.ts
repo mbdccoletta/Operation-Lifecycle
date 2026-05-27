@@ -35,6 +35,7 @@ interface Row {
   "event.status": string;
   "event.category": string;
   count: number;
+  stuck_count?: number; // 0.0.137 — sum of ACTIVE & start < now-4h
 }
 
 export interface StatusCategoryCounts {
@@ -42,12 +43,20 @@ export interface StatusCategoryCounts {
   counts: {
     ACTIVE: Record<string, number>;
     CLOSED: Record<string, number>;
+    /** 0.0.137 — authoritative count of ACTIVE problems older than
+     *  4 h per category. Feeds the constellation Stuck bubble +
+     *  modal Stuck pill so they no longer depend on the
+     *  first-paint sample (which biases toward newest and
+     *  underestimates Stuck for busy cells). */
+    STUCK: Record<string, number>;
   };
   /** Aggregate totals derived from the same response so the rings
    *  and the per-category panels can never disagree. */
   totals: {
     active: number;
     closed: number;
+    /** 0.0.137 — total Stuck across all categories (active > 4h). */
+    stuck: number;
     /** ACTIVE + CLOSED. Matches the native Davis Problems list
      *  header (`N active / M total`). */
     total: number;
@@ -59,7 +68,7 @@ export interface StatusCategoryCounts {
   error: Error | null;
 }
 
-const EMPTY_COUNTS = { ACTIVE: {}, CLOSED: {} } as const;
+const EMPTY_COUNTS = { ACTIVE: {}, CLOSED: {}, STUCK: {} } as const;
 
 export function useStatusCategoryCounts(
   filters: StatusCategoryCountsFilters = {},
@@ -94,12 +103,18 @@ export function useStatusCategoryCounts(
   });
 
   const result = useMemo<StatusCategoryCounts>(() => {
-    const counts: { ACTIVE: Record<string, number>; CLOSED: Record<string, number> } = {
+    const counts: {
+      ACTIVE: Record<string, number>;
+      CLOSED: Record<string, number>;
+      STUCK: Record<string, number>;
+    } = {
       ACTIVE: {},
       CLOSED: {},
+      STUCK: {},
     };
     let active = 0;
     let closed = 0;
+    let stuck = 0;
     for (const r of data?.records ?? []) {
       const status = r["event.status"];
       const cat = r["event.category"];
@@ -108,6 +123,14 @@ export function useStatusCategoryCounts(
       if (status === "ACTIVE") {
         counts.ACTIVE[cat] = n;
         active += n;
+        // stuck_count is only populated for ACTIVE rows (the
+        // is_stuck predicate already gates on status == ACTIVE).
+        const sRaw = r.stuck_count;
+        const s = typeof sRaw === "number" ? sRaw : Number(sRaw ?? 0);
+        if (Number.isFinite(s) && s > 0) {
+          counts.STUCK[cat] = s;
+          stuck += s;
+        }
       } else if (status === "CLOSED") {
         counts.CLOSED[cat] = n;
         closed += n;
@@ -115,7 +138,7 @@ export function useStatusCategoryCounts(
     }
     return {
       counts,
-      totals: { active, closed, total: active + closed },
+      totals: { active, closed, stuck, total: active + closed },
       loading: isLoading,
       error: error || null,
     };
@@ -126,8 +149,12 @@ export function useStatusCategoryCounts(
   // and substitute list-derived math.
   if (isLoading && !data) {
     return {
-      counts: EMPTY_COUNTS as { ACTIVE: Record<string, number>; CLOSED: Record<string, number> },
-      totals: { active: 0, closed: 0, total: 0 },
+      counts: EMPTY_COUNTS as {
+        ACTIVE: Record<string, number>;
+        CLOSED: Record<string, number>;
+        STUCK: Record<string, number>;
+      },
+      totals: { active: 0, closed: 0, stuck: 0, total: 0 },
       loading: true,
       error: error || null,
     };

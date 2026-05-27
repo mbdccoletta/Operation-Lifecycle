@@ -265,8 +265,17 @@ export function buildStatusCategoryCountsQuery(filters: {
   // Dedup BEFORE summarize so each unique problem contributes once.
   query += `\n| sort event.start desc`;
   query += `\n| dedup display_id`;
-  // Two-dimensional summarize: counts grouped by (status, category).
-  query += `\n| summarize count = count(), by: { event.status, event.category }`;
+  // 0.0.137 — also tag whether each row is "stuck" (ACTIVE and
+  // started more than 4 hours ago) so the constellation can show an
+  // authoritative Stuck count per category. Without this, the cell-
+  // level loaded sample (top 250 newest globally) underestimates
+  // Stuck whenever a busy category overflows the sample — its newest
+  // 250 are mostly <4h old, so loaded.open_time = 0 and the Stuck
+  // bubble disappears even when hundreds of older actives exist.
+  query += `\n| fieldsAdd is_stuck = if((event.status == "ACTIVE") and (event.start < now() - 4h), 1, else: 0)`;
+  // Two-dimensional summarize: counts grouped by (status, category)
+  // PLUS a stuck count that only fires for ACTIVE > 4h rows.
+  query += `\n| summarize count = count(), stuck_count = sum(is_stuck), by: { event.status, event.category }`;
   return query;
 }
 
