@@ -3254,29 +3254,16 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
     onEmptyClick?.();
   }, [size, onSelect, findStarAt, screenToWorld, onCategoryLabelClick, onHubRingClick, onResolvedTileClick, expandedQuadrant, onEmptyClick, detectQuadrantAt, detectLabelAt, expandedCellCategory, onQuadrantEnlarge, lockExpandedQuadrant]);
 
-  const handleDoubleClick = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
-    // Pinned-zoom mode (modal): swallow the double-click — we don't
-    // want a stray double-tap inside the modal to drop the zoom and
-    // reveal the empty multi-quadrant grid behind it.
+  const handleDoubleClick = useCallback((_e: React.MouseEvent<HTMLCanvasElement>) => {
+    // 0.0.127 — double-click on a cell no longer opens the enlarged
+    // modal. User: "remover opcao de drill down ... Permitir
+    // drilldown apenas nos circulos de agrupamentos." The bubble
+    // single-click + dot single-click paths remain; the double-
+    // click is reduced to a no-op (still collapses an existing
+    // inline expansion so legacy zoom paths can be exited).
     if (lockExpandedQuadrant) return;
-    const rect = e.currentTarget.getBoundingClientRect();
-    const mx = (e.clientX - rect.left) / size.w;
-    const my = (e.clientY - rect.top) / size.h;
-    // If already expanded inline (no host modal wired), double-click
-    // anywhere collapses back.
-    if (expandedQuadrant) { setExpandedQuadrant(null); return; }
-    const world = screenToWorld(mx, my);
-    const cat = detectQuadrantAt(world.x, world.y);
-    if (!cat) return;
-    // Prefer the host-driven enlarged modal so double-click matches
-    // the explicit "Expand" button path. Only fall back to the
-    // internal canvas zoom when no consumer is listening.
-    if (onQuadrantEnlarge) {
-      onQuadrantEnlarge(cat);
-    } else {
-      setExpandedQuadrant(cat);
-    }
-  }, [size, expandedQuadrant, screenToWorld, onQuadrantEnlarge, detectQuadrantAt, lockExpandedQuadrant]);
+    if (expandedQuadrant) setExpandedQuadrant(null);
+  }, [expandedQuadrant, lockExpandedQuadrant]);
 
   const handleMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
@@ -3340,10 +3327,11 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
     hoveredQuadrantRef.current = detectQuadrantAt(world.x, world.y);
     const tappedCat = detectQuadrantAt(world.x, world.y);
 
-    // Manual double-tap detection — on touch, synthetic dblclick events
-    // don't fire reliably under `touch-action: manipulation`. We compare
-    // against the previous tap: same quadrant + within 350ms = double-tap
-    // = expand. (When already expanded, double-tap anywhere collapses.)
+    // 0.0.127 — double-tap on a cell no longer opens the enlarged
+    // modal (same rationale as the desktop `handleDoubleClick`
+    // change above). The tap accounting + lastTapRef are kept so a
+    // future re-enable is one block. Still collapses an existing
+    // inline canvas zoom so legacy expansion paths can be exited.
     const now = performance.now();
     const isDoubleTap =
       now - lastTapRef.current.t < 350 &&
@@ -3351,20 +3339,8 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
     lastTapRef.current = { t: now, cat: tappedCat };
 
     if (isDoubleTap) {
-      // Reset so a third tap doesn't accidentally re-trigger
       lastTapRef.current = { t: 0, cat: null };
-      if (expandedQuadrant) {
-        setExpandedQuadrant(null);
-      } else if (tappedCat) {
-        // Prefer host-driven modal (matches the Expand button +
-        // desktop double-click). Fallback to the internal canvas
-        // zoom when no consumer wired the prop.
-        if (onQuadrantEnlarge) {
-          onQuadrantEnlarge(tappedCat);
-        } else {
-          setExpandedQuadrant(tappedCat);
-        }
-      }
+      if (expandedQuadrant) setExpandedQuadrant(null);
       return;
     }
 
