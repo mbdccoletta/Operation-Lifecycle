@@ -2730,7 +2730,16 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
               //   total    → no status filter (TOTAL ring)
               //   active   → status = "ACTIVE"
               //   resolved → status = "CLOSED"
+              //
+              // 0.0.143 — also clear the Rising/Stuck chip on the
+              // way out. User: "Ao fazer drilldown dos circulos
+              // centrais e sessao resolved, nao levar filtro de
+              // rising ou stuck para a list." The hub rings express
+              // a status-only intent (all of TOTAL / ACTIVE /
+              // RESOLVED); carrying an age-window narrowing on top
+              // would silently under-count the list vs the ring.
               resetListFilters();
+              setHighlightedSubsetMode(null);
               if (kind === "active")   setStatusFilter("ACTIVE");
               else if (kind === "resolved") setStatusFilter("CLOSED");
               else                     setStatusFilter(null);
@@ -2739,7 +2748,11 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
             onResolvedTileClick={(groupingId) => {
               // 0.0.118 — per-category tile in the RESOLVED zone
               // drills into LIST filtered by category + CLOSED.
+              // 0.0.143 — also clear Rising/Stuck chip (the tiles
+              // are about CLOSED problems, so an ACTIVE-only chip
+              // would collapse the list to zero).
               resetListFilters();
+              setHighlightedSubsetMode(null);
               setCatFilter(new Set([groupingId]));
               setStatusFilter("CLOSED");
               setViewMode("list");
