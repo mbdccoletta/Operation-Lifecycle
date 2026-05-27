@@ -93,7 +93,7 @@ const AppContent = () => {
       <Suspense
         fallback={
           <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "70vh" }}>
-            <ProgressCircle />
+            <ProgressCircle aria-label="Loading Problem Lifecycle…" />
           </div>
         }
       >
