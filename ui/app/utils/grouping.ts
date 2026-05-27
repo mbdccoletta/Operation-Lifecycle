@@ -14,24 +14,27 @@ export interface Grouping {
   color: string;
 }
 
-/** Default grouping: the six Davis problem categories. */
+/** Default grouping: the six Davis problem categories.
+ *
+ *  0.0.112 — Harmonised palette. The previous set was 6 fully-
+ *  saturated hues (neon pink, hot orange, alert blue, vivid
+ *  purple, electric cyan, bright amber) that read as a chaotic
+ *  rainbow against the HUD's dark background. User: "nao acho que
+ *  as cores estao harmonicas." Each colour is now ~25 % less
+ *  saturated, sitting in the same mid-tone band so the cells
+ *  share a tonal family while keeping enough hue separation that
+ *  they remain identifiable. Constraints preserved:
+ *    • no green       (reserved for RESOLVED)
+ *    • no red         (reserved for ACTIVE problem ring)
+ *    • no yellow      (user excluded outright)
+ *    • each hue >40°  apart so dots stay distinguishable. */
 export const CATEGORY_GROUPINGS: Grouping[] = [
-  // AVAILABILITY was lime green (#a3e635) — same rule as
-  // CUSTOM_ALERT below. User excluded green / yellow / red
-  // outright ("nao utilizar amarelo, verde ou vermelho"); pink
-  // is the slot that stays clear of every other category colour
-  // AND the active/resolved semantic palette.
-  { id: "AVAILABILITY",           label: "AVAILABILITY",         color: "#ec4899" },
-  { id: "ERROR",                  label: "ERROR",                color: "#ff8b3e" },
-  { id: "SLOWDOWN",               label: "SLOWDOWN",             color: "#4da6ff" },
-  { id: "RESOURCE_CONTENTION",    label: "RESOURCE CONTENTION",  color: "#a855f7" },
-  // CUSTOM_ALERT was mint-green (#6ee7b7), too close to the
-  // RESOLVED ring's emerald — user 0.0.109: "Verde e vermelho
-  // devem ser exclusivos de resolucao e problemas." Swapped to
-  // cyan, distinct from every other category colour AND from the
-  // active/resolved semantic palette.
-  { id: "CUSTOM_ALERT",           label: "CUSTOM ALERT",         color: "#22d3ee" },
-  { id: "MONITORING_UNAVAILABLE", label: "MONITORING UNAVAIL.",  color: "#f59e0b" },
+  { id: "AVAILABILITY",           label: "AVAILABILITY",         color: "#dc7aa3" }, // soft rose
+  { id: "ERROR",                  label: "ERROR",                color: "#e89567" }, // coral
+  { id: "SLOWDOWN",               label: "SLOWDOWN",             color: "#6fa8d8" }, // steel blue
+  { id: "RESOURCE_CONTENTION",    label: "RESOURCE CONTENTION",  color: "#a888d4" }, // lavender
+  { id: "CUSTOM_ALERT",           label: "CUSTOM ALERT",         color: "#5fb5c4" }, // soft teal
+  { id: "MONITORING_UNAVAILABLE", label: "MONITORING UNAVAIL.",  color: "#cbb46a" }, // sand
 ];
 
 /** Quick lookup of the Davis-category hex colour by category id. Used

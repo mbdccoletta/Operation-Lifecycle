@@ -1053,18 +1053,24 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
     // at the bottom (32 % of canvas) when that panel is enabled.
     // When the host hides RESOLVED, the active area expands to the
     // full canvas so the quadrant fills everything visible.
-    // 0.0.110 — RESOLVED zone is now a FIXED 132 px tall (8 pad +
-    // ~110 tile content + ~14 bottom margin) instead of a ratio of
-    // canvas height. Earlier the ratio (0.24 × h) ballooned on tall
-    // viewports leaving a fat empty band under the tile. User
-    // reported the band twice; centring the content clipped it on
-    // short viewports, so the right answer is to STOP the zone from
-    // growing with the canvas. ACTIVE area absorbs the extra height.
-    // Floor activeAreaH at 70 % so on tiny canvases (h < 440 px)
-    // we don't starve the ACTIVE cells of vertical room.
-    const RESOLVED_ZONE_H = 132;
+    // 0.0.112 — RESOLVED zone is a FIXED pixel height (not a ratio
+    // of canvas) so it stops inflating on tall viewports. Tile
+    // intrinsic content lays out at:
+    //   resolvedY +  0 → "RESOLVED" section header (16 px)
+    //   resolvedY + 24 → per-category dot + label
+    //   resolvedY + 38 → accent line
+    //   resolvedY + 48 → hero number top (32 px tall → ends at +80)
+    //   resolvedY + 80 → delta pill (18 px → ends at +98)
+    //   resolvedY + 98 → "1h ago: N" reference (12 px → ends at +110)
+    // So total content extends to resolvedY + 110. With the 8 px
+    // top pad that's 118 px occupied. Earlier I used 132 px (14 px
+    // bottom margin) and the user STILL saw clipping ("sessão de
+    // Resolved está comida") — DPR rounding + the canvas's own
+    // device-pixel-snap eat a few px. Bump to 156 px → 38 px
+    // bottom margin = clear of any subpixel funny business.
+    const RESOLVED_ZONE_H = 156;
     const activeAreaH = showResolvedZone
-      ? Math.max(h * 0.70, h - RESOLVED_ZONE_H)
+      ? Math.max(h * 0.68, h - RESOLVED_ZONE_H)
       : h;
     // Hub band coordinates — only used when showHub is true. Kept at
     // module scope so trend / spoke / satellite code below can reference
