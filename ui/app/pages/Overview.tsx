@@ -822,25 +822,27 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
     return parseStratoTimeframe(timeframe);
   }, [timeframe, selectedRange]);
 
-  // 0.0.148 — "Stuck" cutoff = start of the user-selected
-  // timeframe. A problem that started inside the observation window
-  // is part of normal noise; one that started before it has spilled
-  // over from a previous window and is genuinely stuck. User: "a
-  // identificacao dos Stucks devem respeitar timeframe e nao janela
-  // utilizada para os risings." Resolved here once, threaded to
-  // every Stuck-aware surface (count query, modal drilldown,
-  // cell bubble, list filter).
-  const stuckCutoffMs = useMemo(() => {
-    if (selectedRange) return selectedRange.from.getTime();
-    const fromIso = timeframe?.from?.absoluteDate;
-    if (fromIso) {
-      const t = Date.parse(fromIso);
-      if (Number.isFinite(t)) return t;
-    }
-    // Defensive fallback if Strato hasn't resolved yet — keep the
-    // legacy 4h floor so bubbles don't flicker on first paint.
-    return Date.now() - 4 * 3_600_000;
-  }, [timeframe, selectedRange]);
+  // 0.0.153 — "Stuck" = active for more than 4 hours. Reverted
+  // 0.0.148's timeframe-aware semantic because it created inverted
+  // intuition: the SAME problem was "stuck" in "Today" view (started
+  // before midnight) but "not stuck" in "Last 7 days" (started this
+  // week, after the 7d cutoff). User: "algo errado esta acontecendo
+  // com os calculos dos grupos por categoria. Validar." "Stuck" is
+  // a property of the problem itself (how long it's been alive),
+  // not of the observation window. Threshold matches
+  // `stuckHours: 4` used by TrendAnalysis + analyticsKpis. The
+  // prop/param infrastructure stays in place so a future opt-in
+  // (timeframe-aware via setting) is one line away.
+  const stuckCutoffMs = useMemo(
+    () => Date.now() - 4 * 3_600_000,
+    // Recompute on every refresh so the rolling 4h cursor stays
+    // current. Tied to `timeframe`/`selectedRange` so a timeframe
+    // change still triggers a fresh memo even though the value
+    // doesn't depend on them — keeps downstream consumers honest
+    // about cache invalidation.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [timeframe, selectedRange, lastRefreshAt],
+  );
   const stuckCutoffIso = useMemo(
     () => new Date(stuckCutoffMs).toISOString(),
     [stuckCutoffMs],
