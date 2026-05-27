@@ -327,8 +327,21 @@ export function buildStatusCategoryCountsQuery(filters: {
   }
   // Same null-tolerant `is_duplicate` filter the other builders use.
   query += `\n| filter (isNull(dt.davis.is_duplicate) or not(dt.davis.is_duplicate))`;
-  // Dedup BEFORE summarize so each unique problem contributes once.
-  query += `\n| sort event.start desc`;
+  // 0.0.166 — deterministic dedup. Davis emits multiple state-change
+  // records per problem; for a problem that's been closed, both
+  // ACTIVE and CLOSED records share the same event.start. The
+  // previous `sort event.start desc | dedup` therefore picked an
+  // arbitrary record per problem — so the same closed problem could
+  // be counted in either bucket depending on the engine's tie-break.
+  // The list query (`buildFilteredQuery`) filters by status BEFORE
+  // dedup, so it sees the closed record reliably. To keep both
+  // queries in lockstep, sort here so CLOSED records sort FIRST per
+  // problem (lexicographically CLOSED < ACTIVE in DESC: "C" > "A"
+  // → C comes first in desc). Dedup then keeps the CLOSED record
+  // whenever it exists; count.CLOSED matches what the list returns.
+  // User: "vejo 2 problemas aqui mas ao fazer drilldown, nao vejo
+  // eles na lista."
+  query += `\n| sort event.status desc, event.start desc`;
   query += `\n| dedup display_id`;
   // 0.0.137 — also tag whether each row is "stuck" (ACTIVE and
   // started more than 4 hours ago) so the constellation can show an
