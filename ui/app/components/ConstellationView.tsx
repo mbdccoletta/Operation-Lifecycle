@@ -2356,7 +2356,16 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
       // Rank-based dimming: top problems are full-bright; lower-ranked dots
       // fade so the meaningful ones stand out. Active in "total" mode keeps
       // everyone at full alpha (scoreNorm is forced to 1 in that mode).
-      const baseAlpha = 0.45 + star.scoreNorm * 0.55; // 0.45 → 1.0
+      //
+      // 0.0.141 — top-tier dots get full alpha regardless of their
+      // relative score rank. User: "destacou apenas 1 aqui." With
+      // 4 Rising dots spread across the last hour, scoreNorm ranges
+      // from 1 (newest) down to ~0.05 (almost-1h-old), so baseAlpha
+      // landed at ~0.48 for the non-newest — the dot's coral fill
+      // showed as muddy brown. Top-tier ⇒ full intensity, period.
+      const baseAlpha = isStarTop
+        ? 1
+        : 0.45 + star.scoreNorm * 0.55; // 0.45 → 1.0
 
       // 0.0.140 — replace YIQ brightening (which mixes toward white
       // and KILLS saturation — slate-blue #3a5fa3 came out as
