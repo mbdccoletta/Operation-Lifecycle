@@ -2568,17 +2568,10 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
       const cG = parseInt(baseColor.slice(3,5),16);
       const cB = parseInt(baseColor.slice(5,7),16);
 
-      // 0.0.117 — comet fires whenever this cell currently HAS
-      // rising problems (any active opened in the last hour). User:
-      // "onde esta a animacao mostrando os problemas indo para as
-      // categorias?" The previous gate required a positive trend
-      // delta (recent > older) AND `dataMode === "rising"`, so a
-      // cell with active Rising bubbles but a flat/falling trend
-      // (e.g. ERROR: 2 rising now, was 3 an hour ago → delta -1)
-      // never animated. The new gate is just "is there something to
-      // animate at all": cell has a Rising bubble with count > 0.
-      const recentNow = trendData ? trendData.recent : 0;
-      if (recentNow <= 0) { spokeIdx++; return; }
+      // Only animate spokes for rising quadrants AND only in the
+      // Rising view mode — motion signals "count climbing", so it's
+      // gated on the metric the user is actually looking at.
+      if (!isRising || dataMode !== "rising") { spokeIdx++; return; }
 
       // Central column targets sit directly above/below the hub — a straight
       // spoke would plow through the quadrant's dots. Route a single spoke
