@@ -2065,6 +2065,15 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
     if (mode === "neural") {
       resetListFilters();
       setStatusFilter(null);
+      // 0.0.170 — re-arm Rising on switch-back to neural (desktop
+      // only — mobile keeps the unset default per v0.0.129).
+      // Without this, the constellation's bubble-pass animations
+      // (the dashed rotating ring on the selected sub-bubble)
+      // never fire because `highlightedSubsetMode` was cleared when
+      // entering the list view. User: "ao alterar do modo
+      // constelation para o list e retornar, a animaçao dos
+      // grupos dentros das categorias param."
+      if (!isMobileOrTablet) setHighlightedSubsetMode("rising");
     }
     // 0.0.125 follow-up — user: "ao abrir a list, nao pre carregar
     // filtro de Rising. Apenas a tela de overview deve fazer isso."
@@ -2080,7 +2089,7 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
       setHighlightedSubsetMode(null);
     }
     setViewMode(mode);
-  }, [resetListFilters, setStatusFilter]);
+  }, [resetListFilters, setStatusFilter, isMobileOrTablet]);
 
   const closeQuadrantDetail = useCallback(() => setQuadrantDetail(null), []);
 
