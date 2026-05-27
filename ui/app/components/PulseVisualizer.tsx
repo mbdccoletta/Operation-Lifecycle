@@ -143,6 +143,17 @@ const PulseVisualizerImpl: React.FC<PulseVisualizerProps> = ({
     return filtered.length >= 2 ? filtered : bars;
   }, [bars, selectedRange]);
 
+  // 0.0.151 — when the chart is fed an ACTIVE-only series (the
+  // default since 0.0.147), the tooltip shouldn't list Closed/Total
+  // rows that always read zero. Otherwise the bucket "Total" looks
+  // like it contradicts the central TOTAL ring (which is cumulative
+  // across the timeframe, not a single bucket). User: "closed e
+  // total do grafico de barras nao bate com os circulos centrais."
+  const hasClosedSeries = React.useMemo(
+    () => bars.some((b) => b.closed > 0),
+    [bars],
+  );
+
   const draw = useCallback(() => {
     const c = canvasRef.current;
     if (!c) return;
@@ -625,12 +636,13 @@ const PulseVisualizerImpl: React.FC<PulseVisualizerProps> = ({
         severityLbl ? ctx.measureText(severityLbl).width : 0,
         clickLbl ? ctx.measureText(clickLbl).width : 0,
       ) + 22;
-      // Base height (caption + time + active + closed + total) is 84.
-      // Each breakdown row adds 14 px; click hint adds 16 px. When the
-      // canvas is too short to fit everything, drop the lowest-priority
-      // rows (severity → category) before the click hint so the focal
-      // numbers always stay visible.
-      const baseH = 84;
+      // Base height (caption + time + active [+ closed + total]) is
+      // 84 when the closed/total rows show, 51 otherwise. Each
+      // breakdown row adds 14 px; click hint adds 16 px. When the
+      // canvas is too short to fit everything, drop the lowest-
+      // priority rows (severity → category) before the click hint
+      // so the focal numbers always stay visible.
+      const baseH = hasClosedSeries ? 84 : 51;
       const rowH  = 14;
       const hintH = clickLbl ? 16 : 0;
       const availH = h - 4 - (padT + 2);
@@ -690,29 +702,36 @@ const PulseVisualizerImpl: React.FC<PulseVisualizerProps> = ({
       ctx.font = `500 9px "SF Mono", monospace`;
       ctx.fillText(timeLbl, tx + 8, ty + 19);
 
-      // Active / Closed — focal numbers, color-coded
+      // Active / Closed — focal numbers, color-coded. When the
+      // host fed an ACTIVE-only series the Closed/Total rows are
+      // suppressed so the tooltip doesn't claim a Total that
+      // disagrees with the central ring's cumulative count.
       ctx.font = `700 12px "SF Mono", monospace`;
       ctx.fillStyle = COLORS.active.hex;
       ctx.fillText(activeLbl, tx + 8, ty + 35);
-      ctx.fillStyle = COLORS.closed.hex;
-      ctx.fillText(closedLbl, tx + 8, ty + 51);
-
-      // Total — demoted: thin separator above it + smaller dim text below.
-      ctx.strokeStyle = dk ? "rgba(255,255,255,0.10)" : "rgba(0,0,0,0.10)";
-      ctx.lineWidth = 0.5;
-      ctx.beginPath();
-      ctx.moveTo(tx + 6, ty + 67); ctx.lineTo(tx + tw - 6, ty + 67);
-      ctx.stroke();
-      ctx.font = `500 10px "SF Mono", monospace`;
-      ctx.fillStyle = dk ? "rgba(148,163,184,0.75)" : "rgba(100,116,139,0.75)";
-      ctx.fillText(totalLbl, tx + 8, ty + 71);
+      if (hasClosedSeries) {
+        ctx.fillStyle = COLORS.closed.hex;
+        ctx.fillText(closedLbl, tx + 8, ty + 51);
+        // Total — demoted: thin separator above it + smaller dim text.
+        ctx.strokeStyle = dk ? "rgba(255,255,255,0.10)" : "rgba(0,0,0,0.10)";
+        ctx.lineWidth = 0.5;
+        ctx.beginPath();
+        ctx.moveTo(tx + 6, ty + 67); ctx.lineTo(tx + tw - 6, ty + 67);
+        ctx.stroke();
+        ctx.font = `500 10px "SF Mono", monospace`;
+        ctx.fillStyle = dk ? "rgba(148,163,184,0.75)" : "rgba(100,116,139,0.75)";
+        ctx.fillText(totalLbl, tx + 8, ty + 71);
+      }
 
       // Breakdown rows (category + severity) — only when problems were
       // passed in, the bucket actually has data, AND there's vertical
       // room (see the `availH` clamp above which can disable them).
       // Same dim style as Total so they read as secondary detail, not
       // focal numbers.
-      let cursorY = ty + 84;
+      // 0.0.151 — when Closed/Total rows are hidden, the breakdown
+      // starts higher up so the tooltip frame doesn't have empty
+      // space.
+      let cursorY = hasClosedSeries ? ty + 84 : ty + 51;
       if (showCategory) {
         ctx.font = `500 10px "SF Mono", monospace`;
         ctx.fillStyle = dk ? "rgba(180,210,255,0.85)" : "rgba(60,90,160,0.85)";
@@ -745,10 +764,18 @@ const PulseVisualizerImpl: React.FC<PulseVisualizerProps> = ({
       ctx.save();
       ctx.font = `600 9px "SF Mono", monospace`;
       ctx.textBaseline = "top";
-      const labels = [
-        { txt: "ACTIVE", color: COLORS.active.hex },
-        { txt: "CLOSED", color: COLORS.closed.hex },
-      ];
+      // 0.0.151 — drop the CLOSED chip from the top-left legend
+      // when the series isn't being rendered (default mode shows
+      // ACTIVE only). The user's chip strip already has Status
+      // pins for the explicit on/off case.
+      const labels = hasClosedSeries
+        ? [
+            { txt: "ACTIVE", color: COLORS.active.hex },
+            { txt: "CLOSED", color: COLORS.closed.hex },
+          ]
+        : [
+            { txt: "ACTIVE", color: COLORS.active.hex },
+          ];
       let lx = padL + 6;
       const ly = 2;
       for (let i = 0; i < labels.length; i++) {
