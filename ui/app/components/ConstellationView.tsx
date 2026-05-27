@@ -2845,7 +2845,15 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
         const recentNow = catTrends[slot.id]?.recent ?? 0;
         const realActive = countOverrides?.activeByCategory?.[slot.id]
           ?? cellActiveTotalAll[slot.id] ?? 0;
-        if (recentNow === 0 && realActive === 0) {
+        // 0.0.162 — also gate on the Total bubble's count (active +
+        // closed). With v0.0.161 a cell with 0 active but N closed
+        // shows a "Total N" bubble; the calm-cell cyan pulse must
+        // NOT fire over a populated cell. User: "pq estou vendo
+        // animaçao?" — the pulse was overlapping the new Total
+        // bubble.
+        const realClosed = countOverrides?.resolvedByCategory?.[slot.id] ?? 0;
+        const realTotalInWindow = realActive + realClosed;
+        if (recentNow === 0 && realActive === 0 && realTotalInWindow === 0) {
           const cxCell = cell.x + cell.w / 2;
           const cyCell = (safeTop + safeBot) / 2;
           const pulse  = (Math.sin(tc * 1.3) + 1) / 2;       // 0..1, slow
