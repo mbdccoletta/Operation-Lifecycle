@@ -430,7 +430,20 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
         // Rising mode: skip categories that aren't actually rising at the
         // quadrant level, otherwise the ★ on a single recent dot would
         // contradict the ▼ / neutral badge on the quadrant itself.
-        if (dataMode === "rising" && risingCats && !risingCats.has(cat)) return;
+        //
+        // 0.0.118 — that gate doesn't apply inside the enlarged-quadrant
+        // MODAL (`disableAggregation`). User explicitly drilled into one
+        // category to see its top-50; the top 10 of that subset must
+        // anchor at the cell centre regardless of the cell-level trend
+        // direction ("nao vejo as top 10 das top 50 destacas no centro
+        // do Rising"). Skipping the gate only in modal mode preserves
+        // the main-view behaviour (no ★ on a non-rising cell).
+        if (
+          dataMode === "rising"
+          && risingCats
+          && !risingCats.has(cat)
+          && !disableAggregation
+        ) return;
         const scored = probs
           .map((p) => ({ p, s: scoreFn(p) }))
           .filter(({ s }) => s > 0)                      // skip zero-score dots
