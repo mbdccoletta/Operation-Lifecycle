@@ -583,47 +583,17 @@ const PulseVisualizerImpl: React.FC<PulseVisualizerProps> = ({
       // When the caller passed the raw problem list, we enrich the
       // tooltip with two extra rows: the top categories in the bucket
       // and the severity mix. Filter is overlap-based (matches the
-      // ACTIVE-AT-THIS-TIME semantic): a problem counts toward this
-      // bucket if its [start, end] interval intersects the bucket
-      // window. Open problems use `now` as the end. We cap the bucket
-      // width to the spacing between successive bars (or fall back to
-      // 1h when only one bar is visible).
-      const bucketMs =
-        visibleBars.length >= 2
-          ? visibleBars[1].ts - visibleBars[0].ts
-          : visibleBars.length === 1 && bars.length >= 2
-            ? bars[1].ts - bars[0].ts
-            : 3600000;
-      let categoryLbl = "";
-      let severityLbl = "";
-      if (problems && problems.length > 0 && bar.total > 0) {
-        const bStart = bar.ts;
-        const bEnd   = bar.ts + bucketMs;
-        const nowMs  = Date.now();
-        const catCounts: Record<string, number> = {};
-        const sevCounts: Record<string, number> = {};
-        for (const p of problems) {
-          const ps = new Date(p["event.start"]).getTime();
-          if (!Number.isFinite(ps) || ps > bEnd) continue;
-          const pe = p["event.end"] ? new Date(p["event.end"]).getTime() : nowMs;
-          if (!Number.isFinite(pe) || pe < bStart) continue;
-          const cat = p["event.category"];
-          if (cat) catCounts[cat] = (catCounts[cat] || 0) + 1;
-          const sev = (p["event.severity"] || "").toString();
-          if (sev) sevCounts[sev] = (sevCounts[sev] || 0) + 1;
-        }
-        const topCats = Object.entries(catCounts)
-          .sort(([, a], [, b]) => b - a)
-          .slice(0, 3)
-          .map(([k, v]) => `${getCategoryLabel(k)} ${v}`)
-          .join(" · ");
-        const sevs = Object.entries(sevCounts)
-          .sort(([a], [b]) => Number(a) - Number(b))
-          .map(([k, v]) => `S${k} ${v}`)
-          .join(" · ");
-        if (topCats) categoryLbl = `▸ ${topCats}`;
-        if (sevs)    severityLbl = `▸ ${sevs}`;
-      }
+      // 0.0.152 — category + severity breakdown removed from the
+      // tooltip. The numbers came from a per-bucket overlap walk on
+      // the loaded sample, so they drifted from the Active count
+      // (which is the server's authoritative number) — e.g. tooltip
+      // showed "Active 8" then "Availability 4 · Slowdown 3 · Error 3"
+      // (= 10) for the same bucket. User: "nao precisa mostrar
+      // detalhes por categoria no tooltip." Keep the breakdown
+      // variables as empty strings so downstream sizing code stays
+      // untouched.
+      const categoryLbl = "";
+      const severityLbl = "";
 
       ctx.font = `700 12px "SF Mono", monospace`;
       const tw = Math.max(
@@ -632,8 +602,6 @@ const PulseVisualizerImpl: React.FC<PulseVisualizerProps> = ({
         ctx.measureText(totalLbl).width,
         ctx.measureText(activeLbl).width,
         ctx.measureText(closedLbl).width,
-        categoryLbl ? ctx.measureText(categoryLbl).width : 0,
-        severityLbl ? ctx.measureText(severityLbl).width : 0,
         clickLbl ? ctx.measureText(clickLbl).width : 0,
       ) + 22;
       // Base height (caption + time + active [+ closed + total]) is
