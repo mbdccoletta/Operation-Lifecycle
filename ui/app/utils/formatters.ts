@@ -1,16 +1,22 @@
 // ─── TIMEZONE CONVENTION ─────────────────────────────────────────
-// All timestamp displays render in **UTC**, not the browser's local
-// timezone. This is intentional: the native Davis Problems app uses
-// UTC for problem.start, event.end, comment timestamps, automation
-// timestamps, and chart axis labels. Showing them in the user's
-// local clock here would create a 3-hour discrepancy for a Brazil
-// (UTC-3) user cross-referencing our app against the native one —
-// which on-call engineers do constantly.
+// Most internal timestamp displays still render in **UTC** to match
+// the legacy native Davis Problems list (chart axis labels, comment
+// timestamps, swimlane, sparkline, ProblemTimelineCard tooltips
+// that explicitly say "UTC"). On-call engineers cross-referencing
+// our app against the native UI find this useful.
 //
-// If you ever need a "user-local" display for a NEW surface, pass
-// the timeZone explicitly (e.g. `timeZone: "America/Sao_Paulo"`).
-// Don't drop the `timeZone: "UTC"` default — that's what keeps every
-// timestamp in the app readable side-by-side with native Davis.
+// HOWEVER — `formatStartedDate` (used by the "Started" column in
+// the list and by ShareWhatsApp) switched to LOCAL in v0.0.183.
+// The Strato problem-detail header already renders local time, so
+// keeping the list UTC produced a confusing 3-hour gap inside our
+// own app between the "Started" column and the "Duration" column
+// on the same row. User: "Started está errado, faz 17 min que foi
+// aberto."
+//
+// Rule of thumb for new surfaces:
+//   • Tooltip / metadata explicitly labelled "UTC" → keep UTC.
+//   • Inline value next to a "duration" / "elapsed" reading → use
+//     LOCAL so the math reads correctly at a glance.
 // ─────────────────────────────────────────────────────────────────
 export function formatDate(isoString: string): string {
   if (!isoString) return "";
@@ -71,20 +77,30 @@ export function getCategoryIcon(category: string): string {
 }
 
 // Formats event.start into the same shape Dynatrace uses in the list
-// (locale-aware date + 24-hour time). Browser locale drives the
-// language; **timezone is forced to UTC** to match the native Davis
-// Problems app (see TIMEZONE CONVENTION comment at the top of this
-// file).
+// (locale-aware date + 24-hour time).
+//
+// 0.0.183 — switched to LOCAL timezone. Originally this forced UTC
+// to match the native Davis Problems convention, but the Strato
+// problem-detail header (rendered by the platform component
+// library) shows local time, so cross-referencing list ↔ detail
+// inside our own app surfaced a 3-hour discrepancy that
+// dominated the user's confusion. User: "Started está errado, faz
+// 17 min que foi aberto." Local time keeps "Started …" lined up
+// with the "Duration: 17 min" column on the same row.
+//
+// Tooltips on the Problem Timeline page that explicitly say "UTC"
+// in their text (ProblemTimelineCard L131/L152/L242) stay in UTC
+// since they are LABELLED — those carry the cross-tenant reference
+// case described in the file header.
 export function formatStartedDate(isoString: string): string {
   if (!isoString) return "";
   const d = new Date(isoString);
   return d.toLocaleString(undefined, {
-    day:      "numeric",
-    month:    "short",
-    year:     "numeric",
-    hour:     "2-digit",
-    minute:   "2-digit",
-    timeZone: "UTC",
+    day:    "numeric",
+    month:  "short",
+    year:   "numeric",
+    hour:   "2-digit",
+    minute: "2-digit",
   });
 }
 
