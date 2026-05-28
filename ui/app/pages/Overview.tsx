@@ -2604,7 +2604,7 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
           {/* (Show-by selector moved to the top of the page —
               see .neo-show-by-bar above the chart.) */}
           <div className="neo-active-titlebar">
-            <h2 className="neo-active-title">Active Problems</h2>
+            <h2 className="neo-active-title">Problems</h2>
             {groupBy === "segment" && (
               <>
                 <span

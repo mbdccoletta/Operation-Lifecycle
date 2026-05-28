@@ -556,7 +556,7 @@ export const EnlargedQuadrantCard = ({
                     }}
                   >
                     <span style={{ color: "var(--neo-text-2)", fontWeight: 600 }}>
-                      Active problems
+                      Problems
                     </span>
                     <span style={{ margin: "0 8px", opacity: 0.5 }}>·</span>
                     <span>
