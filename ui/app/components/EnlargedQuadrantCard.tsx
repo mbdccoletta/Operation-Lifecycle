@@ -289,11 +289,17 @@ export const EnlargedQuadrantCard = ({
 
   // User 0.0.109: "ao fazer drilldown mostrar top 50." Was 10.
   // 0.0.165 — back to top-10 per user request ("apresentando ao
-  // centro os top 10 mais relevantes"). v0.0.109 had bumped this to
-  // 50; the user has since walked it back so the canvas reads as a
-  // focused leaderboard rather than a dense scatter. The on-demand
-  // stuck-fetch (useStuckProblemsByCategory) also caps at this N.
-  const TOP_N = 10;
+  // centro os top 10 mais relevantes").
+  // 0.0.174 — back to 50 per follow-up: "ao fazer drill down,
+  // deveriamos ver os top 50 e os top 10 dos top 50 no centro.
+  // Estou vendo apenas os top 10." The inner ConstellationView caps
+  // its top-tier ring (the visual leaderboard highlight) at
+  // MAX_TIER_PER_CAT = 10 in its `disableAggregation` branch, so
+  // passing 50 dots here gives the user both: a dense scatter of the
+  // 50 most relevant + the top 10 of those 50 visually elevated at
+  // center. The on-demand stuck/rising fetches also cap at this N so
+  // the focused queries deliver the same window the modal renders.
+  const TOP_N = 50;
 
   // 0.0.142 — on-demand fetch of the oldest active problems for
   // this category. Only fires when the modal is open AND the user
@@ -495,11 +501,24 @@ export const EnlargedQuadrantCard = ({
                   "deixar claro nesta area expandida que os dados
                   apresentados sao baseados em problemas ativos.
                   apresentando ao centro os top 10 mais relevantes."
+                  0.0.174 — caption now reflects the two-tier view:
+                  the canvas paints the top 50 by mode (TOP_N), and
+                  the inner ConstellationView's `disableAggregation`
+                  branch elevates the leading 10 of those into the
+                  top-tier ring. Without this update the caption
+                  still read "Top 50 of N by …" with no mention of
+                  the 10-leader highlight, leaving the user wondering
+                  why some dots were ringed and others were not.
                   Subtle styling so it sits as metadata above the
                   dot field, not as a heading. */}
               {(() => {
                 const matchingForCurrent = drilldown.counts[currentMode];
                 const showing = Math.min(TOP_N, matchingForCurrent);
+                // Mirror ConstellationView's MAX_TIER_PER_CAT — kept
+                // as a local const so the caption stays honest if
+                // we ever flex this number per category.
+                const LEADING = 10;
+                const leading = Math.min(LEADING, showing);
                 const modeLabel = ALL_MODES.find((m) => m.mode === currentMode)?.label
                   ?? currentMode;
                 return (
@@ -527,6 +546,14 @@ export const EnlargedQuadrantCard = ({
                     <span>
                       Top {showing}{matchingForCurrent > showing ? ` of ${matchingForCurrent}` : ""} by {modeLabel.toLowerCase()}
                     </span>
+                    {leading > 0 && showing > leading && (
+                      <>
+                        <span style={{ margin: "0 8px", opacity: 0.5 }}>·</span>
+                        <span style={{ color: "var(--neo-text-2)", fontWeight: 600 }}>
+                          Top {leading} highlighted
+                        </span>
+                      </>
+                    )}
                   </div>
                 );
               })()}
