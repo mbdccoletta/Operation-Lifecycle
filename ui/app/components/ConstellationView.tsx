@@ -195,6 +195,16 @@ interface ConstellationViewProps {
      *  back to the sample-derived `catTrends`, which disagreed
      *  with the Rising bubble on busy categories. */
     olderByCategory?: Record<string, number>;
+    /** 0.0.185 — count of ACTIVE problems started in the last 1 h
+     *  per category. Replaces `risingDeltaByCategory` as the source
+     *  for the cell's Rising sub-bubble so the visual cue fires
+     *  whenever NEW problems arrive — independent of whether net
+     *  delta (active - older) collapsed to zero or went negative
+     *  because closures matched openings. The `▲/▼` trend arrow
+     *  next to "N active" still uses olderByCategory for the
+     *  signed net delta. User: "não estou vendo mais os rising
+     *  e animações." */
+    newlyStartedByCategory?: Record<string, number>;
   };
   /** 0.0.148 — ms timestamp before which an ACTIVE problem counts
    *  as Stuck. Host derives this from the user-selected timeframe.
@@ -932,10 +942,24 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
       // provides one (uncapped, full timeframe). Falls back to the
       // sample-derived `recent - older` math for dev/standalone
       // contexts that don't run the count query.
+      //
+      // 0.0.185 — `newlyStartedByCategory` (count of ACTIVE problems
+      // started in the last 1 h) now takes precedence over the
+      // net-delta-based `risingDeltaByCategory`. The net delta
+      // collapsed to zero or went negative on busy categories
+      // where closures matched openings — the Rising bubble would
+      // disappear even though new problems were arriving. The
+      // newly-started count fires the cue whenever something new
+      // is coming in, independent of the queue's net direction
+      // (which is still visible via the `▲/▼` arrow on the cell
+      // title). User: "não estou vendo mais os rising e animações."
+      const overrideNewlyStarted = countOverrides?.newlyStartedByCategory?.[cellId];
       const overrideDelta = countOverrides?.risingDeltaByCategory?.[cellId];
-      const risingDelta = (typeof overrideDelta === "number")
-        ? overrideDelta
-        : Math.max(0, trend.recent - trend.older);
+      const risingDelta = (typeof overrideNewlyStarted === "number")
+        ? overrideNewlyStarted
+        : (typeof overrideDelta === "number")
+          ? overrideDelta
+          : Math.max(0, trend.recent - trend.older);
       // 0.0.137 — authoritative Stuck from the count query when the
       // host provides it. Avoids the sample-bias problem where a
       // busy category's loaded subset is all <4h old and the scaled

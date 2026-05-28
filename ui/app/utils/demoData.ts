@@ -251,6 +251,8 @@ export function getDemoStatusCategoryCounts(filters: {
   const CLOSED: Record<string, number> = {};
   const STUCK:  Record<string, number> = {};
   const OLDER:  Record<string, number> = {};
+  // 0.0.185 — count ACTIVE problems started in the last 1 h.
+  const NEWLY_STARTED: Record<string, number> = {};
 
   for (const p of getDemoProblems()) {
     const cat = p["event.category"];
@@ -265,6 +267,9 @@ export function getDemoStatusCategoryCounts(filters: {
       // OLDER = problems alive 1 h ago. ACTIVE & start ≤ now-1h
       // satisfies that.
       if (startMs <= olderCut) OLDER[cat] = (OLDER[cat] || 0) + 1;
+      // NEWLY_STARTED = ACTIVE & start within last 1 h. Mirrors
+      // the new `newly_started_1h` DQL field.
+      if (startMs > olderCut) NEWLY_STARTED[cat] = (NEWLY_STARTED[cat] || 0) + 1;
     } else {
       CLOSED[cat] = (CLOSED[cat] || 0) + 1;
       // OLDER also includes problems that were ACTIVE 1 h ago but
@@ -281,7 +286,7 @@ export function getDemoStatusCategoryCounts(filters: {
   const closed = Object.values(CLOSED).reduce((a, b) => a + b, 0);
   const stuck  = Object.values(STUCK).reduce((a, b) => a + b, 0);
   return {
-    counts: { ACTIVE, CLOSED, STUCK, OLDER },
+    counts: { ACTIVE, CLOSED, STUCK, OLDER, NEWLY_STARTED },
     totals: { active, closed, stuck, total: active + closed },
   };
 }

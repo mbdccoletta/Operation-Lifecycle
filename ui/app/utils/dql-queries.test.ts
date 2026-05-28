@@ -232,6 +232,18 @@ describe("buildStatusCategoryCountsQuery", () => {
     expect(q7d).toContain("fetch dt.davis.problems, from: now() - 7d");
   });
 
+  it("0.0.185 — adds newly_started_1h field and summarises it", () => {
+    // The constellation Rising bubble reads this column so it can
+    // show "N problems just opened" regardless of how many closed
+    // in the same hour — fixes the "I don't see Rising anymore"
+    // case when net delta collapses to zero.
+    const q = buildStatusCategoryCountsQuery({ timeframe: "7d" });
+    expect(q).toContain("newly_started_1h = if(");
+    expect(q).toContain('(event.status == "ACTIVE")');
+    expect(q).toContain("event.start >= now() - 1h");
+    expect(q).toContain("newly_started_count = sum(newly_started_1h)");
+  });
+
   it("0.0.184 — tags each row with is_in_user_window for CLOSED-timeframe trim", () => {
     // ACTIVE rows always count; CLOSED rows count only when their
     // event.end is at or after the user-window start.

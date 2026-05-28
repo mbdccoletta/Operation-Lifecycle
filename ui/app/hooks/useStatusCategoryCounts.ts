@@ -41,8 +41,9 @@ interface Row {
   "event.status": string;
   "event.category": string;
   count: number;
-  stuck_count?: number; // 0.0.137 — sum of ACTIVE & start < now-4h
-  older_count?: number; // 0.0.150 — sum of "was active 1h ago" rows
+  stuck_count?: number;         // 0.0.137 — sum of ACTIVE & start < now-4h
+  older_count?: number;         // 0.0.150 — sum of "was active 1h ago" rows
+  newly_started_count?: number; // 0.0.185 — sum of ACTIVE & start >= now-1h
 }
 
 export interface StatusCategoryCounts {
@@ -62,6 +63,14 @@ export interface StatusCategoryCounts {
      *  read `max(0, ACTIVE - OLDER)` from server data instead of
      *  the 250-row sample. */
     OLDER: Record<string, number>;
+    /** 0.0.185 — number of ACTIVE-now problems per category whose
+     *  `event.start` is within the last 1 h. Unlike OLDER-derived
+     *  Rising delta, this is always >= 0 and is what the
+     *  constellation Rising bubble displays (so the cue fires
+     *  whenever NEW problems arrived, independent of how many
+     *  others closed in the same window). User: "não estou
+     *  vendo mais os rising e animações." */
+    NEWLY_STARTED: Record<string, number>;
   };
   /** Aggregate totals derived from the same response so the rings
    *  and the per-category panels can never disagree. */
@@ -81,7 +90,7 @@ export interface StatusCategoryCounts {
   error: Error | null;
 }
 
-const EMPTY_COUNTS = { ACTIVE: {}, CLOSED: {}, STUCK: {}, OLDER: {} } as const;
+const EMPTY_COUNTS = { ACTIVE: {}, CLOSED: {}, STUCK: {}, OLDER: {}, NEWLY_STARTED: {} } as const;
 
 export function useStatusCategoryCounts(
   filters: StatusCategoryCountsFilters = {},
@@ -137,11 +146,13 @@ export function useStatusCategoryCounts(
       CLOSED: Record<string, number>;
       STUCK: Record<string, number>;
       OLDER: Record<string, number>;
+      NEWLY_STARTED: Record<string, number>;
     } = {
       ACTIVE: {},
       CLOSED: {},
       STUCK: {},
       OLDER: {},
+      NEWLY_STARTED: {},
     };
     let active = 0;
     let closed = 0;
@@ -159,6 +170,14 @@ export function useStatusCategoryCounts(
         if (Number.isFinite(s) && s > 0) {
           counts.STUCK[cat] = s;
           stuck += s;
+        }
+        // 0.0.185 — newly_started_count is per ACTIVE-status row
+        // only (the predicate already requires status == ACTIVE)
+        // so we only read it on the ACTIVE branch.
+        const nsRaw = r.newly_started_count;
+        const ns = typeof nsRaw === "number" ? nsRaw : Number(nsRaw ?? 0);
+        if (Number.isFinite(ns) && ns > 0) {
+          counts.NEWLY_STARTED[cat] = ns;
         }
       } else if (status === "CLOSED") {
         counts.CLOSED[cat] = n;
@@ -195,6 +214,7 @@ export function useStatusCategoryCounts(
         CLOSED: Record<string, number>;
         STUCK: Record<string, number>;
         OLDER: Record<string, number>;
+        NEWLY_STARTED: Record<string, number>;
       },
       totals: { active: 0, closed: 0, stuck: 0, total: 0 },
       loading: true,

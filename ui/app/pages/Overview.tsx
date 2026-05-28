@@ -1025,6 +1025,15 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
       // `catTrends` and disagreed with the Rising bubble (which
       // uses risingDeltaByCategory). User: "Rising esta discrepante."
       olderByCategory: statusCategoryCounts.OLDER,
+      // 0.0.185 — newly_started_count per category (ACTIVE & started
+      // in last 1 h). The constellation Rising bubble now reads
+      // THIS instead of the net Rising delta so the cue fires
+      // whenever new problems arrive, even when closures match
+      // openings in the same hour. The ▲/▼ trend arrow next to
+      // "N active" still derives from `olderByCategory` (signed
+      // ACTIVE - OLDER) so the user sees both: "things are
+      // arriving" (bubble) AND "queue direction" (arrow).
+      newlyStartedByCategory: statusCategoryCounts.NEWLY_STARTED,
     };
   }, [statusCategoryLoading, statusCategoryTotals, statusCategoryCounts]);
 

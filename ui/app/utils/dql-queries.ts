@@ -456,6 +456,21 @@ export function buildStatusCategoryCountsQuery(filters: {
          + `(event.start <= now() - 1h) and `
          + `((event.status == "ACTIVE") or (isNotNull(event.end) and (event.end > now() - 1h))),`
          + ` 1, else: 0)`;
+  // 0.0.185 — `newly_started_1h` counts ACTIVE-now problems whose
+  // event.start is within the last 1 h. Unlike Rising delta
+  // (ACTIVE − OLDER, which goes to zero or negative on busy
+  // categories where closures match openings), this is always >= 0
+  // and tells the user "N problems opened in 1 h" regardless of net
+  // queue movement. The constellation cell's Rising bubble uses
+  // this so the visual cue fires whenever new problems arrive,
+  // independent of whether the same minute saw enough closures to
+  // bring the net delta to zero. The trend arrow ▲/▼ next to
+  // "N active" still reads the net delta (via OLDER) so the user
+  // sees both: "things are coming in" (bubble) AND "queue is
+  // shrinking/growing" (arrow).
+  query += `\n| fieldsAdd newly_started_1h = if(`
+         + `(event.status == "ACTIVE") and (event.start >= now() - 1h),`
+         + ` 1, else: 0)`;
   // 0.0.184 — `is_in_user_window` masks CLOSED records that fall
   // OUTSIDE the user's chosen timeframe (relevant whenever the
   // fetch above was widened to cover the 1 h baseline). ACTIVE rows
@@ -472,7 +487,7 @@ export function buildStatusCategoryCountsQuery(filters: {
   // timeframe-aware cutoff), and the 1h-ago baseline (uses ALL
   // fetched rows so Rising stays consistent regardless of the
   // user timeframe).
-  query += `\n| summarize count = sum(is_in_user_window), stuck_count = sum(is_stuck), older_count = sum(was_active_1h_ago), by: { event.status, event.category }`;
+  query += `\n| summarize count = sum(is_in_user_window), stuck_count = sum(is_stuck), older_count = sum(was_active_1h_ago), newly_started_count = sum(newly_started_1h), by: { event.status, event.category }`;
   return query;
 }
 

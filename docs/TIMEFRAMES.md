@@ -245,6 +245,17 @@ Notable inflection points so future you can find the "why":
   "Today" and +3 in "30m" with identical underlying state — the
   shorter fetch had dropped 2 closures from the 1 h baseline,
   inflating Rising. Rising delta is now timeframe-invariant.
+- **v0.0.185** — constellation cell Rising bubble now reads
+  `newly_started_count` (ACTIVE & start ≥ now-1h) instead of
+  `risingDeltaByCategory` (the NET delta). After v0.0.184 made
+  net delta accurate, busy categories whose closures matched their
+  openings hour-by-hour stopped showing Rising at all — even when
+  4 new problems had just arrived. The new field always reflects
+  "things coming in" so the visual cue and the animation fire
+  whenever new arrivals exist. The `▲/▼` trend arrow on the cell
+  title keeps reading the net delta (via OLDER) so the queue
+  direction is still visible. User: "não estou vendo mais os
+  rising e animações."
 - **v0.0.178** — demo mode via `?demo=1` URL param. Five data hooks
   short-circuit to `utils/demoData.ts` (a hand-crafted dataset of
   ~79 problems anchored to `Date.now()`) instead of firing DQL.
