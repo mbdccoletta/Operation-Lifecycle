@@ -139,14 +139,39 @@ describe("buildFilteredQuery", () => {
     expect(buildFilteredQuery({ status: "CLOSED" })).toContain('event.status == "CLOSED"');
   });
 
-  it("places dedup AFTER sort and BEFORE limit", () => {
+  it("0.0.190 — dedup sorts by `timestamp` so the LATEST state per problem wins", () => {
+    // Davis emits one record per problem state change. The dedup
+    // sort key has to point at the per-record emit timestamp
+    // (`timestamp`), not `event.start` — otherwise a problem opened
+    // at T0 (ACTIVE record) and closed at T1 (CLOSED record at a
+    // later `timestamp`) would tie on `event.start` and the engine
+    // would pick an arbitrary row, leaving the list showing the old
+    // ACTIVE record for a problem Davis has since closed. User
+    // observed list = 20 but server count = 15 on dev-tenant.
     const q = buildFilteredQuery({});
-    const sortIdx  = q.indexOf("| sort event.start desc");
-    const dedupIdx = q.indexOf("| dedup display_id");
-    const limitIdx = q.indexOf("| limit ");
-    expect(sortIdx).toBeGreaterThan(-1);
-    expect(dedupIdx).toBeGreaterThan(sortIdx);
-    expect(limitIdx).toBeGreaterThan(dedupIdx);
+    const tsSortIdx = q.indexOf("| sort timestamp desc");
+    const dedupIdx  = q.indexOf("| dedup display_id");
+    const displaySortIdx = q.indexOf("| sort event.start desc");
+    const limitIdx  = q.indexOf("| limit ");
+    expect(tsSortIdx).toBeGreaterThan(-1);
+    expect(dedupIdx).toBeGreaterThan(tsSortIdx);
+    // Display sort comes AFTER dedup so the user sees newest-first
+    // ordering, but it's independent of the dedup-winner choice.
+    expect(displaySortIdx).toBeGreaterThan(dedupIdx);
+    expect(limitIdx).toBeGreaterThan(displaySortIdx);
+  });
+
+  it("0.0.190 — status filter is applied AFTER dedup (latest-state row)", () => {
+    // Filtering `event.status == "ACTIVE"` BEFORE dedup would keep
+    // the OLD ACTIVE record of a problem that has since closed in
+    // the same window — the dedup'd row needs to be the LATEST
+    // state row, then the status filter checks whether that latest
+    // state is what the user asked for.
+    const q = buildFilteredQuery({ status: "ACTIVE" });
+    const dedupIdx  = q.indexOf("| dedup display_id");
+    const statusIdx = q.indexOf('event.status == "ACTIVE"');
+    expect(dedupIdx).toBeGreaterThan(-1);
+    expect(statusIdx).toBeGreaterThan(dedupIdx);
   });
 
   it("includes the full field projection used by the Davis Problems UI", () => {

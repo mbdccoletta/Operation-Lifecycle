@@ -115,35 +115,54 @@ export function buildFilteredQuery(filters: {
   //
   // `isNull(...) or not(...)` keeps null + false, drops only
   // explicit true — the exact native semantic.
-  const conditions: string[] = [
+  // 0.0.190 — Filter split: PROBLEM-LEVEL filters (is_duplicate,
+  // category) apply BEFORE the dedup pass; the STATUS filter is
+  // applied AFTER dedup. Davis emits multiple records per problem
+  // (one per state change), and the previous flow filtered by
+  // status BEFORE dedup, which kept the OLD ACTIVE record of a
+  // problem that had since closed in the same window — list shows
+  // such a problem with status=Active even though Davis already
+  // closed it. The new dedup sorts by record `timestamp` desc, so
+  // the LATEST state record wins per problem; only then do we
+  // filter `event.status == "ACTIVE"` to keep currently-active
+  // rows. Matches the count query's intent (see v0.0.166 comment).
+  // User: list showed 20 ERROR active in 1h but Rising bubble
+  // (server count) showed 15 — the 5 difference were closed-in-
+  // window problems still appearing as Active in the list.
+  const earlyConditions: string[] = [
     `(isNull(dt.davis.is_duplicate) or not(dt.davis.is_duplicate))`,
   ];
-
-  if (filters.status && ALLOWED_STATUSES.has(filters.status)) {
-    conditions.push(`event.status == "${filters.status}"`);
-  }
-  // Multi-value takes precedence — that's the path the new chip
-  // filter context uses. Single-value `category` is still honoured
-  // for any legacy URL deep-link that may still set it.
   const cats = (filters.categories ?? [])
     .filter((c) => ALLOWED_CATEGORIES.has(c));
   if (cats.length === 1) {
-    conditions.push(`event.category == "${cats[0]}"`);
+    earlyConditions.push(`event.category == "${cats[0]}"`);
   } else if (cats.length > 1) {
-    // `in()` is DQL's set-membership predicate — equivalent to
-    // `event.category == "A" or event.category == "B" …` but
-    // shorter to parse and (more importantly) the canonical way
-    // Davis Intelligence recommends matching across enums.
     const list = cats.map((c) => `"${c}"`).join(", ");
-    conditions.push(`in(event.category, ${list})`);
+    earlyConditions.push(`in(event.category, ${list})`);
   } else if (filters.category && ALLOWED_CATEGORIES.has(filters.category)) {
-    conditions.push(`event.category == "${filters.category}"`);
+    earlyConditions.push(`event.category == "${filters.category}"`);
   }
+  query += `\n| filter ${earlyConditions.join(" and ")}`;
 
-  if (conditions.length > 0) {
-    query += `\n| filter ${conditions.join(" and ")}`;
+  // 0.0.190 — Sort by record `timestamp` desc + dedup BEFORE the
+  // projection. `timestamp` is the implicit per-record emit time
+  // that Davis stamps on each state-change event; the latest
+  // emission wins per `display_id`, so a problem that was opened
+  // (ACTIVE record) and then closed (CLOSED record) in the same
+  // window is correctly represented by its CLOSED record. This is
+  // intentionally INSIDE the dedup window — the projection below
+  // drops `timestamp`, so the sort has to happen before `| fields`
+  // strips it. Pulled BEFORE the status filter so the status filter
+  // operates on the latest-state row.
+  query += `\n| sort timestamp desc`;
+  query += `\n| dedup display_id`;
+  // Status filter on the latest-state row (post-dedup). Filters out
+  // the OLD ACTIVE record of a problem that has since closed in
+  // window — that record had been incorrectly counted as "active"
+  // by the pre-v0.0.190 ordering.
+  if (filters.status && ALLOWED_STATUSES.has(filters.status)) {
+    query += `\n| filter event.status == "${filters.status}"`;
   }
-
   // Pull the canonical entity NAMES directly from dt.davis.problems
   // alongside their IDs/types. The official Problems app uses these
   // fields verbatim — no separate dt.entity.<type> lookup needed,
@@ -166,10 +185,10 @@ export function buildFilteredQuery(filters: {
   // both fields in the projection until we can isolate root cause
   // and re-evaluate independently.
   query += `\n| fields davis_problem_id, davis_problem_id_alt1, davis_problem_id_alt2, davis_problem_id_alt3, event.name, event.status, event.category, event.start, event.end, event.severity, affected_entity_ids, affected_entity_names, affected_entity_types, root_cause_entity_id, root_cause_entity_name, display_id, management_zones`;
-  // Dynatrace Intelligence (Davis) emits multiple records per problem (one per state change). Sort
-  // by event.start desc and dedup keeps one record per problem.
+  // Display ordering — newest problems first. Independent of the
+  // dedup-by-timestamp sort above (that one was about "which row
+  // wins"; this one is about "what does the user see first").
   query += `\n| sort event.start desc`;
-  query += `\n| dedup display_id`;
   // Clamp the caller-supplied limit to a safe integer in
   // [1, 10000]. The upper bound matches the legacy "fetch
   // everything" path so the Load-more ramp never accidentally
