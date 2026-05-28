@@ -1567,9 +1567,22 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
     // But when every candidate is falling we fall back to including
     // them so the user always sees the highest-scoring quadrant under
     // the active Show By mode.
+    //
+    // 0.0.196 — Rising mode is the ONE exception: never fall back
+    // to falling cells. `▲ UP` (the Rising leader badge) and `▼ DOWN`
+    // (the falling-cell seal) measure the same 1 h delta direction;
+    // stacking both on the same cell reads as a contradiction even
+    // when the math is internally consistent ("16 arrived, 38 closed,
+    // net −22"). The user's read: "the comet animation already shows
+    // arrivals — let ▼ DOWN carry the direction signal alone."
+    // Stuck / Total / Criticality still fall back since their leader
+    // semantic (most stuck / most active / highest severity) is
+    // independent of 1 h queue direction — ★ TOP on a falling cell
+    // is not contradictory.
     const allEntries  = Object.entries(catAgg);
     const nonFalling  = allEntries.filter(([cat]) => !isFalling(cat));
-    const useFallback = nonFalling.length === 0 || nonFalling.every(([, v]) => v <= 0);
+    const useFallback = dataMode !== "rising"
+      && (nonFalling.length === 0 || nonFalling.every(([, v]) => v <= 0));
     const candidates  = useFallback ? allEntries : nonFalling;
     const globalMax   = Math.max(0, ...candidates.map(([, v]) => v));
     // Tie tolerance — integer-valued modes (rising delta, total count,
