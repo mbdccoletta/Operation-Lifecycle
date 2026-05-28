@@ -24,6 +24,8 @@ import type { FilterSegment } from "@dynatrace-sdk/client-query";
 import { useSegments } from "@dynatrace/strato-components-preview/filters";
 import { buildStuckProblemsByCategoryQuery } from "../utils/dql-queries";
 import type { Problem } from "./useProblems";
+import { useDemoMode } from "../contexts/DemoModeContext";
+import { getDemoStuckByCategory } from "../utils/demoData";
 
 export interface UseStuckProblemsByCategoryOptions {
   /** Davis category id (must match the ALLOWED_CATEGORIES whitelist
@@ -94,6 +96,10 @@ export function useStuckProblemsByCategory(
     [query, segmentIds, opts.limit],
   );
 
+  // 0.0.178 — demo-mode short-circuit. Same intercept pattern. The
+  // demo's Stuck filter applies the same 4 h cutoff that the DQL
+  // does, derived from the central dataset in demoData.ts.
+  const demo = useDemoMode();
   const { data, isLoading, error } = useDql<Problem>(
     params ?? {
       query: "",
@@ -104,13 +110,22 @@ export function useStuckProblemsByCategory(
       // Modal opens are user-initiated, so a moderately long cache
       // smooths out closing/reopening within the same triage flow.
       staleTime: 60_000,
-      // Don't fire when params is null (gate off).
-      enabled: !!params,
+      // Don't fire when params is null (gate off) OR when demo mode
+      // is on (we synthesise the response below).
+      enabled: !!params && !demo.enabled,
     },
   );
 
+  const demoProblems = useMemo<Problem[] | null>(() => {
+    if (!demo.enabled || !opts.enabled || !opts.category) return null;
+    return getDemoStuckByCategory(opts.category, opts.limit ?? 50);
+  }, [demo.enabled, opts.enabled, opts.category, opts.limit]);
+
   const problems = useMemo(() => data?.records ?? EMPTY, [data]);
 
+  if (demo.enabled) {
+    return { problems: demoProblems ?? EMPTY, loading: false, error: null };
+  }
   if (!params) {
     return { problems: EMPTY, loading: false, error: null };
   }

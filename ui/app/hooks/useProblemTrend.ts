@@ -9,6 +9,7 @@ import type { FilterSegment } from "@dynatrace-sdk/client-query";
 import { convertQueryResultToTimeseries } from "@dynatrace/strato-components-preview/charts";
 import { useSegments } from "@dynatrace/strato-components-preview/filters";
 import { buildTrendQuery } from "../utils/dql-queries";
+import { useDemoMode } from "../contexts/DemoModeContext";
 
 export function useProblemTrend(timeframe: string = "7d", status?: string) {
   const { segments } = useSegments();
@@ -26,6 +27,13 @@ export function useProblemTrend(timeframe: string = "7d", status?: string) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }), [timeframe, status, segmentIds]);
 
+  // 0.0.178 — demo-mode skip. The chart's bucket shape comes from
+  // Strato's `convertQueryResultToTimeseries`; rather than fabricate
+  // a synthetic query-result and risk shape drift, demo simply
+  // returns an empty timeseries and the chart renders an empty
+  // canvas. The page's other surfaces (constellation, list, modal)
+  // are the demo's main attraction — the chart is a follow-up.
+  const demo = useDemoMode();
   const { data, isLoading, error, forceRefetch } = useDql(params, {
     // Trend buckets change slowly — 2 min cache saves a query
     // when the user toggles view modes on the same timeframe.
@@ -33,6 +41,7 @@ export function useProblemTrend(timeframe: string = "7d", status?: string) {
        hours of data per bucket; 3 min staleness is invisible to
        the user. ~33% fewer trend refetches. */
     staleTime: 180_000,
+    enabled: !demo.enabled,
   });
 
   // The SDK returns a `QueryResult`; the chart wants a timeseries
@@ -49,9 +58,9 @@ export function useProblemTrend(timeframe: string = "7d", status?: string) {
   }, [data]);
 
   return {
-    data: timeseries,
-    loading: isLoading,
-    error: error || null,
+    data: demo.enabled ? [] as typeof timeseries : timeseries,
+    loading: demo.enabled ? false : isLoading,
+    error: demo.enabled ? null : (error || null),
     refetch: forceRefetch,
   };
 }

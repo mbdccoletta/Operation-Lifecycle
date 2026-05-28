@@ -23,6 +23,8 @@ import { useMemo } from "react";
 import { useDql } from "@dynatrace-sdk/react-hooks";
 import type { FilterSegment } from "@dynatrace-sdk/client-query";
 import { useSegments } from "@dynatrace/strato-components-preview/filters";
+import { useDemoMode } from "../contexts/DemoModeContext";
+import { getDemoStatusCategoryCounts } from "../utils/demoData";
 import { buildStatusCategoryCountsQuery } from "../utils/dql-queries";
 
 export interface StatusCategoryCountsFilters {
@@ -105,13 +107,29 @@ export function useStatusCategoryCounts(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }), [query, segmentIds]);
 
+  // 0.0.178 — demo-mode short-circuit. Same intercept pattern as
+  // useProblems: skip the DQL, return the demo-derived counts. See
+  // utils/demoData.ts for the derivation rules (same thresholds as
+  // the real DQL: 4 h Stuck, 1 h OLDER).
+  const demo = useDemoMode();
   const { data, isLoading, error } = useDql<Row>(params, {
     /* Same cadence as `useCategoryCounts` — these two queries
        feed adjacent surfaces and need to refresh together to stay
        coherent. 2 min matches the native Davis Problems list
        cadence. */
     staleTime: 120_000,
+    enabled: !demo.enabled,
   });
+
+  const demoResult = useMemo<StatusCategoryCounts | null>(() => {
+    if (!demo.enabled) return null;
+    const r = getDemoStatusCategoryCounts({
+      timeframe: filters.timeframe,
+      from:      filters.from,
+      to:        filters.to,
+    });
+    return { ...r, loading: false, error: null };
+  }, [demo.enabled, filters.timeframe, filters.from, filters.to]);
 
   const result = useMemo<StatusCategoryCounts>(() => {
     const counts: {
@@ -164,6 +182,9 @@ export function useStatusCategoryCounts(
     };
   }, [data, isLoading, error]);
 
+  // 0.0.178 — demo branch takes priority. Stable result, no loading
+  // state since data is synchronous in demo.
+  if (demoResult) return demoResult;
   // While loading and the response hasn't arrived yet, return a
   // sentinel with empty maps. Callers detect this via `loading`
   // and substitute list-derived math.

@@ -16,6 +16,7 @@ import { TimeRangeProvider } from "./hooks/useTimeRange";
 import { CategoryFilterProvider } from "./contexts/CategoryFilterContext";
 import { RefreshSignalProvider } from "./contexts/RefreshSignalContext";
 import { IntensityProvider } from "./contexts/IntensityContext";
+import { DemoModeProvider } from "./contexts/DemoModeContext";
 // DisplaySettingsPanel is rendered inline by each page's header
 // (Overview, TrendAnalysis) — no longer a global floating widget.
 import { useActiveProblemsCount } from "./hooks/useActiveProblemsCount";
@@ -180,17 +181,19 @@ const AppContent = () => {
 export const App = () => {
   return (
     <ErrorBoundary>
-      <IntensityProvider>
-        <SegmentsProvider>
-          <TimeRangeProvider>
-            <CategoryFilterProvider>
-              <RefreshSignalProvider>
-                <AppContent />
-              </RefreshSignalProvider>
-            </CategoryFilterProvider>
-          </TimeRangeProvider>
-        </SegmentsProvider>
-      </IntensityProvider>
+      <DemoModeProvider>
+        <IntensityProvider>
+          <SegmentsProvider>
+            <TimeRangeProvider>
+              <CategoryFilterProvider>
+                <RefreshSignalProvider>
+                  <AppContent />
+                </RefreshSignalProvider>
+              </CategoryFilterProvider>
+            </TimeRangeProvider>
+          </SegmentsProvider>
+        </IntensityProvider>
+      </DemoModeProvider>
     </ErrorBoundary>
   );
 };

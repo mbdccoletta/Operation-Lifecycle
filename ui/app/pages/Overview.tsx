@@ -30,6 +30,7 @@ import { LoadMoreFooter } from "../components/LoadMoreFooter";
 import { ProblemSearch } from "../components/ProblemSearch";
 import { useCategoryFilterOnly, useSetCategoryCounts } from "../contexts/CategoryFilterContext";
 import { useTriggerRefresh } from "../contexts/RefreshSignalContext";
+import { useDemoMode } from "../contexts/DemoModeContext";
 // IntensityContext is consumed by the global DisplaySettingsPanel
 // (rendered in App.tsx); Overview no longer reads it directly.
 import { useCategoryCounts } from "../hooks/useCategoryCounts";
@@ -309,6 +310,11 @@ function MobileRingTrend({
 
 export const Overview = ({ groupBy = "category" }: OverviewProps) => {
   const navigate = useNavigate();
+  // 0.0.178 — demo flag drives a visible badge so anyone watching the
+  // screen knows the numbers are synthetic. The hooks themselves
+  // already re-route through demoData.ts; this is the user-facing
+  // breadcrumb.
+  const demo = useDemoMode();
   // URL-synced view + data mode — picks initial values from search
   // params so a shared URL like `/?view=list&mode=criticality` lands
   // the user in the same state the sender saw. The actual write-back
@@ -2605,6 +2611,28 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
               see .neo-show-by-bar above the chart.) */}
           <div className="neo-active-titlebar">
             <h2 className="neo-active-title">Problems</h2>
+            {demo.enabled && (
+              <span
+                title="Demo mode — synthetic data, no DQL is firing. Remove ?demo=1 from the URL to return to live data."
+                aria-label="Demo mode active — synthetic data"
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  marginLeft: 12,
+                  padding: "3px 10px",
+                  borderRadius: 999,
+                  background: "rgba(255, 196, 0, 0.18)",
+                  border: "1px solid rgba(255, 196, 0, 0.55)",
+                  color: "#ffd75a",
+                  font: '700 10px/1 "SF Mono","JetBrains Mono",monospace',
+                  letterSpacing: "0.12em",
+                  textTransform: "uppercase",
+                  verticalAlign: "middle",
+                }}
+              >
+                Demo mode
+              </span>
+            )}
             {groupBy === "segment" && (
               <>
                 <span

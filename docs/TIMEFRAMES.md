@@ -236,3 +236,14 @@ Notable inflection points so future you can find the "why":
   in 1h" when active and "Rising 2" when inactive (matches the
   cell). Caption reads "24 started in 1h · 2 net new highlighted".
   Plumbed via new `maxHighlightTier` prop on ConstellationView.
+- **v0.0.178** — demo mode via `?demo=1` URL param. Five data hooks
+  short-circuit to `utils/demoData.ts` (a hand-crafted dataset of
+  ~79 problems anchored to `Date.now()`) instead of firing DQL.
+  All counts (Active, Stuck, Rising delta, OLDER, Trend) are
+  derived from that one dataset using the same 1 h / 4 h
+  thresholds the real queries apply, so the sample-walked and
+  count-query paths cannot drift — the failure mode that prompted
+  the v0.0.159 demo removal. The trend chart returns empty in
+  demo (Strato bucket-shape sidestep); constellation, list, modal,
+  and leader frame all render synthetic data. A yellow "DEMO MODE"
+  badge next to the section heading signals the state.

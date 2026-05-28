@@ -23,6 +23,8 @@ import type { FilterSegment } from "@dynatrace-sdk/client-query";
 import { useSegments } from "@dynatrace/strato-components-preview/filters";
 import { buildRisingProblemsByCategoryQuery } from "../utils/dql-queries";
 import type { Problem } from "./useProblems";
+import { useDemoMode } from "../contexts/DemoModeContext";
+import { getDemoRisingByCategory } from "../utils/demoData";
 
 export interface UseRisingProblemsByCategoryOptions {
   /** Davis category id (must match the ALLOWED_CATEGORIES whitelist
@@ -86,6 +88,8 @@ export function useRisingProblemsByCategory(
     [query, segmentIds, opts.limit],
   );
 
+  // 0.0.178 — demo-mode short-circuit. Mirrors useStuckProblemsByCategory.
+  const demo = useDemoMode();
   const { data, isLoading, error } = useDql<Problem>(
     params ?? {
       query: "",
@@ -96,12 +100,20 @@ export function useRisingProblemsByCategory(
       // Rising is the most time-sensitive metric — keep cache short
       // so a refresh during triage actually returns fresh data.
       staleTime: 60_000,
-      enabled: !!params,
+      enabled: !!params && !demo.enabled,
     },
   );
 
+  const demoProblems = useMemo<Problem[] | null>(() => {
+    if (!demo.enabled || !opts.enabled || !opts.category) return null;
+    return getDemoRisingByCategory(opts.category, opts.limit ?? 10);
+  }, [demo.enabled, opts.enabled, opts.category, opts.limit]);
+
   const problems = useMemo(() => data?.records ?? EMPTY, [data]);
 
+  if (demo.enabled) {
+    return { problems: demoProblems ?? EMPTY, loading: false, error: null };
+  }
   if (!params) {
     return { problems: EMPTY, loading: false, error: null };
   }

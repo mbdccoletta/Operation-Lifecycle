@@ -11,6 +11,8 @@ import { useDql } from "@dynatrace-sdk/react-hooks";
 import type { FilterSegment } from "@dynatrace-sdk/client-query";
 import { useSegments } from "@dynatrace/strato-components-preview/filters";
 import { buildFilteredQuery } from "../utils/dql-queries";
+import { useDemoMode } from "../contexts/DemoModeContext";
+import { getDemoFilteredProblems } from "../utils/demoData";
 
 export interface Problem {
   /** Long composite identifier (e.g. `3024535536893773453_1779198660000V2`)
@@ -146,6 +148,13 @@ export function useProblems(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }), [query, segmentIds]);
 
+  // 0.0.178 — demo-mode short-circuit. When `?demo=1` is on the URL,
+  // useDql is disabled (so no DQL fires + no DPS spend) and we
+  // synthesise the response from `demoData.ts`. The intercept is
+  // RIGHT AT the SDK call site so every consumer of this hook
+  // (list, constellation, modal) gets the same demo dataset — no
+  // component-level branching, no drift.
+  const demo = useDemoMode();
   const { data, isLoading, isFetching, error, forceRefetch } = useDql<Problem>(params, {
     // 90 s cache window — wide enough that round-tripping between
     // Incidents → Segments → Analytics (or constellation ↔ list)
@@ -156,9 +165,25 @@ export function useProblems(
        native Davis Problems list cadence; user-perceived
        freshness unchanged, ~25% fewer refetches. */
     staleTime: 120_000,
+    enabled: !demo.enabled,
   });
 
-  const problems = data?.records || [];
+  const demoProblems = useMemo(
+    () => demo.enabled
+      ? getDemoFilteredProblems({
+          status:     filters.status,
+          category:   filters.category,
+          categories: filters.categories,
+          timeframe:  filters.timeframe,
+          from:       filters.from,
+          to:         filters.to,
+        }, activeLimit)
+      : null,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [demo.enabled, filters.status, filters.category, categoriesKey, filters.timeframe, filters.from, filters.to, activeLimit],
+  );
+
+  const problems = demo.enabled ? (demoProblems || []) : (data?.records || []);
   // Heuristic: if we got back exactly `activeLimit` records, the
   // DQL `| limit` clipped the result and there's probably more. If
   // we got back fewer, we've already loaded everything that
