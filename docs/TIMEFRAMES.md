@@ -236,6 +236,15 @@ Notable inflection points so future you can find the "why":
   in 1h" when active and "Rising 2" when inactive (matches the
   cell). Caption reads "24 started in 1h · 2 net new highlighted".
   Plumbed via new `maxHighlightTier` prop on ConstellationView.
+- **v0.0.184** — `buildStatusCategoryCountsQuery` now always
+  fetches at least the last **1 h** (widened from the user
+  timeframe when shorter), so `was_active_1h_ago` sees the
+  complete 1 h baseline regardless of the user's choice. CLOSED
+  count is kept user-timeframe-bound via a new `is_in_user_window`
+  column. HAR-verified dev-tenant case: RC Rising read +1 in
+  "Today" and +3 in "30m" with identical underlying state — the
+  shorter fetch had dropped 2 closures from the 1 h baseline,
+  inflating Rising. Rising delta is now timeframe-invariant.
 - **v0.0.178** — demo mode via `?demo=1` URL param. Five data hooks
   short-circuit to `utils/demoData.ts` (a hand-crafted dataset of
   ~79 problems anchored to `Date.now()`) instead of firing DQL.

@@ -26,6 +26,21 @@ const ALLOWED_CATEGORIES = new Set([
  *  arbitrary suffixes from being concatenated into the DQL. */
 const TIMEFRAME_RE = /^\d{1,4}[hdm]$/;
 
+/** Parse a `<number><h|d|m>` timeframe (the one TIMEFRAME_RE
+ *  accepts) into milliseconds. Returns `null` for inputs that
+ *  don't match — callers fall back to whatever default the
+ *  surrounding builder uses. Used to compare against the 1 h
+ *  baseline floor in `buildStatusCategoryCountsQuery`. */
+function parseTimeframeToMs(tf: string): number | null {
+  const m = /^(\d{1,4})([hdm])$/.exec(tf);
+  if (!m) return null;
+  const n = parseInt(m[1], 10);
+  const u = m[2];
+  return u === "m" ? n * 60_000
+       : u === "h" ? n * 3_600_000
+       :             n * 86_400_000; // "d"
+}
+
 /** ISO-8601 date validator. Accepts the canonical
  *  `YYYY-MM-DDTHH:MM:SS(.sss)?Z` form that `new Date().toISOString()`
  *  produces. The DQL engine also accepts unquoted timestamps in this
@@ -365,13 +380,37 @@ export function buildStatusCategoryCountsQuery(filters: {
    *  stuck. */
   stuckCutoff?: string;
 }): string {
+  // 0.0.184 — Fetch window must cover at least the last 1 h so the
+  // `was_active_1h_ago` predicate (and therefore the Rising bubble)
+  // sees the full set of records eligible for "alive 1 h ago",
+  // independent of the user's selected timeframe. Without this,
+  // shorter user timeframes (e.g. "Last 30 min") truncate the
+  // CLOSED records whose `event.end` is between user_tf and 1 h —
+  // those records would normally satisfy `was_active_1h_ago = 1`
+  // but get dropped before the predicate runs, inflating Rising.
+  // HAR-verified dev-tenant case: RC Rising read +1 in "Today"
+  // tf and +3 in "30m" tf with the same underlying state, because
+  // the 30m fetch lost 2 closures from the 1h baseline.
+  //
+  // The CLOSED count itself stays user-timeframe-bound via the
+  // `is_in_user_window` conditional column below — the fetch is
+  // only WIDER than the user picked, never narrower.
   let query: string;
+  let userWindowStartExpr: string; // DQL expr for the user-tf start
   if (filters.from && filters.to && isIsoTimestamp(filters.from) && isIsoTimestamp(filters.to)) {
-    query = `fetch dt.davis.problems, from: "${filters.from}", to: "${filters.to}"`;
+    const userFromMs = new Date(filters.from).getTime();
+    const minFromMs  = Date.now() - 3_600_000; // 1 h ago
+    const effFromIso = userFromMs > minFromMs ? new Date(minFromMs).toISOString() : filters.from;
+    query = `fetch dt.davis.problems, from: "${effFromIso}", to: "${filters.to}"`;
+    userWindowStartExpr = `toTimestamp("${filters.from}")`;
   } else if (filters.timeframe && TIMEFRAME_RE.test(filters.timeframe)) {
-    query = `fetch dt.davis.problems, from: now() - ${filters.timeframe}`;
+    const userTfMs = parseTimeframeToMs(filters.timeframe);
+    const effTf    = (userTfMs !== null && userTfMs < 3_600_000) ? "1h" : filters.timeframe;
+    query = `fetch dt.davis.problems, from: now() - ${effTf}`;
+    userWindowStartExpr = `now() - ${filters.timeframe}`;
   } else {
     query = `fetch dt.davis.problems, from: now() - 72h`;
+    userWindowStartExpr = `now() - 72h`;
   }
   // Same null-tolerant `is_duplicate` filter the other builders use.
   query += `\n| filter (isNull(dt.davis.is_duplicate) or not(dt.davis.is_duplicate))`;
@@ -417,10 +456,23 @@ export function buildStatusCategoryCountsQuery(filters: {
          + `(event.start <= now() - 1h) and `
          + `((event.status == "ACTIVE") or (isNotNull(event.end) and (event.end > now() - 1h))),`
          + ` 1, else: 0)`;
-  // Three-dimensional summarize: total count, stuck count (ACTIVE
-  // & older than the timeframe-aware cutoff), and the 1h-ago
-  // baseline (both statuses contribute).
-  query += `\n| summarize count = count(), stuck_count = sum(is_stuck), older_count = sum(was_active_1h_ago), by: { event.status, event.category }`;
+  // 0.0.184 — `is_in_user_window` masks CLOSED records that fall
+  // OUTSIDE the user's chosen timeframe (relevant whenever the
+  // fetch above was widened to cover the 1 h baseline). ACTIVE rows
+  // always count (the "Active" headline number is intended to be
+  // timeframe-invariant — the user-selected timeframe bounds
+  // closures only). For CLOSED rows we require event.end to fall on
+  // or after the user-window start; null event.end is treated as
+  // out-of-window (defensive, shouldn't happen for CLOSED).
+  query += `\n| fieldsAdd is_in_user_window = if(`
+         + `event.status == "ACTIVE", 1, `
+         + `else: if(isNotNull(event.end) and (event.end >= ${userWindowStartExpr}), 1, else: 0))`;
+  // Three-dimensional summarize: total count (timeframe-bound
+  // CLOSED + all ACTIVE), stuck count (ACTIVE & older than the
+  // timeframe-aware cutoff), and the 1h-ago baseline (uses ALL
+  // fetched rows so Rising stays consistent regardless of the
+  // user timeframe).
+  query += `\n| summarize count = sum(is_in_user_window), stuck_count = sum(is_stuck), older_count = sum(was_active_1h_ago), by: { event.status, event.category }`;
   return query;
 }
 

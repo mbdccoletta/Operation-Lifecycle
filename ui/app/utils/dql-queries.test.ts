@@ -205,13 +205,43 @@ describe("buildCategoryCountsQuery", () => {
 describe("buildStatusCategoryCountsQuery", () => {
   it("aggregates by BOTH status and category", () => {
     const q = buildStatusCategoryCountsQuery({ timeframe: "7d" });
-    // 0.0.137 added `stuck_count`, 0.0.150 added `older_count`
-    // so the Rising bubble can read max(0, active - older) from
-    // server data and bypass the 250-row sample cap.
-    expect(q).toContain("summarize count = count()");
+    // 0.0.137 added `stuck_count`, 0.0.150 added `older_count`,
+    // 0.0.184 replaced `count()` with `sum(is_in_user_window)` so
+    // CLOSED counts only include records within the user-selected
+    // timeframe even when the fetch was widened to cover the 1 h
+    // baseline. ACTIVE rows always satisfy is_in_user_window so the
+    // ACTIVE counts stay timeframe-invariant.
+    expect(q).toContain("summarize count = sum(is_in_user_window)");
     expect(q).toContain("stuck_count = sum(is_stuck)");
     expect(q).toContain("older_count = sum(was_active_1h_ago)");
     expect(q).toContain("by: { event.status, event.category }");
+  });
+
+  it("0.0.184 — widens fetch to >= 1h so the 1h baseline is complete", () => {
+    // User picks a timeframe shorter than 1 h → fetch expands to 1 h
+    // anyway so `was_active_1h_ago` can see all records eligible
+    // for the 1 h baseline. CLOSED count is then trimmed back to
+    // the user timeframe via `is_in_user_window`.
+    const q30 = buildStatusCategoryCountsQuery({ timeframe: "30m" });
+    expect(q30).toContain("fetch dt.davis.problems, from: now() - 1h");
+    expect(q30).not.toContain("from: now() - 30m\n");
+    // Timeframes >= 1h pass through unchanged.
+    const q1h = buildStatusCategoryCountsQuery({ timeframe: "1h" });
+    expect(q1h).toContain("fetch dt.davis.problems, from: now() - 1h");
+    const q7d = buildStatusCategoryCountsQuery({ timeframe: "7d" });
+    expect(q7d).toContain("fetch dt.davis.problems, from: now() - 7d");
+  });
+
+  it("0.0.184 — tags each row with is_in_user_window for CLOSED-timeframe trim", () => {
+    // ACTIVE rows always count; CLOSED rows count only when their
+    // event.end is at or after the user-window start.
+    const q30 = buildStatusCategoryCountsQuery({ timeframe: "30m" });
+    expect(q30).toContain("is_in_user_window = if(");
+    expect(q30).toContain('event.status == "ACTIVE", 1');
+    // User-window start is the ORIGINAL timeframe (30m), not the
+    // widened fetch window (1h). This is what keeps CLOSED count
+    // bound to the user's choice.
+    expect(q30).toContain("event.end >= now() - 30m");
   });
 
   it("tags each row with was_active_1h_ago", () => {
