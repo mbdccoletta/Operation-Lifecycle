@@ -3112,8 +3112,23 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
       if (dist < 1) return;
 
       const trendData = catTrends[cat];
-      const diff      = trendData ? trendData.recent - trendData.older : 0;
-      const isRising  = diff > 0;
+      const sampleDiff = trendData ? trendData.recent - trendData.older : 0;
+      // 0.0.191 — comet trigger now reads `newlyStartedByCategory`
+      // (server count of ACTIVE problems started in last 1 h) when
+      // available. Earlier the trigger used the sample-derived
+      // `recent - older` net delta, which suppressed the comet on
+      // categories whose closures matched their arrivals — e.g.
+      // AVAILABILITY with 2 newly-arrived problems but net delta
+      // ▼-8 had no comet, even though 2 new ones were genuinely
+      // coming in. After the v0.0.185 split that made the bubble
+      // itself show newly_started, the comet should fire on the
+      // same signal so the trail visually matches the bubble's
+      // pulse. User: "porque nao vejo a animacao do cometa indo
+      // para a categoria de Availability tem rising?"
+      const overrideNewly = countOverrides?.newlyStartedByCategory?.[cat];
+      const hasArrivals = (typeof overrideNewly === "number")
+        ? overrideNewly > 0
+        : sampleDiff > 0;
       // 0.0.118 — comet trail stays RED. Tried cyan for the
       // sci-fi feel but the user re-confirmed: "a cor da animacao
       // cometa deve ser vermelha sempre." Red matches the ACTIVE
@@ -3126,10 +3141,10 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
       const baseColor = colorOf(cat);
       const cR = 255, cG = 77, cB = 106;   // #ff4d6a — matches ACTIVE hub ring
 
-      // Only animate spokes for rising quadrants AND only in the
-      // Rising view mode — motion signals "count climbing", so it's
-      // gated on the metric the user is actually looking at.
-      if (!isRising || dataMode !== "rising") { spokeIdx++; return; }
+      // Only animate spokes when this category had ARRIVALS in 1 h
+      // AND the user is in Rising mode. Motion signals "new things
+      // coming in", gated on the metric the user is looking at.
+      if (!hasArrivals || dataMode !== "rising") { spokeIdx++; return; }
 
       // Central column targets sit directly above/below the hub — a straight
       // spoke would plow through the quadrant's dots. Route a single spoke
@@ -3203,7 +3218,13 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
       // Cleaner / more futuristic than a multi-crest sine wave: one focused
       // "comet" per spoke. Speed/magnitude grows with delta but is capped
       // much lower so the eye can follow each packet calmly.
-      const magC         = Math.min(diff, 8);
+      // 0.0.191 — magnitude is now newly_started arrivals (server) when
+      // available, falling back to the sample-derived net delta. The
+      // comet's brightness / speed / wave count therefore scales with
+      // "how many new ones came in", which is the signal the bubble
+      // itself shows.
+      const magSource = (typeof overrideNewly === "number") ? overrideNewly : sampleDiff;
+      const magC      = Math.min(Math.max(0, magSource), 8);
       const baseAlpha    = 0.06 + magC * 0.015;  // very subtle ambient trail
       const peakAlpha    = 0.70 + magC * 0.025;
       const wavesVisible = 1 + magC * 0.10;      // 1 → 1.8 crests (was up to 3.4)
