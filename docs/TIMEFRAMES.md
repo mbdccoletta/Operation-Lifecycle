@@ -179,6 +179,7 @@ surface back here:
 | Constellation cell ▲+N badge | `ACTIVE - OLDER` from same query | 1 h vs now | `was_active_1h_ago` (1 h) |
 | Constellation cell **Stuck** bubble | `useStatusCategoryCounts.STUCK` | user timeframe | `is_stuck` (4 h) |
 | Constellation cell **Total** bubble | `ACTIVE + CLOSED` from same query | user timeframe | none |
+| Constellation cell **corner-bracket frame** | `subsetLeaderCells` — overrides by mode (v0.0.175): Rising → `risingDeltaByCategory`, Stuck → `stuckByCategory`, Total → `activeByCategory`; categories tied at `max(counts)` get framed | user timeframe | matches the bubble for the active mode (1 h / 4 h / none) |
 | Modal header `N active ▲ ±M /1h` | `categoryCounts.active` + delta | user timeframe + 1 h delta | `was_active_1h_ago` |
 | Modal Rising pill `Rising N` | `categoryCounts.rising` (server) | 1 h | `event.start >= now()-1h` |
 | Modal Stuck pill `TOP K Stuck of N` | `categoryCounts.stuck` (server) | 4 h | `event.start < now()-4h` |
@@ -215,3 +216,13 @@ Notable inflection points so future you can find the "why":
 - **v0.0.174** — modal canvas `TOP_N: 10 → 50`; inner ring
   highlight kept at 10 (`MAX_TIER_PER_CAT`). Caption now reads
   "Top 50 by X · Top 10 highlighted".
+- **v0.0.175** — `subsetLeaderCells` (the constellation
+  corner-bracket frame) now reads from `constellationCountOverrides`
+  in all three modes (Rising → `risingDeltaByCategory`, Stuck →
+  `stuckByCategory`, Total → `activeByCategory`). Previously only
+  Total used the override; Rising/Stuck counted sample-resident
+  actives and could highlight categories whose visible bubble was
+  not the leader (e.g. 7-day Stuck framing ERROR + SLOWDOWN
+  because AVAILABILITY's 4 stuck were outside the 250-row newest
+  sample). The Stuck highlight threshold also shifts from the
+  internal 1 h cutoff to the bubble's 4 h threshold for parity.

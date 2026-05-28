@@ -1308,25 +1308,49 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
   // pattern now extends to all three modes — predicate changes per
   // mode, frame style stays identical.
   //
-  // Counting logic per mode:
-  //   rising      — ACTIVE problems whose `event.start` is within
-  //                 the last hour.
-  //   open_time   — ACTIVE problems whose `event.start` is at least
-  //                 one hour ago (≈ "Stuck", matches the cell-bubble
-  //                 partition in ConstellationView.matches).
-  //   criticality — ALL ACTIVE problems (Total mode). Prefers the
-  //                 count-query override so the leader still matches
-  //                 native Davis when the loaded list is truncated.
+  // 0.0.175 — all three modes now read from
+  // `constellationCountOverrides` (the server-authoritative count
+  // query), not the 250-row sample. Previously only `criticality`
+  // had the override path; `rising` and `open_time` counted
+  // sample-resident actives, which on busy tenants disagreed with
+  // the visible bubble numbers. User screenshot: 7d timeframe in
+  // Stuck mode showed ERROR + SLOWDOWN with corner brackets even
+  // though AVAILABILITY had 4 stuck (max) — the sample had ~0
+  // AVAILABILITY rows (18 totals lost in a sample of 250 dominated
+  // by ERROR/CUSTOM_ALERT each with ~770 totals) but 1 ERROR and 1
+  // SLOWDOWN active+old, so those tied at max and got the frame.
+  // Switching to the override unifies highlight with bubble count.
+  //
+  // Counting logic per mode (source of truth):
+  //   rising      — `risingDeltaByCategory` (max(0, ACTIVE - OLDER)
+  //                 from count query — same number the cell ▲+N
+  //                 badge reads).
+  //   open_time   — `stuckByCategory` (ACTIVE & event.start < now-4h
+  //                 from count query — same number the cell "Stuck"
+  //                 bubble reads). Note: this is 4 h, not 1 h, so
+  //                 the highlight now matches the bubble label.
+  //   criticality — `activeByCategory` (every ACTIVE — same number
+  //                 the cell's `N active` heading reads).
+  //
+  // Falls back to the sample-derived path only when the override
+  // hasn't loaded yet (initial paint).
   const subsetLeaderCells = useMemo<ReadonlySet<string> | undefined>(() => {
     if (highlightedSubsetMode === null) return undefined;
     const counts: Record<string, number> = {};
-    const useOverride =
-      highlightedSubsetMode === "criticality"
-      && constellationCountOverrides?.activeByCategory;
-    if (useOverride) {
-      const override = constellationCountOverrides!.activeByCategory!;
-      for (const id of Object.keys(override)) counts[id] = override[id];
+    let overrideMap: Record<string, number> | undefined;
+    if (highlightedSubsetMode === "criticality") {
+      overrideMap = constellationCountOverrides?.activeByCategory;
+    } else if (highlightedSubsetMode === "open_time") {
+      overrideMap = constellationCountOverrides?.stuckByCategory;
+    } else if (highlightedSubsetMode === "rising") {
+      overrideMap = constellationCountOverrides?.risingDeltaByCategory;
+    }
+    if (overrideMap) {
+      for (const id of Object.keys(overrideMap)) counts[id] = overrideMap[id];
     } else {
+      // Fallback while count query is in flight — sample-derived,
+      // intentionally narrower than the override so a stale paint
+      // doesn't outlive the override's arrival by much.
       const now = Date.now();
       const RISING_WINDOW_MS = 3_600_000;
       for (const p of problems) {
@@ -1338,7 +1362,6 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
           const ts = new Date(p["event.start"]).getTime();
           if (!(ts < now - RISING_WINDOW_MS)) continue;
         }
-        // "criticality" without overrides: every ACTIVE counts.
         const id = resolveGrouping(p);
         if (!id) continue;
         counts[id] = (counts[id] || 0) + 1;
