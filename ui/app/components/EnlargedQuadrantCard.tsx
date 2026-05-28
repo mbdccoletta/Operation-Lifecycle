@@ -360,10 +360,44 @@ export const EnlargedQuadrantCard = ({
     );
     matchingByMode.rising = activeByStartDesc.slice(0, authoritativeRising);
 
-    // 0.0.142 — overlay the focused stuck-fetch result onto the
-    // sample-derived list. Dedup by display_id so a problem present
-    // in BOTH the global sample and the focused fetch counts once.
-    if (fetchedStuckProblems.length > 0) {
+    // 0.0.180 — Stuck slice is now anchored to the server count
+    // (`categoryCounts.stuck`) so the modal's canvas, caption, and
+    // pill always agree on "how many stuck". The previous logic
+    // built the slice from `matchesMode` over the sample and then
+    // appended focused-fetch extras, which on tenants where the
+    // 250-row global sample was biased toward long-lived problems
+    // produced a slice LARGER than the server's stuck count. User:
+    // header said "2 stuck", pill said "TOP 2 of 2", but the canvas
+    // painted 7 dots and the caption read "TOP 7 BY STUCK".
+    //
+    // New rule:
+    //   • If server count is known AND the focused fetch has
+    //     responded, replace the sample-derived slice with the
+    //     fetched problems (server applies the same WHERE
+    //     event.start < now()-4h). Slice to the server count for
+    //     the case where fetched returns more than `categoryCounts.stuck`
+    //     due to a transient skew (server `now()` vs client `now()`).
+    //   • If server count is known but the focused fetch hasn't
+    //     responded yet (initial paint), trim the sample-derived
+    //     slice to the server count, preferring OLDEST problems
+    //     first (most likely to be the actually-stuck cohort).
+    //   • If server count is missing (dev / standalone), keep the
+    //     pre-v0.0.180 append-and-dedup behaviour as a fallback.
+    if (typeof categoryCounts?.stuck === "number") {
+      const authoritativeStuck = categoryCounts.stuck;
+      if (fetchedStuckProblems.length > 0) {
+        matchingByMode.open_time = fetchedStuckProblems.slice(0, authoritativeStuck);
+      } else {
+        matchingByMode.open_time = [...matchingByMode.open_time]
+          .sort(
+            (a, b) =>
+              new Date(a["event.start"]).getTime() - new Date(b["event.start"]).getTime(),
+          )
+          .slice(0, authoritativeStuck);
+      }
+    } else if (fetchedStuckProblems.length > 0) {
+      // 0.0.142 fallback path — no server count, append the focused
+      // fetch to whatever the sample matched.
       const sampleStuckIds = new Set(matchingByMode.open_time.map((p) => p.display_id));
       const extras = fetchedStuckProblems.filter((p) => !sampleStuckIds.has(p.display_id));
       matchingByMode.open_time = [...matchingByMode.open_time, ...extras];
@@ -390,7 +424,7 @@ export const EnlargedQuadrantCard = ({
         criticality: matchingByMode.criticality.length,
       } as Record<SubsetMode, number>,
     };
-  }, [activeProblems, currentMode, risingDelta, fetchedStuckProblems, fetchedRisingProblems, stuckCutoff, categoryCounts?.rising]);
+  }, [activeProblems, currentMode, risingDelta, fetchedStuckProblems, fetchedRisingProblems, stuckCutoff, categoryCounts?.rising, categoryCounts?.stuck]);
 
   // Inner ConstellationView receives the top 10 of the current mode
   // + the closed tail (still feeds `risingCats` / trend bookkeeping).
