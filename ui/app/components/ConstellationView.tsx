@@ -2814,13 +2814,54 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
         // Rotation speed also doubled so the motion reads as a
         // running animation, not a slow drift.
         if (isHighlighted) {
-          const trendData  = catTrends[slot.id];
-          const trendDelta = trendData ? trendData.recent - trendData.older : 0;
-          if (trendDelta !== 0) {
+          // 0.0.187 — switch the animation's trend signal from the
+          // sample-derived `catTrends` to the server-authoritative
+          // pair (activeByCategory − olderByCategory). The old path
+          // was sample-biased TWO ways: (1) wrong direction for
+          // dominant categories like ERROR (sample skews recent →
+          // false positive trend), and (2) flatlined at 0 for
+          // non-dominant categories like RESOURCE_CONTENTION whose
+          // rows are crowded out of the 250-newest global sample —
+          // their bubbles got NO animation even when newly_started
+          // > 0. Fallback chain: server net delta → server arrivals
+          // (so steady-state-with-arrivals still animates) →
+          // sample-derived (dev / standalone with no count query).
+          const trendData = catTrends[slot.id];
+          const sampleDelta = trendData ? trendData.recent - trendData.older : 0;
+          const overrideActive = countOverrides?.activeByCategory?.[slot.id];
+          const overrideOlder  = countOverrides?.olderByCategory?.[slot.id];
+          const overrideNewly  = countOverrides?.newlyStartedByCategory?.[slot.id];
+          const serverNetDelta = (typeof overrideActive === "number" && typeof overrideOlder === "number")
+            ? overrideActive - overrideOlder
+            : null;
+          const hasServerArrivals = (typeof overrideNewly === "number") && overrideNewly > 0;
+          const trendDelta = serverNetDelta !== null ? serverNetDelta : sampleDelta;
+          // Fire the animation when either signal says "something is
+          // happening" — direction-of-motion (net delta) OR
+          // arrivals-without-net-motion. Neutral-with-no-arrivals
+          // stays static, preserving the original "no ring on truly
+          // calm cells" intent.
+          const shouldAnimate = trendDelta !== 0 || hasServerArrivals;
+          if (shouldAnimate) {
             const ringPulse = (Math.sin(tc * 2.2) + 1) / 2;
             const ringR     = r + 6 + ringPulse * 4;
-            const trendColor = trendDelta > 0 ? "#ff4d6a" : "#22d3a0";
-            const trendRgb   = trendDelta > 0 ? "255,77,106" : "34,211,160";
+            // Colour: red if queue is GROWING (net positive),
+            // green if SHRINKING (net negative), accent (category
+            // colour) when net is zero but arrivals are happening
+            // — that ambiguous "steady state with churn" deserves
+            // a neutral signal, not a misleading green/red.
+            let trendColor: string;
+            let trendRgb:   string;
+            if (trendDelta > 0) {
+              trendColor = "#ff4d6a";
+              trendRgb   = "255,77,106";
+            } else if (trendDelta < 0) {
+              trendColor = "#22d3a0";
+              trendRgb   = "34,211,160";
+            } else {
+              trendColor = s.color;
+              trendRgb   = "210,210,210"; // soft halo for the neutral case
+            }
 
             // Primary dashed ring — thick, halo via shadow.
             // 0.0.118 — inner counter-rotating ring removed per user
