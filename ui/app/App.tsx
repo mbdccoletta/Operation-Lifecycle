@@ -66,9 +66,12 @@ const AppContent = () => {
   // "Problems" in its own platform menu. Polls every 60s through
   // its own lightweight count-only DQL query (see hook for cost).
   const { count: activeCount } = useActiveProblemsCount();
-  // Cap at 99+ to keep the badge a stable width regardless of how
-  // busy the tenant is. Anything ≥ 100 just reads "99+".
-  const badgeLabel = activeCount > 99 ? "99+" : String(activeCount);
+  // Cap at 999+ to keep the badge a stable width regardless of how
+  // busy the tenant is. Anything ≥ 1000 just reads "999+". User
+  // 0.0.182 — bumped from 99+ → 999+ so 3-digit counts (typical on
+  // busy tenants like dev-tenant) show their actual value instead
+  // of always reading "99+".
+  const badgeLabel = activeCount > 999 ? "999+" : String(activeCount);
 
   return (
     <div data-theme={theme} style={{ minHeight: "100vh" }}>

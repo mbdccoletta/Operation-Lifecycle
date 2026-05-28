@@ -18,7 +18,8 @@ import { useActiveProblemsCount } from "../../hooks/useActiveProblemsCount";
 
 export const PreviewShell = () => {
   const { count: activeCount } = useActiveProblemsCount();
-  const badgeLabel = activeCount > 99 ? "99+" : String(activeCount);
+  // 0.0.182 — cap bumped 99+ → 999+ to mirror the App.tsx tab badge.
+  const badgeLabel = activeCount > 999 ? "999+" : String(activeCount);
 
   return (
     <div className="neo-preview-shell">
