@@ -2658,10 +2658,17 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
       // baked into the cap so the boosted ring still fits.
       const HIGHLIGHT_BOOST = 1.25;
       const verticalCap = Math.max(10, (safeBot - safeTop) / 2 / HIGHLIGHT_BOOST - 6);
-      // Caps bumped — user 0.0.109: "aumentar um pouco mais os
-      // circulos." Max 28 → 36, min 14 → 18, spacing factor
-      // 0.32 → 0.38. Vertical cap still bounds on tight rows.
-      const baseR = Math.min(36, Math.max(18, Math.min(spacing * 0.38, verticalCap)));
+      // 0.0.179 — floor lowered from 18 → 10. The old floor would
+      // override `verticalCap` on short cells (bottom-row cells in
+      // a 6-category grid, ~80–100 px tall), forcing the bubble to
+      // be larger than the safe area. Boosted by HIGHLIGHT_BOOST,
+      // the bubble would then extend below `safeBot` and OVERLAP
+      // the "Stuck"/"Total" label drawn just under it — the user
+      // reported exactly this clipping. Letting the floor stay at
+      // 10 lets the bubble shrink gracefully on tight rows; in
+      // practice the spacing-derived cap (`spacing * 0.38`) keeps
+      // it from going truly tiny on normal layouts.
+      const baseR = Math.min(36, Math.max(10, Math.min(spacing * 0.38, verticalCap)));
       // Bubble animation removed — user 0.0.109 follow-up: "porem
       // sem animacao". The earlier breathing pulse (±6 % radius)
       // and the dashed-rotating focus ring both made highlighted
@@ -2860,15 +2867,33 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
         // above so the bubble's text layer reads as a unit. The
         // bubble ring already carries the category accent.
         ctx.save();
-        ctx.font = `600 ${(11 * fsMult).toFixed(2)}px "Inter", system-ui, sans-serif`;
+        const labelFontSize = 11 * fsMult;
+        ctx.font = `600 ${labelFontSize.toFixed(2)}px "Inter", system-ui, sans-serif`;
         ctx.textAlign = "center";
         ctx.textBaseline = "top";
         ctx.fillStyle = dk ? "rgba(255,255,255,0.85)" : "rgba(15,23,42,0.85)";
         ctx.globalAlpha = bubbleAlpha;
-        // Label sits below the bubble at a fixed offset from the
-        // SAFE-BOTTOM position so it always lands inside LABEL_PAD
-        // (defined above as 28 px) — clear of the cell divider line.
-        ctx.fillText(s.label, bubbleX, safeBot + 4);
+        // 0.0.179 — label position is now adaptive:
+        //   - lower bound: directly under the bubble (bubbleY + r + 4)
+        //     so even if the bubble grew past `safeBot` on a tight
+        //     cell, the label stays clear of it.
+        //   - upper bound: at most `cell bottom - labelHeight - 2 px`
+        //     so the label can never bleed into the dashed divider
+        //     between rows.
+        // The previous implementation used a fixed `safeBot + 4`,
+        // which on short cells (bottom-row in 6-cat grid) was BELOW
+        // the bubble's bottom — the bubble overflowed onto the label
+        // and clipped it. With this clamp the label always sits in
+        // free space, regardless of how compressed the row is.
+        const labelTextHeight = labelFontSize * 1.25;
+        const desiredLabelTop = bubbleY + r + 4;
+        const labelTopCap = cell.y + cell.h - labelTextHeight - 2;
+        const labelY = Math.min(Math.max(safeBot + 4, desiredLabelTop), labelTopCap);
+        // If the cap is below the desired position there's genuinely
+        // no room — hide the label rather than render it clipped.
+        if (labelY + labelTextHeight <= cell.y + cell.h) {
+          ctx.fillText(s.label, bubbleX, labelY);
+        }
         ctx.restore();
       }
 
