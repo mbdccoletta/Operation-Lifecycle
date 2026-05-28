@@ -1076,26 +1076,53 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
   // in 250-row batches via useProblems pagination (`hasMore` /
   // `loadMore`); this value tells the user the TRUE size of the
   // matching set so the "250 problems" badge doesn't look like a
-  // hard cap. Client-side narrowing (search, pinned problem,
-  // Rising/Stuck chip, brush) is NOT included here — by design,
-  // since those add ad-hoc filters on top of the server-side query.
-  // User: "deixar claro que a list renderiza de 250 em 250, mas
-  // conta todos os problemas."
+  // hard cap.
+  //
+  // 0.0.188 — Rising / Stuck chip filters NOW contribute to this
+  // count too, via `newlyStartedByCategory` and `stuckByCategory`
+  // (server-authoritative, added in v0.0.137 / v0.0.185). Earlier
+  // those chips were considered "client-side narrowing" because the
+  // count query didn't expose them — but the Rising chip on a busy
+  // category like ERROR with 21 newly-arrived problems was reading
+  // "Showing 3 of 5,300" (the 5,300 was the broad active+closed
+  // count, not the Rising-specific number). User: "Se o volume da
+  // ultima hora for maior que 250, a conta não pode ser prejudicada.
+  // Este limite é apenas a camada de apresentação." Now the
+  // denominator reflects what the user actually filtered to: the
+  // 21 Rising number lets them know they should Load more if the
+  // sample didn't include all 21.
+  //
+  // Pure client-side narrowing (search box, pinned problem, brush)
+  // still doesn't contribute — those are explicit user typing /
+  // pointing actions where the sample-derived count is the truth.
   const expectedListTotal = useMemo<number | null>(() => {
     if (!constellationCountOverrides) return null;
     const cats = Array.from(catFilter);
     const activeBy = constellationCountOverrides.activeByCategory ?? {};
     const closedBy = constellationCountOverrides.resolvedByCategory ?? {};
+    const newlyBy  = constellationCountOverrides.newlyStartedByCategory ?? {};
+    const stuckBy  = constellationCountOverrides.stuckByCategory ?? {};
     const sum = (m: Record<string, number>): number => {
       if (cats.length === 0) {
         return Object.values(m).reduce((acc, n) => acc + (Number.isFinite(n) ? n : 0), 0);
       }
       return cats.reduce((acc, c) => acc + (m[c] || 0), 0);
     };
+    // Rising / Stuck chip filters narrow the count to the
+    // server-side `newly_started_1h` / `is_stuck` subsets. Both
+    // imply event.status == "ACTIVE", so a user with the CLOSED
+    // status filter active sees zero (closed problems can't be
+    // currently rising or stuck by definition).
+    if (viewMode === "list" && highlightedSubsetMode === "rising") {
+      return statusFilter === "CLOSED" ? 0 : sum(newlyBy);
+    }
+    if (viewMode === "list" && highlightedSubsetMode === "open_time") {
+      return statusFilter === "CLOSED" ? 0 : sum(stuckBy);
+    }
     if (statusFilter === "ACTIVE") return sum(activeBy);
     if (statusFilter === "CLOSED") return sum(closedBy);
     return sum(activeBy) + sum(closedBy);
-  }, [constellationCountOverrides, catFilter, statusFilter]);
+  }, [constellationCountOverrides, catFilter, statusFilter, viewMode, highlightedSubsetMode]);
 
   // Hour-over-hour trend figures for the mobile headline strip.
   //
