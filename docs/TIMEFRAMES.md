@@ -241,10 +241,11 @@ Notable inflection points so future you can find the "why":
   timeframe when shorter), so `was_active_1h_ago` sees the
   complete 1 h baseline regardless of the user's choice. CLOSED
   count is kept user-timeframe-bound via a new `is_in_user_window`
-  column. HAR-verified dev-tenant case: RC Rising read +1 in
-  "Today" and +3 in "30m" with identical underlying state — the
-  shorter fetch had dropped 2 closures from the 1 h baseline,
-  inflating Rising. Rising delta is now timeframe-invariant.
+  column. HAR-verified production case: RESOURCE_CONTENTION Rising
+  read +1 in "Today" and +3 in "30m" with identical underlying
+  state — the shorter fetch had dropped 2 closures from the 1 h
+  baseline, inflating Rising. Rising delta is now
+  timeframe-invariant.
 - **v0.0.185** — constellation cell Rising bubble now reads
   `newly_started_count` (ACTIVE & start ≥ now-1h) instead of
   `risingDeltaByCategory` (the NET delta). After v0.0.184 made

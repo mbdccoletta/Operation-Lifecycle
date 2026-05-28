@@ -1,9 +1,9 @@
 {
   "$schema": "./.dt-app/app.config.schema.json",
-  "environmentUrl": "https://dev-tenant.apps.dynatrace.com",
+  "environmentUrl": "https://<your-tenant>.apps.dynatrace.com",
   "app": {
     "name": "Problem Lifecycle",
-    "version": "0.0.193",
+    "version": "0.0.194",
     "description": "Triage, prioritize, and share Dynatrace problems with multi-segment analytics.",
     "id": "my.problems.hub",
     "icon": "icon.png",

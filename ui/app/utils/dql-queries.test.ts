@@ -147,7 +147,7 @@ describe("buildFilteredQuery", () => {
     // later `timestamp`) would tie on `event.start` and the engine
     // would pick an arbitrary row, leaving the list showing the old
     // ACTIVE record for a problem Davis has since closed. User
-    // observed list = 20 but server count = 15 on dev-tenant.
+    // observed list = 20 but server count = 15 in production.
     const q = buildFilteredQuery({});
     const tsSortIdx = q.indexOf("| sort timestamp desc");
     const dedupIdx  = q.indexOf("| dedup display_id");

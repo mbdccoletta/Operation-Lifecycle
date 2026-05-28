@@ -407,9 +407,10 @@ export function buildStatusCategoryCountsQuery(filters: {
   // CLOSED records whose `event.end` is between user_tf and 1 h —
   // those records would normally satisfy `was_active_1h_ago = 1`
   // but get dropped before the predicate runs, inflating Rising.
-  // HAR-verified dev-tenant case: RC Rising read +1 in "Today"
-  // tf and +3 in "30m" tf with the same underlying state, because
-  // the 30m fetch lost 2 closures from the 1h baseline.
+  // HAR-verified production case: RESOURCE_CONTENTION Rising read
+  // +1 in "Today" tf and +3 in "30m" tf with the same underlying
+  // state, because the 30m fetch lost 2 closures from the 1h
+  // baseline.
   //
   // The CLOSED count itself stays user-timeframe-bound via the
   // `is_in_user_window` conditional column below — the fetch is
