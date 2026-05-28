@@ -1490,16 +1490,48 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
     const HL_COLORS: Record<string, string> = {};
     for (const g of groupings) HL_COLORS[g.id] = hexToRgb(g.color);
 
-    // Compute per-quadrant aggregate score for the active mode
+    // Compute per-quadrant aggregate score for the active mode.
+    //
+    // 0.0.193 — Rising / open_time / total now read SERVER-side
+    // counts (newlyStartedByCategory / stuckByCategory / active+
+    // resolvedByCategory) whenever the host provides them, instead
+    // of computing aggregates over the 250-row sample. The sample
+    // can be heavily skewed on busy tenants where one category
+    // dominates the global newest-N: a less-busy category with
+    // genuine arrivals or stuck cohort would score 0 from the
+    // sample and miss its leader seal, the ▼ DOWN seal, or get
+    // mis-ranked. Falls back to the sample-derived math for
+    // criticality (no server equivalent) and for hosts that don't
+    // run the count query at all (dev / standalone). User: "Sim,
+    // atualizar tudo".
     const catAgg: Record<string, number> = {};
+    const serverNewly  = countOverrides?.newlyStartedByCategory;
+    const serverStuck  = countOverrides?.stuckByCategory;
+    const serverActive = countOverrides?.activeByCategory;
+    const serverClosed = countOverrides?.resolvedByCategory;
     if (dataMode === "rising") {
-      // Use the actual trend delta (recent - older) so the ▲ UP highlight
-      // matches the trend indicator in the quadrant labels. Only positive
-      // deltas qualify — neutral and falling categories score 0.
-      Object.keys(catTrends).forEach((cat) => {
-        const t = catTrends[cat];
-        catAgg[cat] = Math.max(0, t.recent - t.older);
-      });
+      if (serverNewly) {
+        // Server count of ACTIVE & start ≥ now-1h per category.
+        // Matches the cell's Rising bubble and the ▲+N/1h header.
+        for (const g of groupings) {
+          catAgg[g.id] = Math.max(0, serverNewly[g.id] ?? 0);
+        }
+      } else {
+        Object.keys(catTrends).forEach((cat) => {
+          const t = catTrends[cat];
+          catAgg[cat] = Math.max(0, t.recent - t.older);
+        });
+      }
+    } else if (dataMode === "open_time" && serverStuck) {
+      // Server count of ACTIVE & start < now-4h per category.
+      // Same number the Stuck bubble shows.
+      for (const g of groupings) catAgg[g.id] = Math.max(0, serverStuck[g.id] ?? 0);
+    } else if (dataMode === "total" && (serverActive || serverClosed)) {
+      // Server count of ACTIVE + CLOSED per category. Matches the
+      // Total bubble shown in each cell.
+      for (const g of groupings) {
+        catAgg[g.id] = (serverActive?.[g.id] ?? 0) + (serverClosed?.[g.id] ?? 0);
+      }
     } else {
       stars.forEach((s) => {
         const cur = catAgg[s.cluster] ?? 0;
@@ -1511,10 +1543,21 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
         catAgg[s.cluster] = v;
       });
     }
-    // A quadrant is FALLING when recent < older (overall problem count
-    // shrinking in the last hour). Falling quadrants are NEVER leaders —
-    // they get a "▼" seal instead so the user sees they're improving.
+    // A quadrant is FALLING when its NET delta over the last hour is
+    // negative — i.e. it had MORE problems an hour ago than now,
+    // independent of which mode the user is in. Falling quadrants
+    // are NEVER leaders — they get a "▼" seal instead.
+    //
+    // 0.0.193 — derives from `activeByCategory − olderByCategory`
+    // when both are present (server-authoritative net delta, same
+    // signal the cell title's `▼-N` arrow already uses). Falls back
+    // to the sample-derived `recent < older` for dev / standalone.
     const isFalling = (cat: string): boolean => {
+      if (serverActive && countOverrides?.olderByCategory) {
+        const a = serverActive[cat];
+        const o = countOverrides.olderByCategory[cat];
+        if (typeof a === "number" && typeof o === "number") return a < o;
+      }
       const t = catTrends[cat];
       return !!t && t.recent < t.older;
     };
