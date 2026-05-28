@@ -632,6 +632,34 @@ export const EnlargedQuadrantCard = ({
                 initialExpandedQuadrant={quadrantId}
                 lockExpandedQuadrant
                 catTrendOverride={trendOverride}
+                /* 0.0.192 — synthesize a single-cell countOverrides
+                   from `categoryCounts` so the inner constellation's
+                   animations (bubble ring, title-row trail) read
+                   server-authoritative numbers instead of falling
+                   back to the sample-derived `catTrends` (which had
+                   `older` inflated by closed problems in the slice
+                   and routinely flipped sign). Without this every
+                   modal canvas reverted to the pre-v0.0.187/191
+                   bugs internally. */
+                countOverrides={categoryCounts ? {
+                  activeByCategory:   { [quadrantId]: categoryCounts.active },
+                  resolvedByCategory: { [quadrantId]: categoryCounts.closed },
+                  ...(typeof categoryCounts.stuck === "number"
+                    ? { stuckByCategory: { [quadrantId]: categoryCounts.stuck } }
+                    : {}),
+                  ...(typeof categoryCounts.newlyStarted === "number"
+                    ? { newlyStartedByCategory: { [quadrantId]: categoryCounts.newlyStarted } }
+                    : {}),
+                  ...(typeof categoryCounts.rising === "number"
+                    ? {
+                        risingDeltaByCategory: { [quadrantId]: Math.max(0, categoryCounts.rising) },
+                        // Derive olderByCategory so the bubble ring's
+                        // net-delta math (active - older) lands on
+                        // the same number the header `▲/▼` arrow shows.
+                        olderByCategory: { [quadrantId]: Math.max(0, categoryCounts.active - categoryCounts.rising) },
+                      }
+                    : {}),
+                } : undefined}
               />
               {/* 0.0.117 — gradient backdrop strip behind the mode
                   pills. Without it, dots placed near the bottom-right

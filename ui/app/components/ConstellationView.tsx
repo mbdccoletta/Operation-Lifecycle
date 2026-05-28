@@ -3350,9 +3350,18 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
       const upRgb = "255,77,106";
       for (const slot of layout) {
         const tr = catTrends[slot.id];
-        if (!tr) continue;
-        const diff = tr.recent - tr.older;
-        if (diff <= 0) continue;
+        const sampleDiff = tr ? tr.recent - tr.older : 0;
+        // 0.0.192 — same fix as v0.0.191 (hub comet): trigger reads
+        // `newlyStartedByCategory` when available, falling back to
+        // the sample-derived diff for hosts that don't run the count
+        // query. The title-row trail used to be suppressed for any
+        // cell whose sample net delta was ≤ 0, missing the comet on
+        // categories with arrivals but matching closures.
+        const overrideNewly = countOverrides?.newlyStartedByCategory?.[slot.id];
+        const hasArrivals = (typeof overrideNewly === "number")
+          ? overrideNewly > 0
+          : sampleDiff > 0;
+        if (!hasArrivals) continue;
         const cell = cellRects[slot.id];
         if (!cell || cell.w < 80 || cell.h < 50) continue;
 
@@ -3373,7 +3382,10 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
         if (trackW < 40) continue;
 
         // Match the main-page spoke parameters except waveSpeed (half).
-        const magC           = Math.min(diff, 8);
+        // 0.0.192 — magnitude from newly_started arrivals (server)
+        // when available, falling back to the sample diff.
+        const magSource = (typeof overrideNewly === "number") ? overrideNewly : sampleDiff;
+        const magC           = Math.min(Math.max(0, magSource), 8);
         const baseAlpha      = 0.06 + magC * 0.015;
         const peakAlpha      = 0.70 + magC * 0.025;
         const wavesVisible   = 1 + magC * 0.10;
