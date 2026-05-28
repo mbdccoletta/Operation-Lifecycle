@@ -6,8 +6,6 @@
   "private": true,
   "scripts": {
     "start": "dt-app dev",
-    "dev:devtenant": "dt-app dev --environment-url https://dev-tenant.apps.dynatrace.com",
-    "deploy:devtenant": "dt-app deploy --environment-url https://dev-tenant.apps.dynatrace.com",
     "build": "dt-app build",
     "deploy": "dt-app deploy",
     "uninstall": "dt-app uninstall",

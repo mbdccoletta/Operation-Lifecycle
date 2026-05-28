@@ -1,6 +1,6 @@
 {
   "$schema": "./.dt-app/app.config.schema.json",
-  "environmentUrl": "https://bwm98081.apps.dynatrace.com",
+  "environmentUrl": "https://dev-tenant.apps.dynatrace.com",
   "app": {
     "name": "Problem Lifecycle",
     "version": "0.0.181",
