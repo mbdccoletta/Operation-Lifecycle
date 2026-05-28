@@ -89,7 +89,17 @@ export interface EnlargedQuadrantCardProps {
    *  Used by the Rising pill so its number always matches the cell
    *  bubble even when the 250-row sample misses the actual rising
    *  rows. */
-  categoryCounts?: { active: number; closed: number; stuck?: number; rising?: number };
+  /** 0.0.186 — `newlyStarted` added: server count of ACTIVE problems
+   *  whose `event.start` is within the last 1 h. After v0.0.185
+   *  the cell Rising bubble started reading this (so the visual cue
+   *  fires whenever new problems arrive even if closures matched).
+   *  The modal must also consume it for gating the focused Rising
+   *  fetch and sizing the canvas slice — otherwise clicking a cell
+   *  whose bubble reads "Rising 18" opens a modal that paints
+   *  ZERO dots (because `rising`, the net delta, collapsed to 0).
+   *  `rising` (the net delta) is kept for the modal HEADER's
+   *  `▲/▼ N/1h` trend arrow so queue direction stays visible. */
+  categoryCounts?: { active: number; closed: number; stuck?: number; rising?: number; newlyStarted?: number };
   /** 0.0.142 — timeframe context for the on-demand stuck-by-category
    *  fetch. Same shape useProblems accepts. When the user lands on
    *  the Stuck pill the modal fires a focused DQL to retrieve the
@@ -328,9 +338,14 @@ export const EnlargedQuadrantCard = ({
   // show. Bridges the 250-row sample gap for busy categories where
   // the global newest-N doesn't include this category's recent
   // arrivals.
+  // 0.0.186 — gate on `newlyStarted` (server count of arrivals in
+  // 1 h) instead of `rising` (net delta). Otherwise a category
+  // whose closures matched its arrivals would have rising = 0 and
+  // the fetch would never fire, leaving the canvas empty even
+  // though the cell bubble showed N new problems.
   const risingFetchEnabled =
     currentMode === "rising" &&
-    (categoryCounts?.rising ?? 0) > 0;
+    (categoryCounts?.newlyStarted ?? categoryCounts?.rising ?? 0) > 0;
   const { problems: fetchedRisingProblems } = useRisingProblemsByCategory({
     category: quadrantId,
     timeframe: risingFetch?.timeframe,
@@ -351,9 +366,17 @@ export const EnlargedQuadrantCard = ({
     // server-authoritative count (`categoryCounts.rising`) when
     // available so the slice size matches the cell bubble even on
     // tenants where the 250-row sample undercounts.
-    const authoritativeRising = (typeof categoryCounts?.rising === "number")
-      ? categoryCounts.rising
-      : risingDelta;
+    // 0.0.186 — use `newlyStarted` here. The bubble + canvas semantic
+    // is now "problems that arrived in the last hour" (always >= 0),
+    // not the net delta (which can collapse to 0 even when 18 new
+    // ones arrived). Falls back to `rising` for backwards compat
+    // when the host hasn't populated newlyStarted yet.
+    const authoritativeRising =
+      (typeof categoryCounts?.newlyStarted === "number")
+        ? categoryCounts.newlyStarted
+        : (typeof categoryCounts?.rising === "number")
+          ? categoryCounts.rising
+          : risingDelta;
     const activeByStartDesc = [...activeProblems].sort(
       (a, b) =>
         new Date(b["event.start"]).getTime() - new Date(a["event.start"]).getTime(),
@@ -390,7 +413,7 @@ export const EnlargedQuadrantCard = ({
         criticality: matchingByMode.criticality.length,
       } as Record<SubsetMode, number>,
     };
-  }, [activeProblems, currentMode, risingDelta, fetchedStuckProblems, fetchedRisingProblems, stuckCutoff, categoryCounts?.rising]);
+  }, [activeProblems, currentMode, risingDelta, fetchedStuckProblems, fetchedRisingProblems, stuckCutoff, categoryCounts?.rising, categoryCounts?.newlyStarted]);
 
   // Inner ConstellationView receives the top 10 of the current mode
   // + the closed tail (still feeds `risingCats` / trend bookkeeping).
@@ -518,22 +541,22 @@ export const EnlargedQuadrantCard = ({
                 // as a local const so the caption stays honest if
                 // we ever flex this number per category.
                 const LEADING_DEFAULT = 10;
-                // 0.0.176 — Rising mode highlights ONLY the net delta
-                // (categoryCounts.rising = max(0, ACTIVE - OLDER))
-                // because "Rising" semantically means "the net new
-                // arrivals", not "everything that opened in 1h".
-                // The slice itself (matchingForCurrent) is still all
-                // problems started in the 1h window (24 in the user's
-                // example) — so the user sees the full context — but
-                // only the netDelta dots (2) get the ring. For Stuck
-                // and Total the ring count stays at the leaderboard
-                // convention (10).
+                // 0.0.176 — Rising mode highlights ONLY the net delta.
+                // 0.0.186 — replaced net delta with `newlyStarted`
+                // (server count of ACTIVE & start ≥ now-1h). The
+                // net delta could collapse to zero or go negative
+                // when closures matched openings, leaving the canvas
+                // with N dots but zero highlighted — confusing.
+                // Now leading == min(MAX_TIER_PER_CAT, newlyStarted)
+                // so the highlights match the cell bubble exactly.
                 const isRising = currentMode === "rising";
-                const risingNetDelta = isRising && typeof categoryCounts?.rising === "number"
-                  ? categoryCounts.rising
-                  : null;
-                const leading = isRising && risingNetDelta !== null
-                  ? Math.min(LEADING_DEFAULT, risingNetDelta, showing)
+                const risingHighlightCount = isRising && typeof categoryCounts?.newlyStarted === "number"
+                  ? categoryCounts.newlyStarted
+                  : (isRising && typeof categoryCounts?.rising === "number"
+                      ? categoryCounts.rising
+                      : null);
+                const leading = isRising && risingHighlightCount !== null
+                  ? Math.min(LEADING_DEFAULT, risingHighlightCount, showing)
                   : Math.min(LEADING_DEFAULT, showing);
                 const modeLabel = ALL_MODES.find((m) => m.mode === currentMode)?.label
                   ?? currentMode;
@@ -597,8 +620,12 @@ export const EnlargedQuadrantCard = ({
                    context, but only the genuinely net-new arrivals
                    get the ring. Other modes keep MAX_TIER_PER_CAT=10. */
                 maxHighlightTier={
-                  currentMode === "rising" && typeof categoryCounts?.rising === "number"
-                    ? categoryCounts.rising
+                  currentMode === "rising"
+                    ? (typeof categoryCounts?.newlyStarted === "number"
+                        ? categoryCounts.newlyStarted
+                        : (typeof categoryCounts?.rising === "number"
+                            ? categoryCounts.rising
+                            : undefined))
                     : undefined
                 }
                 dotScale={1.6}
@@ -688,12 +715,25 @@ export const EnlargedQuadrantCard = ({
                     shownTopActive = Math.min(TOP_N, count);
                   } else {
                     // Rising
-                    const netDelta = typeof categoryCounts?.rising === "number"
-                      ? categoryCounts.rising
-                      : drilldown.counts.rising;
-                    const newlyStarted = drilldown.counts.rising;
-                    count = isActive ? newlyStarted : netDelta;
-                    shownTopActive = Math.min(TOP_N, netDelta);
+                    // 0.0.186 — both the TOP badge and the "of N"
+                    // denominator now read `newlyStarted` (server
+                    // count of ACTIVE & start ≥ now-1h). v0.0.176
+                    // had used net delta for the TOP badge to
+                    // distinguish "2 net new" from "24 newly arrived",
+                    // but with the v0.0.185 cell change the bubble
+                    // already shows newlyStarted — clicking a cell
+                    // that reads "Rising 18" and seeing "TOP 0 of 0"
+                    // in the modal was the bug. The net delta is
+                    // still visible in the modal header's `▲/▼ N/1h`
+                    // trend arrow, so queue direction stays clear.
+                    const authoritativeNewly =
+                      typeof categoryCounts?.newlyStarted === "number"
+                        ? categoryCounts.newlyStarted
+                        : (typeof categoryCounts?.rising === "number"
+                            ? categoryCounts.rising
+                            : drilldown.counts.rising);
+                    count = authoritativeNewly;
+                    shownTopActive = Math.min(TOP_N, authoritativeNewly);
                   }
                   const shownTop = isActive ? shownTopActive : 0;
                   // 0.0.109 follow-up — pick the active pill's text

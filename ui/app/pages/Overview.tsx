@@ -3709,11 +3709,18 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
                   // 0.0.137 — pass authoritative Stuck count too so
                   // the modal pill agrees with the cell bubble.
                   stuck: constellationCountOverrides.stuckByCategory?.[enlargedQuadrant],
-                  // 0.0.169 — same for Rising. ACTIVE - OLDER from
-                  // the count query, computed once in Overview's
-                  // constellationCountOverrides and reused by the
-                  // cell bubble + modal pill.
+                  // 0.0.169 — Rising for the modal: net delta
+                  // (ACTIVE - OLDER from the count query). Used by
+                  // the modal HEADER `▲/▼ N/1h` trend arrow.
+                  // 0.0.186 — split: net delta stays for the header,
+                  // but `newlyStarted` (server count of ACTIVE &
+                  // start ≥ now-1h) is what gates the focused
+                  // fetch + sizes the canvas slice. Otherwise a cell
+                  // whose Rising bubble shows 18 newly arrived
+                  // problems would open a modal with `0 STARTED IN
+                  // 1H` because net delta had collapsed to zero.
                   rising: constellationCountOverrides.risingDeltaByCategory?.[enlargedQuadrant],
+                  newlyStarted: constellationCountOverrides.newlyStartedByCategory?.[enlargedQuadrant],
                 }
               : undefined
           }
