@@ -2845,23 +2845,19 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
           if (shouldAnimate) {
             const ringPulse = (Math.sin(tc * 2.2) + 1) / 2;
             const ringR     = r + 6 + ringPulse * 4;
-            // Colour: red if queue is GROWING (net positive),
-            // green if SHRINKING (net negative), accent (category
-            // colour) when net is zero but arrivals are happening
-            // — that ambiguous "steady state with churn" deserves
-            // a neutral signal, not a misleading green/red.
-            let trendColor: string;
-            let trendRgb:   string;
-            if (trendDelta > 0) {
-              trendColor = "#ff4d6a";
-              trendRgb   = "255,77,106";
-            } else if (trendDelta < 0) {
-              trendColor = "#22d3a0";
-              trendRgb   = "34,211,160";
-            } else {
-              trendColor = s.color;
-              trendRgb   = "210,210,210"; // soft halo for the neutral case
-            }
+            // 0.0.189 — Colour collapsed to RED across all cases
+            // (was red/green/accent based on net delta sign). User:
+            // "sempre vermelho quando há chegadas". The original
+            // v0.0.118 trend-direction palette was a clever idea
+            // (red = worse, green = better) but became confusing
+            // after the v0.0.185 split — the bubble itself shows
+            // newly-arrived count (which never goes negative), so
+            // a green ring around it read as a mixed signal. The
+            // cell title's `▲/▼ N/1h` arrow already carries queue
+            // direction; the ring's job is to scream "this cell
+            // has activity", and red carries that universally.
+            const trendColor = "#ff4d6a";
+            const trendRgb   = "255,77,106";
 
             // Primary dashed ring — thick, halo via shadow.
             // 0.0.118 — inner counter-rotating ring removed per user
