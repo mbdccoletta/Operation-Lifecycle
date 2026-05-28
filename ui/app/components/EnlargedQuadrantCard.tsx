@@ -99,7 +99,7 @@ export interface EnlargedQuadrantCardProps {
    *  ZERO dots (because `rising`, the net delta, collapsed to 0).
    *  `rising` (the net delta) is kept for the modal HEADER's
    *  `▲/▼ N/1h` trend arrow so queue direction stays visible. */
-  categoryCounts?: { active: number; closed: number; stuck?: number; rising?: number; newlyStarted?: number };
+  categoryCounts?: { active: number; closed: number; stuck?: number; rising?: number; newlyStarted?: number; older?: number };
   /** 0.0.142 — timeframe context for the on-demand stuck-by-category
    *  fetch. Same shape useProblems accepts. When the user lands on
    *  the Stuck pill the modal fires a focused DQL to retrieve the
@@ -218,16 +218,35 @@ export const EnlargedQuadrantCard = ({
     }
     return { recent, older };
   }, [quadProblems]);
-  // 0.0.173 — prefer the SERVER's signed delta when the host
-  // provides it (categoryCounts.rising is the positive part; we
-  // can reconstruct sign via active vs displayedActive). For now,
-  // use categoryCounts.rising directly when defined — it's the
-  // same number the cell bubble + chip badge use. Falls back to
-  // sample trend for dev/standalone hosts.
-  const trendDelta = (typeof categoryCounts?.rising === "number")
-    ? categoryCounts.rising
-    : (quadTrend.recent - quadTrend.older);
+  // 0.0.195 — Compute the SIGNED net delta from `active - older`
+  // when both are available, so the header arrow can show `▼-22`
+  // (and the decomposition line below it can split that into
+  // "16 arrived, 38 closed in 1h"). Previously we used
+  // categoryCounts.rising which was `max(0, ACTIVE-OLDER)` —
+  // never negative — and fell through to the sample-derived
+  // quadTrend for falling categories. The new pair (active +
+  // older) gives a server-authoritative signed delta everywhere.
+  const trendDelta =
+    (typeof categoryCounts?.active === "number" && typeof categoryCounts?.older === "number")
+      ? categoryCounts.active - categoryCounts.older
+      : (typeof categoryCounts?.rising === "number")
+        ? categoryCounts.rising
+        : (quadTrend.recent - quadTrend.older);
   const risingDelta = Math.max(0, trendDelta);
+  // 0.0.195 — Decomposition for the header subtitle:
+  //   net_delta = newly_started_1h − closed_from_active_1h
+  // So:
+  //   closed_from_active_1h = newly_started_1h − net_delta
+  // (where newly_started_1h = ACTIVE problems opened in the last
+  // hour, and closed_from_active_1h = problems that were ACTIVE 1 h
+  // ago and have since closed in the last hour). The two together
+  // explain how the queue moved by `net_delta`.
+  const newlyStartedFor1h = typeof categoryCounts?.newlyStarted === "number"
+    ? categoryCounts.newlyStarted
+    : null;
+  const closedFromOldFor1h = (newlyStartedFor1h !== null)
+    ? Math.max(0, newlyStartedFor1h - trendDelta)
+    : null;
 
   // ── Drill-down: explode top 10 + keep other modes as bubbles ────
   // 0.0.109 follow-up. User asked: "Ao fazer drill down, explodir
@@ -500,6 +519,46 @@ export const EnlargedQuadrantCard = ({
             ✕
           </button>
         </header>
+
+        {/* 0.0.195 — Decomposition sub-header. Renders only when
+            BOTH signals are non-trivial: there are arrivals in the
+            last hour AND the net queue movement is non-zero.
+            Reads as "16 arrived · 38 closed · queue shrank by 22 in
+            1 h" — explains how `▼-22` and `Rising 16` coexist
+            instead of looking contradictory. User: "como devo
+            interpretar a tendencia de down com rising ao mesmo
+            tempo?" */}
+        {newlyStartedFor1h !== null && newlyStartedFor1h > 0 && trendDelta !== 0 && closedFromOldFor1h !== null && (
+          <div
+            aria-live="polite"
+            style={{
+              padding: "6px 24px 10px",
+              fontSize: 11,
+              fontFamily: '"SF Mono","JetBrains Mono",monospace',
+              color: "var(--neo-text-3)",
+              letterSpacing: "0.04em",
+              textTransform: "uppercase",
+              borderBottom: "1px dashed rgba(255,255,255,0.06)",
+            }}
+            title="Net queue movement decomposed: arrivals minus closures of previously-active problems"
+          >
+            <span style={{ color: "#ff4d6a", fontWeight: 600 }}>
+              {newlyStartedFor1h.toLocaleString()} arrived
+            </span>
+            <span style={{ margin: "0 8px", opacity: 0.5 }}>·</span>
+            <span style={{ color: "#22d3a0", fontWeight: 600 }}>
+              {closedFromOldFor1h.toLocaleString()} closed
+            </span>
+            <span style={{ margin: "0 8px", opacity: 0.5 }}>·</span>
+            <span style={{ color: "var(--neo-text-2)" }}>
+              queue {trendDelta > 0 ? "grew by" : "shrank by"}{" "}
+              <strong style={{ color: trendDelta > 0 ? "#ff4d6a" : "#22d3a0" }}>
+                {Math.abs(trendDelta)}
+              </strong>{" "}
+              in 1h
+            </span>
+          </div>
+        )}
 
         <div className="neo-enlarged-quadrant-body">
           {/* 0.0.171 — empty-state gate uses the AUTHORITATIVE

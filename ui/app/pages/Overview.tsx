@@ -3748,6 +3748,14 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
                   // 1H` because net delta had collapsed to zero.
                   rising: constellationCountOverrides.risingDeltaByCategory?.[enlargedQuadrant],
                   newlyStarted: constellationCountOverrides.newlyStartedByCategory?.[enlargedQuadrant],
+                  // 0.0.195 — pass `older` (count of problems alive
+                  // 1 h ago, server). Lets the modal show the SIGNED
+                  // net delta (active - older) for the header arrow
+                  // and decompose it into "arrived + closed" below
+                  // the title so the user reads ▼-22 alongside
+                  // Rising 16 as "16 arrived + 38 closed = net -22"
+                  // instead of two seemingly contradictory signals.
+                  older: constellationCountOverrides.olderByCategory?.[enlargedQuadrant],
                 }
               : undefined
           }
