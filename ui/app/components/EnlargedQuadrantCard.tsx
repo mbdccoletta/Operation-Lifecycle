@@ -517,8 +517,24 @@ export const EnlargedQuadrantCard = ({
                 // Mirror ConstellationView's MAX_TIER_PER_CAT — kept
                 // as a local const so the caption stays honest if
                 // we ever flex this number per category.
-                const LEADING = 10;
-                const leading = Math.min(LEADING, showing);
+                const LEADING_DEFAULT = 10;
+                // 0.0.176 — Rising mode highlights ONLY the net delta
+                // (categoryCounts.rising = max(0, ACTIVE - OLDER))
+                // because "Rising" semantically means "the net new
+                // arrivals", not "everything that opened in 1h".
+                // The slice itself (matchingForCurrent) is still all
+                // problems started in the 1h window (24 in the user's
+                // example) — so the user sees the full context — but
+                // only the netDelta dots (2) get the ring. For Stuck
+                // and Total the ring count stays at the leaderboard
+                // convention (10).
+                const isRising = currentMode === "rising";
+                const risingNetDelta = isRising && typeof categoryCounts?.rising === "number"
+                  ? categoryCounts.rising
+                  : null;
+                const leading = isRising && risingNetDelta !== null
+                  ? Math.min(LEADING_DEFAULT, risingNetDelta, showing)
+                  : Math.min(LEADING_DEFAULT, showing);
                 const modeLabel = ALL_MODES.find((m) => m.mode === currentMode)?.label
                   ?? currentMode;
                 return (
@@ -544,13 +560,17 @@ export const EnlargedQuadrantCard = ({
                     </span>
                     <span style={{ margin: "0 8px", opacity: 0.5 }}>·</span>
                     <span>
-                      Top {showing}{matchingForCurrent > showing ? ` of ${matchingForCurrent}` : ""} by {modeLabel.toLowerCase()}
+                      {isRising
+                        ? `${showing} started in 1h`
+                        : `Top ${showing}${matchingForCurrent > showing ? ` of ${matchingForCurrent}` : ""} by ${modeLabel.toLowerCase()}`}
                     </span>
-                    {leading > 0 && showing > leading && (
+                    {leading > 0 && (showing > leading || isRising) && (
                       <>
                         <span style={{ margin: "0 8px", opacity: 0.5 }}>·</span>
                         <span style={{ color: "var(--neo-text-2)", fontWeight: 600 }}>
-                          Top {leading} highlighted
+                          {isRising
+                            ? `${leading} net new highlighted`
+                            : `Top ${leading} highlighted`}
                         </span>
                       </>
                     )}
@@ -571,6 +591,16 @@ export const EnlargedQuadrantCard = ({
                 showResolvedZone={false}
                 disableMagnifierLens
                 disableAggregation
+                /* 0.0.176 — Rising mode caps the highlight ring at
+                   the server net delta (categoryCounts.rising). Keeps
+                   the slice wide (all problems started in 1h) for
+                   context, but only the genuinely net-new arrivals
+                   get the ring. Other modes keep MAX_TIER_PER_CAT=10. */
+                maxHighlightTier={
+                  currentMode === "rising" && typeof categoryCounts?.rising === "number"
+                    ? categoryCounts.rising
+                    : undefined
+                }
                 dotScale={1.6}
                 initialExpandedQuadrant={quadrantId}
                 lockExpandedQuadrant
@@ -630,15 +660,42 @@ export const EnlargedQuadrantCard = ({
                   // modal — pill matches the cell bubble exactly,
                   // even on tenants where the 250-row sample
                   // undercounted Rising.
-                  const count = m.mode === "criticality"
-                    ? displayedActive + displayedClosed
-                    : (m.mode === "open_time" && typeof categoryCounts?.stuck === "number"
-                        ? categoryCounts.stuck
-                        : (m.mode === "rising" && typeof categoryCounts?.rising === "number"
-                            ? categoryCounts.rising
-                            : drilldown.counts[m.mode]));
+                  //
+                  // 0.0.176 — Rising pill splits into TWO numbers when
+                  // active:
+                  //   shownTop = net delta (categoryCounts.rising,
+                  //              matches the cell ▲+N badge)
+                  //   count    = newly-started in 1h (drilldown.counts.rising,
+                  //              the full slice the canvas paints)
+                  // Reads as "TOP 2 new Rising of 24 in 1h" — i.e.
+                  // "2 net new out of 24 problems that opened in the
+                  // 1h window". Without the split, pill said "TOP 2
+                  // of 2" while the canvas showed 24 dots — confusing.
+                  // When INACTIVE the Rising pill collapses to the
+                  // net delta only ("Rising 2") so it agrees with the
+                  // cell badge at a glance. Stuck and Total keep the
+                  // previous single-number semantic.
                   const isActive = m.mode === currentMode;
-                  const shownTop = isActive ? Math.min(TOP_N, count) : 0;
+                  let count: number;
+                  let shownTopActive: number;
+                  if (m.mode === "criticality") {
+                    count = displayedActive + displayedClosed;
+                    shownTopActive = Math.min(TOP_N, count);
+                  } else if (m.mode === "open_time") {
+                    count = typeof categoryCounts?.stuck === "number"
+                      ? categoryCounts.stuck
+                      : drilldown.counts.open_time;
+                    shownTopActive = Math.min(TOP_N, count);
+                  } else {
+                    // Rising
+                    const netDelta = typeof categoryCounts?.rising === "number"
+                      ? categoryCounts.rising
+                      : drilldown.counts.rising;
+                    const newlyStarted = drilldown.counts.rising;
+                    count = isActive ? newlyStarted : netDelta;
+                    shownTopActive = Math.min(TOP_N, netDelta);
+                  }
+                  const shownTop = isActive ? shownTopActive : 0;
                   // 0.0.109 follow-up — pick the active pill's text
                   // colour by accent luminance (YIQ). User reported
                   // "não consigo ler" on AVAILABILITY's lime green
@@ -716,7 +773,7 @@ export const EnlargedQuadrantCard = ({
                           background: insetBg,
                           letterSpacing: "0.05em",
                         }}>
-                          TOP {shownTop}
+                          TOP {shownTop}{m.mode === "rising" ? " new" : ""}
                         </span>
                       )}
                       <span style={{ fontWeight: isActive ? 700 : 600 }}>{m.label}</span>
@@ -725,7 +782,7 @@ export const EnlargedQuadrantCard = ({
                         fontWeight: 700,
                       }}>
                         {isActive
-                          ? `of ${count.toLocaleString()}`
+                          ? `of ${count.toLocaleString()}${m.mode === "rising" ? " in 1h" : ""}`
                           : count.toLocaleString()}
                       </span>
                     </button>

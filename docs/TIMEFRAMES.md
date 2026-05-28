@@ -226,3 +226,13 @@ Notable inflection points so future you can find the "why":
   because AVAILABILITY's 4 stuck were outside the 250-row newest
   sample). The Stuck highlight threshold also shifts from the
   internal 1 h cutoff to the bubble's 4 h threshold for parity.
+- **v0.0.176** — modal Rising mode now distinguishes **net delta**
+  (`categoryCounts.rising` = max(0, ACTIVE - OLDER), what the cell
+  ▲+N badge shows) from **newly started in 1 h** (the focused
+  fetch + sample union, the full list of `event.start ≥ now()-1h`
+  active problems). The canvas paints all newly-started for
+  context (24 in the user's example) but only the netDelta dots
+  (2) get the highlight ring. Pill reads "TOP 2 new Rising of 24
+  in 1h" when active and "Rising 2" when inactive (matches the
+  cell). Caption reads "24 started in 1h · 2 net new highlighted".
+  Plumbed via new `maxHighlightTier` prop on ConstellationView.

@@ -130,6 +130,15 @@ interface ConstellationViewProps {
    *  see individual dots, so the aggregation safety net would just
    *  hide the data they came to see. */
   disableAggregation?: boolean;
+  /** 0.0.175 — override for the "top-tier highlight" dot count
+   *  inside the `disableAggregation` branch. Default is
+   *  `MAX_TIER_PER_CAT` (10). The Rising modal sets this to the
+   *  server-authoritative net delta (`categoryCounts.rising`) so
+   *  the canvas ring count equals the cell's ▲+N badge — for the
+   *  case where the slice itself shows ALL newly-started problems
+   *  but only the net-new ones deserve emphasis. Passing 0 hides
+   *  the ring entirely (no leaders to highlight). */
+  maxHighlightTier?: number;
   /** Pre-sets the internal `expandedQuadrant` state on mount so the
    *  canvas opens already zoomed into a specific quadrant. The user
    *  can still click "Exit zoom" / press ESC to leave the zoom; from
@@ -243,6 +252,7 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
   stuckCutoffMs,
   dotScale = 1,
   disableAggregation = false,
+  maxHighlightTier,
   initialExpandedQuadrant,
   lockExpandedQuadrant = false,
   highlightedSubsetMode = null,
@@ -499,9 +509,19 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
         // score-tier filter in modal mode — flag every active dot
         // as top-tier so the focus ring fires for the full slice.
         if (disableAggregation) {
+          // 0.0.175 — `maxHighlightTier` lets the modal narrow the
+          // highlight ring count below MAX_TIER_PER_CAT (e.g. Rising
+          // mode passes `categoryCounts.rising` = net delta so only
+          // the genuinely new arrivals get the ring, even though the
+          // full slice contains every problem started in 1h). Cap at
+          // MAX_TIER_PER_CAT so the modal can't ask for MORE rings
+          // than the default leaderboard tier; floor at 0.
+          const tierCap = typeof maxHighlightTier === "number"
+            ? Math.max(0, Math.min(MAX_TIER_PER_CAT, maxHighlightTier))
+            : MAX_TIER_PER_CAT;
           const ids = probs
             .filter((p) => p["event.status"] === "ACTIVE")
-            .slice(0, MAX_TIER_PER_CAT)
+            .slice(0, tierCap)
             .map((p) => p.display_id);
           topListByCat[cat] = ids;
           ids.forEach((id, i) => { tierIndexById[id] = i; });
@@ -740,7 +760,7 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
     }
 
     return built;
-  }, [problems, dataMode, isMobileOrTablet, slotById, colorOf, resolveGrouping]);
+  }, [problems, dataMode, isMobileOrTablet, slotById, colorOf, resolveGrouping, disableAggregation, maxHighlightTier]);
 
   /** Per-cell aggregation data — for each cell, the count of
    *  non-top-tier ACTIVE problems broken down by Davis category. Used
