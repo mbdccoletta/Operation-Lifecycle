@@ -23,6 +23,7 @@ import {
   isDavisProblemId,
 } from "../utils/problem-timeline-queries";
 import { formatDuration } from "../utils/formatters";
+import { useDemoMode } from "../contexts/DemoModeContext";
 
 /** Coarse-grained category we surface in the UI. The exact
  *  `annotation.source` string from Davis lands in `sourceLabel` so
@@ -200,6 +201,14 @@ export function useProblemTimeline(
 ): UseProblemTimelineResult {
   const enabled = opts.enabled ?? true;
   const valid = isDavisProblemId(davisProblemId);
+  // 0.0.198 — DPS Tier 5 demo gate. The Timeline page is the most
+  // expensive lazy fan-out in the app (one annotations + one
+  // workflow DQL per expanded problem). In demo sessions the
+  // lifecycle/auto-generated events already give a meaningful
+  // story; the live DQL adds nothing but DPS. Gating both
+  // useDql calls here also covers the per-row activity feed
+  // on Overview when ?demo=1 is on.
+  const demo = useDemoMode();
 
   const annotationsParams = useMemo(() => ({
     query: buildAnnotationsQuery(davisProblemId, problemStartIso),
@@ -214,14 +223,15 @@ export function useProblemTimeline(
   }), [davisProblemId, problemStartIso]);
 
   const annotationsQuery = useDql<AnnotationRecord>(annotationsParams, {
-    // Gates: valid id + caller opted in. The `enabled` toggle lets
-    // the multi-problem stack on the Timeline page skip queries for
-    // collapsed cards — otherwise 100 cards = 200 in-flight DQL.
-    enabled: valid && enabled,
+    // Gates: valid id + caller opted in + not demo. The `enabled`
+    // toggle lets the multi-problem stack on the Timeline page
+    // skip queries for collapsed cards — otherwise 100 cards =
+    // 200 in-flight DQL.
+    enabled: valid && enabled && !demo.enabled,
     staleTime: 30_000,
   });
   const workflowQuery = useDql<WorkflowRecord>(workflowParams, {
-    enabled: valid && enabled,
+    enabled: valid && enabled && !demo.enabled,
     staleTime: 30_000,
   });
 

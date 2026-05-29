@@ -24,6 +24,7 @@ import { useDql } from "@dynatrace-sdk/react-hooks";
 import type { FilterSegment } from "@dynatrace-sdk/client-query";
 import { useSegments } from "@dynatrace/strato-components-preview/filters";
 import type { Problem } from "./useProblems";
+import { useDemoMode } from "../contexts/DemoModeContext";
 import {
   aggregateScalar,
   aggregateSeries,
@@ -161,8 +162,20 @@ export function useTeamMetrics(
       `      and annotation.source == "Problems App"`,
       `      and isNotNull(annotation.problem_ids)`,
       `      and isNotNull(event.start)`,
-      `| fields annotation.problem_ids, event.start`,
       `| sort event.start asc`,
+      // 0.0.198 — DPS Tier 5 server-side dedup. The client only
+      // needs the EARLIEST comment per problem id to compute
+      // MTTA (`firstCommentByPid` below). Doing the dedup
+      // server-side cuts payload ~95 % (BWM validation: 30 rows
+      // → 15 unique) without changing the result of the loop in
+      // `firstCommentByPid` (which already implements
+      // first-wins semantics and is idempotent on duplicates).
+      // Bytes-scanned is unchanged — Grail still walks the
+      // 30 d window — so the DPS line item is steady; the win
+      // is in network transfer, JSON parse time, and the JS
+      // map size.
+      `| dedup annotation.problem_ids, sort: { event.start asc }`,
+      `| fields annotation.problem_ids, event.start`,
       `| limit 10000`,
     ].join("\n"),
     requestTimeoutMilliseconds: 30_000,
@@ -170,12 +183,22 @@ export function useTeamMetrics(
     dtClientContext: "problems-hub:team-metrics:comments",
   }), [segmentList]);
 
+  // 0.0.198 — DPS Tier 5 demo gate. Empirical measurement on the
+  // BWM tenant showed that the comments query was firing in
+  // `?demo=1` sessions and consuming on_demand bytes that the
+  // synthetic Timeline UI never used. Gating here means demo
+  // sessions get `firstCommentByPid = empty map`, the per-row
+  // MTTA chips render their "—" fallback (`MetricChip` already
+  // handles null), and the page-level KPI cards show the same
+  // zeroed state as during cold-start before any data lands.
+  const demo = useDemoMode();
+
   const query = useDql<AnnotationCommentRecord>(params, {
     /* DPS Tier 3 bump — was 300_000 (5 min). Team KPIs
        aggregate over hours/days of data; 10 min cache cuts
        repeat-visit cost in half without affecting accuracy. */
     staleTime: 600_000,
-    enabled: effectivelyEnabled,
+    enabled: effectivelyEnabled && !demo.enabled,
   });
 
   // First-comment per problem id — drives the MTTA stream.

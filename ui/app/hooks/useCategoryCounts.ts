@@ -19,6 +19,7 @@ import { useDql } from "@dynatrace-sdk/react-hooks";
 import type { FilterSegment } from "@dynatrace-sdk/client-query";
 import { useSegments } from "@dynatrace/strato-components-preview/filters";
 import { buildCategoryCountsQuery } from "../utils/dql-queries";
+import { useDemoMode } from "../contexts/DemoModeContext";
 
 export interface CategoryCountsFilters {
   status?: string;
@@ -65,14 +66,27 @@ export function useCategoryCounts(filters: CategoryCountsFilters = {}): Category
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }), [query, segmentIds]);
 
+  // 0.0.198 — DPS Tier 5 demo gate. This hook never had a demo
+  // short-circuit, so before now it kept hitting Grail even when
+  // `?demo=1` was active. Empirical measurement on BWM showed
+  // ~5% of the app's on_demand bytes came from this hook in
+  // demo sessions. With the gate active, demo callers see an
+  // empty `counts` map and the chip badges fall back to their
+  // own "0" rendering, which is the same thing they show
+  // during cold-start loading — no UX regression.
+  const demo = useDemoMode();
+
   const { data, isLoading, error } = useDql<Row>(params, {
     /* DPS Tier 3 bump — was 90_000. Paired with `useProblems`
        so the chip badges and the list refetch at the same
        cadence (2 min). Keeps headline counts coherent. */
     staleTime: 120_000,
+    /* 0.0.198 — DPS Tier 5: demo gate. */
+    enabled: !demo.enabled,
   });
 
   const counts = useMemo(() => {
+    if (demo.enabled) return {};
     const out: Record<string, number> = {};
     for (const r of data?.records ?? []) {
       const cat = r["event.category"];
@@ -80,7 +94,7 @@ export function useCategoryCounts(filters: CategoryCountsFilters = {}): Category
       if (cat && Number.isFinite(n)) out[cat] = n;
     }
     return out;
-  }, [data]);
+  }, [data, demo.enabled]);
 
-  return { counts, loading: isLoading, error: error || null };
+  return { counts, loading: demo.enabled ? false : isLoading, error: error || null };
 }
