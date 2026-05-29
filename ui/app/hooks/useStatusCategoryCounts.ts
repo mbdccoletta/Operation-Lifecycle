@@ -122,11 +122,18 @@ export function useStatusCategoryCounts(
   // the real DQL: 4 h Stuck, 1 h OLDER).
   const demo = useDemoMode();
   const { data, isLoading, error } = useDql<Row>(params, {
-    /* Same cadence as `useCategoryCounts` — these two queries
-       feed adjacent surfaces and need to refresh together to stay
-       coherent. 2 min matches the native Davis Problems list
-       cadence. */
-    staleTime: 120_000,
+    /* DPS Tier 6.4 bump — was 120_000 (2 min). The constellation
+       rings + per-category panels driven by this hook are
+       headline indicators, not second-by-second telemetry; a
+       5 min cache matches how often the user actually re-reads
+       the same numbers during a typical triage flow. The
+       toolbar refresh button always bypasses the cache via
+       `forceRefetch`, so manual freshness on demand stays
+       unchanged. Pairs with the useCategoryCounts cadence
+       (still at 120s) — kept separate because the chip badges
+       update more visibly on filter chip clicks while these
+       rings only re-render on segment / timeframe changes. */
+    staleTime: 300_000,
     enabled: !demo.enabled,
   });
 

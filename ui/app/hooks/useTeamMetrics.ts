@@ -194,10 +194,18 @@ export function useTeamMetrics(
   const demo = useDemoMode();
 
   const query = useDql<AnnotationCommentRecord>(params, {
-    /* DPS Tier 3 bump — was 300_000 (5 min). Team KPIs
-       aggregate over hours/days of data; 10 min cache cuts
-       repeat-visit cost in half without affecting accuracy. */
-    staleTime: 600_000,
+    /* DPS Tier 6.3 bump — was 600_000 (10 min). Team KPIs
+       aggregate over HOURS / DAYS of data; the difference
+       between a 10 min and 30 min staleness is invisible at
+       chart resolution and during typical triage flows. The
+       client metering showed this hook accounted for ~50 % of
+       the residual cost after Tier 5, dominated by cache-expiry
+       refires across multi-hour sessions. Lifting the cache
+       window to 30 min cuts refire frequency by ~67 % without
+       changing what users see on KPI cards or evolution
+       charts. Previous values: 300_000 (Tier 1) → 600_000
+       (Tier 3) → 1_800_000 (Tier 6.3, current). */
+    staleTime: 1_800_000,
     enabled: effectivelyEnabled && !demo.enabled,
   });
 

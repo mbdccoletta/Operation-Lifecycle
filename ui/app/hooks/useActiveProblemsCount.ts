@@ -19,19 +19,21 @@ import { useDemoMode } from "../contexts/DemoModeContext";
 // Incidents page (the original bug: 9 in the badge vs 6 in the
 // constellation's ACTIVE ring). Three pieces matter here:
 //
-//   1. `from: now() - 7d` — DPS Tier 5 (0.0.198): validated
-//      empirically against the BWM tenant that 7 d returns the
-//      same ACTIVE count as 30 d while scanning 4× less data
-//      (~120 MB vs ~540 MB per fire). Rationale: Davis re-emits a
-//      state-change record on every status touch, plus
-//      escalations, so the "quiet active problem" edge case that
-//      motivated the 30 d window in v0.0.20-era code does not
-//      materialise in practice — any active problem has at least
-//      one record in the past week. The 7 d floor also matches
-//      what `useTeamMetrics` could safely shrink to, but we leave
-//      that one alone because MTBF/MTTF accuracy depends on
-//      lifetime data. Re-validate if you ever see the badge drift
-//      below the list count for week-long incidents.
+//   1. `from: now() - 24h` — DPS Tier 6.5 (0.0.199): validated
+//      empirically against the production client tenant that
+//      24 h returns the SAME ACTIVE count as 7 d AND 30 d (all
+//      three resolve to 1 153 active problems) while scanning
+//      6.5× less data than 7 d (~2 GB vs ~13 GB per fire on a
+//      busy tenant). Rationale: Davis re-emits a state-change
+//      record on every status touch — severity, escalation,
+//      entity churn, comments. Active problems on a tenant with
+//      meaningful incident density have at least one record in
+//      the past day, so the "quiet active problem with only a
+//      start record older than 24 h" edge case does not
+//      materialise. Re-validate if you ever see the badge drift
+//      below the list count after a day of low platform churn.
+//      Previous floors (v0.0.20: 30 d → v0.0.198: 7 d → now: 24 h)
+//      each saved roughly 80 % per fire of the previous floor.
 //
 //   2. NULL-tolerant `is_duplicate` filter — same expression the
 //      native Davis Problems app uses (`isNull OR not(...)`). The
@@ -48,7 +50,7 @@ import { useDemoMode } from "../contexts/DemoModeContext";
 //      DO NOT switch to `countDistinct(display_id)` — it skips
 //      records where display_id is null, so the count drifts
 //      below the sort+dedup approach (BWM validation: 6 vs 7).
-const ACTIVE_PROBLEMS_COUNT_QUERY = `fetch dt.davis.problems, from: now() - 7d
+const ACTIVE_PROBLEMS_COUNT_QUERY = `fetch dt.davis.problems, from: now() - 24h
 | filter (isNull(dt.davis.is_duplicate) or not(dt.davis.is_duplicate)) and event.status == "ACTIVE"
 | sort event.start desc
 | dedup display_id
