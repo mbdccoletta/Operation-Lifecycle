@@ -27,6 +27,36 @@ const CANVAS_FS_MULT: Record<string, number> = {
   large:  1.16,
 };
 
+/** 0.0.204 — Compact human-readable formatter for canvas-rendered
+ *  ring counts. Used inside `drawSatellite` and the cell bubble
+ *  count branch when the raw digits would overflow the ring's
+ *  inner diameter — instead of font-shrinking into illegibility,
+ *  we collapse the magnitude:
+ *     0–999       →  "0", "999"        (raw — 1–3 chars)
+ *     1 000–9 999 →  "1.2k", "9.9k"    (4 chars, one decimal)
+ *     10 k–999 k  →  "10k", "999k"     (3–4 chars)
+ *     1 M–9.9 M   →  "1.2M", "9.9M"    (4 chars, one decimal)
+ *     ≥ 10 M      →  "10M", "999M"     (3–4 chars)
+ *     ≥ 1 B       →  "1.2B"            (rare on this dashboard)
+ *  Trailing ".0" is stripped so "1.0k" becomes "1k" — keeps the
+ *  ring text dense without losing precision (we only ever use this
+ *  branch for over-budget strings anyway). */
+function formatCompactCount(n: number): string {
+  if (!Number.isFinite(n)) return String(n);
+  const abs = Math.abs(n);
+  const sign = n < 0 ? "-" : "";
+  const fmt = (val: number, suffix: string) => {
+    const oneDec = val.toFixed(1);
+    return sign + (oneDec.endsWith(".0") ? oneDec.slice(0, -2) : oneDec) + suffix;
+  };
+  if (abs < 1_000)        return String(n);
+  if (abs < 10_000)       return fmt(abs / 1_000, "k");
+  if (abs < 1_000_000)    return sign + Math.round(abs / 1_000) + "k";
+  if (abs < 10_000_000)   return fmt(abs / 1_000_000, "M");
+  if (abs < 1_000_000_000)return sign + Math.round(abs / 1_000_000) + "M";
+  return fmt(abs / 1_000_000_000, "B");
+}
+
 export type ConstellationDataMode = "rising" | "open_time" | "criticality" | "total";
 
 interface ConstellationViewProps {
@@ -1285,19 +1315,29 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
     // reportedly clipped was never deployed (local-only); 128 is
     // close enough to that ceiling to assume it's safe in prod. If
     // clipping reappears we'll bump back toward 140.
-    const RESOLVED_ZONE_H = 128;
+    // 0.0.208 — Resolved panel trimmed 128 → 96 px. User: "dimibuir
+    // sessao resolved para dar mais espaços para outras sessoes".
+    // The decorative accent line (was +14 px) and the redundant
+    // "1h ago: N" reference (was +12 px) are dropped from the
+    // rendering below; everything the user needs (category, count,
+    // delta /1h) still fits. Recovered ~32 px is handed to the
+    // constellation cells via the hub-band shifts below.
+    const RESOLVED_ZONE_H = 96;
     const activeAreaH = showResolvedZone
-      ? Math.max(h * 0.72, h - RESOLVED_ZONE_H)
+      ? Math.max(h * 0.78, h - RESOLVED_ZONE_H)
       : h;
     // Hub band coordinates — only used when showHub is true. Kept at
     // module scope so trend / spoke / satellite code below can reference
     // them; guarded against rendering when the hub is hidden.
-    // Hub band sits in the gap between the two rows (0.210 →
-    // 0.570 after the row shift). 0.235-0.545 leaves a 2.5 %
-    // clearance on each side, keeping the rings ~31 % of canvas
-    // tall.
-    const hubBandTop    = h * 0.235;
-    const hubBandBottom = h * 0.545;
+    // 0.0.208 — Band positions shifted (0.235→0.27, 0.545→0.51) so
+    // both rows expand toward the centre. Top cell stretches from
+    // 0 → 0.27 (was 0.235) and the bottom cell follows via the
+    // v0.0.207 symmetry cap, ending at 0.78 (was 0.78). Hub
+    // diameter drops from 0.31 to 0.24 of canvas, leaving the
+    // central satellites still readable while the per-category
+    // bubbles get the ~17 % radius bump the user asked for.
+    const hubBandTop    = h * 0.27;
+    const hubBandBottom = h * 0.51;
     const hubCx = w / 2;
     const hubCy = (hubBandTop + hubBandBottom) / 2;
 
@@ -1465,6 +1505,20 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
         const hubBotN = hubBandBottom / h;
         if (s.bounds.yMax <= hubTopN) yMaxN = Math.min(yMaxN, hubTopN);
         if (s.bounds.yMin >= hubBotN) yMinN = Math.max(yMinN, hubBotN);
+        // 0.0.207 — Equalise BOTTOM cell height with TOP. The top
+        // row is clamped to (0, hubTopN) so its height is hubTopN.
+        // The bottom row was clamped to (hubBotN, activeAreaYMaxN)
+        // — and on small canvases (h ≤ 457 px) activeAreaYMaxN
+        // floor-bumps to 0.72, leaving the bottom row visibly
+        // shorter than the top. User: "linha inferior nao
+        // aumentou, apenas a superior". Stretch yMaxN down so the
+        // bottom cell matches the top cell exactly. RESOLVED zone
+        // still fits below it (the remaining 22 % of the canvas
+        // ≈ 132 px at 1080p, 88 px at small viewports).
+        if (s.bounds.yMin >= hubBotN) {
+          const topCellH = hubTopN; // = (hubBandTop / h) - 0
+          yMaxN = Math.min(1, yMinN + topCellH);
+        }
       }
       cellRects[s.id] = {
         x: xMinN * w,
@@ -2121,20 +2175,11 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
         : labelColor + (dk ? "ee" : "ee");
       ctx.fillText(labelText.toUpperCase(), labelX, headerY);
 
-      // ── Row 2: thin accent line in category color (HUD style)
-      const accentY = headerY + 14;
-      const accentW = 56;
-      ctx.strokeStyle = isEmpty
-        ? labelColor + (dk ? "22" : "33")
-        : labelColor + (dk ? "88" : "aa");
-      ctx.lineWidth = 1.5;
-      ctx.beginPath();
-      ctx.moveTo(cx - accentW / 2, accentY);
-      ctx.lineTo(cx + accentW / 2, accentY);
-      ctx.stroke();
-
-      // ── Row 3: hero number — big bold count, centered, with subtle glow
-      const heroY = accentY + 10;
+      // ── Row 2: hero number — big bold count, centered, with subtle glow
+      // 0.0.208 — accent-line row removed to recover vertical
+      // budget for the constellation cells. The category dot still
+      // carries the colour identity; the line was decorative.
+      const heroY = headerY + 10;
       ctx.font = `600 ${(32 * fsMult).toFixed(2)}px "Roboto Mono", "SF Mono", monospace`;
       ctx.textAlign    = "center";
       ctx.textBaseline = "top";
@@ -2175,12 +2220,10 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
         ctx.fillStyle = `rgba(${trendRgb},${delta === 0 ? 0.55 : 0.95})`;
         ctx.textBaseline = "middle";
         ctx.fillText(deltaText, cx, deltaY + pillH / 2 - 3);
-
-        // ── Row 5: reference — "1h ago: N"
-        ctx.font = `400 ${(12 * fsMult).toFixed(2)}px "Roboto Mono", "SF Mono", monospace`;
-        ctx.textBaseline = "top";
-        ctx.fillStyle = dk ? "rgba(148,163,184,0.55)" : "rgba(100,116,139,0.6)";
-        ctx.fillText(`1h ago: ${countPrev}`, cx, deltaY + 18);
+        // 0.0.208 — "1h ago: N" reference row removed. The delta
+        // pill already conveys the 1 h change; the absolute "1 h
+        // ago" count is rarely the action the user needs and was
+        // pushing the panel ~12 px taller than the new budget.
       }
 
       // Column separator — vertical thin dashed line for HUD look
@@ -2727,8 +2770,15 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
       // the bottom. User reported the highlight ring overlapping
       // both the title row and the cell divider lines on shorter
       // cells.
-      const TITLE_PAD = 28; // reserved for the "ERROR 1 active" title strip
-      const LABEL_PAD = 28; // reserved for the bubble label ("Rising") below
+      // 0.0.206 — pads tightened (28 → 22 / 20) and ceiling raised
+      // (36 → 56) because cell sub-bubbles read as visibly tiny
+      // next to the central TOTAL / ACTIVE / RESOLVED satellites
+      // ("os circulos das categorias estao muito pequenos"). The
+      // freed pad budget grows the bubble radius linearly, the
+      // ceiling unblocks growth on wide cells where the previous
+      // spacing-derived cap had already cleared the old limit.
+      const TITLE_PAD = 22; // reserved for the "ERROR 1 active" title strip
+      const LABEL_PAD = 20; // reserved for the bubble label ("Rising") below
       const safeTop = cell.y + TITLE_PAD;
       const safeBot = cell.y + cell.h - LABEL_PAD;
       const bubbleY = (safeTop + safeBot) / 2;
@@ -2737,7 +2787,7 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
       // viewports, multi-row grids). Highlight boost (1.25) is
       // baked into the cap so the boosted ring still fits.
       const HIGHLIGHT_BOOST = 1.25;
-      const verticalCap = Math.max(10, (safeBot - safeTop) / 2 / HIGHLIGHT_BOOST - 6);
+      const verticalCap = Math.max(10, (safeBot - safeTop) / 2 / HIGHLIGHT_BOOST - 3);
       // 0.0.179 — floor lowered from 18 → 10. The old floor would
       // override `verticalCap` on short cells (bottom-row cells in
       // a 6-category grid, ~80–100 px tall), forcing the bubble to
@@ -2748,7 +2798,11 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
       // 10 lets the bubble shrink gracefully on tight rows; in
       // practice the spacing-derived cap (`spacing * 0.38`) keeps
       // it from going truly tiny on normal layouts.
-      const baseR = Math.min(36, Math.max(10, Math.min(spacing * 0.38, verticalCap)));
+      // 0.0.206 — horizontal factor bumped 0.38 → 0.44 to let the
+      // bubble fill more of its slot when the cell is wide and only
+      // hosts 2 sub-bubbles (Stuck + Total, the common case in
+      // non-rising modes).
+      const baseR = Math.min(56, Math.max(10, Math.min(spacing * 0.44, verticalCap)));
       // Bubble animation removed — user 0.0.109 follow-up: "porem
       // sem animacao". The earlier breathing pulse (±6 % radius)
       // and the dashed-rotating focus ring both made highlighted
@@ -2946,17 +3000,38 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
         // usable inner diameter is ≈ r × 1.7 (allow 15 % padding on
         // each side); if the text would render wider than that at
         // the natural size, scale the font down proportionally
-        // until it fits. Floor at 10 px so even six-digit counts
-        // stay readable.
+        // until it fits.
+        // 0.0.204 — switch to COMPACT format (49 806 → "50k") when
+        // the raw digits won't fit at any sane font size. User
+        // feedback: a 5-digit Total ring on a small bubble was
+        // overflowing the circle border even after the 10 px floor
+        // ("texto e numeros nao podem sobrepor elementos"). Trying
+        // the compact form first preserves readability; we still
+        // shrink the font afterwards if even the compact string
+        // overshoots (only happens at extreme radii).
         ctx.save();
         ctx.globalAlpha = bubbleAlpha;
-        const countStr = String(s.count);
         const naturalFont = Math.max(13, Math.min(22, r * 0.85)) * fsMult;
         ctx.font = `700 ${naturalFont}px "Roboto Mono", "SF Mono", monospace`;
-        const innerDiameter = r * 1.7;
-        const naturalWidth  = ctx.measureText(countStr).width;
-        const fontSize = naturalWidth > innerDiameter
-          ? Math.max(10, naturalFont * (innerDiameter / naturalWidth))
+        // 0.0.205 — tightened from r * 1.7 to r * 1.45 (≈ 72.5 %
+        // of the bubble diameter) because users were still seeing
+        // "1.1k" / "1.4k" touch the ring border on small bubbles.
+        // The old budget assumed monospace advance width matched
+        // glyph bounding box; in practice the ".4k" combination
+        // overshoots its advance by ~8 %. Pulling the budget in
+        // adds breathing room and forces the shrink branch a bit
+        // earlier so the digit never crowds the stroke. Floor
+        // dropped 10 → 9 px so tiny bubbles can still show a
+        // legible 2–3-char compact ("1k").
+        const innerDiameter = r * 1.45;
+        let countStr = String(s.count);
+        let measured = ctx.measureText(countStr).width;
+        if (measured > innerDiameter) {
+          countStr = formatCompactCount(s.count);
+          measured = ctx.measureText(countStr).width;
+        }
+        const fontSize = measured > innerDiameter
+          ? Math.max(9, naturalFont * (innerDiameter / measured))
           : naturalFont;
         if (fontSize !== naturalFont) {
           ctx.font = `700 ${fontSize}px "Roboto Mono", "SF Mono", monospace`;
@@ -3977,24 +4052,40 @@ function drawSatellite(
   ctx.arc(cx, cy, r - 5, 0, Math.PI * 2);
   ctx.stroke();
 
-  // Label
+  // Label — 0.0.213 reverts the v0.0.212 "top" baseline
+  // experiment (Chrome's interpretation of em-square edges is
+  // inconsistent across font fallbacks and DPR settings, which
+  // is what produced "piorou"). Back to MIDDLE baseline with a
+  // generous absolute inset (22 px). The math is now:
+  //    middle at cy - r + 22 → glyph extends roughly
+  //    cy - r + 16 (top) to cy - r + 28 (bottom)
+  // so even the tallest glyph stays ≥ 12 px below the ring stroke.
   ctx.font = `500 ${(12 * fsMult).toFixed(2)}px "Roboto Mono", "Roboto Mono", "SF Mono", monospace`;
   ctx.textAlign    = "center";
   ctx.textBaseline = "middle";
   ctx.fillStyle    = dk ? "rgba(148,163,184,0.85)" : "rgba(100,116,139,0.95)";
-  ctx.fillText(label, cx, cy - r * 0.48);
+  ctx.fillText(label, cx, cy - r + 22);
 
   // Number — fits to the circle's interior. With the count-query
   // override active, this can be 5+ digits (e.g. 27548 on a 180d
   // window). The natural size is `r * 0.72`; if the rendered text
-  // would overshoot the ring's safe horizontal area, shrink
-  // proportionally. `r * 1.55` leaves ~15% margin on each side
-  // and keeps the trend indicator below from getting crowded.
+  // would overshoot the ring's safe horizontal area we first try
+  // the COMPACT form (49 806 → "50k") so the digit stays legible
+  // instead of getting font-shrunk into illegibility. Only if the
+  // compact form ALSO doesn't fit do we fall back to font-scaling.
+  // 0.0.205 — budget tightened from r * 1.55 to r * 1.35 because
+  // compact strings with a decimal ("1.4k") were still touching
+  // the ring stroke. ~67 % of the diameter; matches the
+  // bubble-level budget update.
   const naturalSize = Math.round(r * 0.72) * fsMult;
-  const maxTextWidth = r * 1.55;
-  const text = `${count}`;
+  const maxTextWidth = r * 1.35;
+  let text = `${count}`;
   ctx.font = `900 ${naturalSize}px "Roboto Mono", "Roboto Mono", "SF Mono", monospace`;
-  const measured = ctx.measureText(text).width;
+  let measured = ctx.measureText(text).width;
+  if (measured > maxTextWidth) {
+    text = formatCompactCount(count);
+    measured = ctx.measureText(text).width;
+  }
   let numSize = naturalSize;
   if (measured > maxTextWidth) {
     // Scale the font so the rendered width matches the budget.
@@ -4004,14 +4095,27 @@ function drawSatellite(
     numSize = Math.max(naturalSize * 0.4, naturalSize * (maxTextWidth / measured));
     ctx.font = `900 ${numSize}px "Roboto Mono", "Roboto Mono", "SF Mono", monospace`;
   }
+  // 0.0.213 — explicitly set middle baseline for the number
+  // so it stays centered inside the ring no matter what the
+  // label code set above. Position cy keeps it on the geometric
+  // centre — the visual centre still trends slightly downward
+  // because of the digits' typical centre-of-mass, but this is
+  // the canonical placement.
+  ctx.textBaseline = "middle";
   ctx.fillStyle = dk ? "#ffffff" : "#0f172a";
-  ctx.fillText(text, cx, cy + 2);
+  ctx.fillText(text, cx, cy);
 
-  // Trend indicator below the number
+  // Trend indicator below the number — 0.0.213 back to MIDDLE
+  // baseline (see label note above) with a generous 22 px
+  // absolute inset from the ring bottom edge. Text middle at
+  // cy + r - 22; for the standard 12 px font with the ▼/▲
+  // arrows, the glyph bottom lands at roughly cy + r - 16,
+  // leaving 16 px clear of the stroke.
   ctx.font = `500 ${(12 * fsMult).toFixed(2)}px "Roboto Mono", "SF Mono", monospace`;
+  ctx.textBaseline = "middle";
   if (trendDelta === 0) {
     ctx.fillStyle = dk ? "rgba(148,163,184,0.55)" : "rgba(100,116,139,0.6)";
-    ctx.fillText("— neutral", cx, cy + r * 0.55);
+    ctx.fillText("— neutral", cx, cy + r - 22);
   } else {
     const isUp = trendDelta > 0;
     const isGood = isUp ? risingIsGood : !risingIsGood;
@@ -4022,7 +4126,9 @@ function drawSatellite(
     ctx.shadowColor = tColor;
     ctx.shadowBlur  = 5;
     ctx.fillStyle   = tColor;
-    ctx.fillText(text, cx, cy + r * 0.55);
+    // 0.0.213 — matches the neutral branch above (middle
+    // baseline at cy + r - 22).
+    ctx.fillText(text, cx, cy + r - 22);
     ctx.restore();
   }
 }

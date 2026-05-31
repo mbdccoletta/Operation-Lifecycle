@@ -319,9 +319,27 @@ span,p,div,h1,h2,h3,h4,h5,h6,label { color: var(--neo-text); }
      • DON'T target `body > [data-overlay-container]` — the
        container is portaled as a direct body child today, but
        Strato has moved this around between versions. */
+/* 0.0.215 — bumped from 1000 → 99999. The previous value lost
+   to some Strato sub-overlay stacking contexts on the Bradesco
+   tenant ("ao clicar em select nao vejo nada"). The earlier
+   v0.0.214 also tried `visibility/opacity !important` on every
+   descendant, but that broke Strato's own animation states.
+   Just the container z-index is the safe escalation. */
 [data-overlay-container] {
-  z-index: 1000 !important;
+  z-index: 99999 !important;
 }
+
+/* 0.0.224 — Removed the overflow/max-height overrides from
+   v0.0.221/222/223. User confirmed the native Davis Problems
+   app renders the SegmentSelector listbox correctly INSIDE
+   the dialog without ANY of our CSS, so the bug is something
+   else in our app's environment — not in Strato. Forcing
+   overflow constraints just masked the symptom (and could
+   cause secondary clipping issues). Reverted to just the
+   z-index bump above; let Strato own the layout. The real
+   root cause is likely interference from our
+   `body[data-app-view="neural"] { overflow: hidden }` rule
+   or the iframe positioning — to be investigated separately. */
 :root,
 :root[data-theme="light"],
 :root[data-theme="dark"] {
@@ -587,15 +605,43 @@ span,p,div,h1,h2,h3,h4,h5,h6,label { color: var(--neo-text); }
    PULSE VISUALIZER
    ═══════════════════════════════════════════════════════════ */
 .neo-pulse-container {
-  margin: 4px 16px 6px; position: relative;
+  /* 0.0.203 — Tighter vertical margins. Was 4/6 px, now 2 px top
+     and bottom. Gives the constellation 6 px more breathing room
+     without changing the chart aesthetic. */
+  margin: 2px 16px 2px; position: relative;
   border-radius: var(--neo-radius-sm); overflow: hidden;
   border: 1px solid var(--neo-border);
   background: var(--neo-surface);
 }
 .neo-pulse {
-  /* Tall enough for the new tooltip (~84 px) + breathing room above and
-     below, plus better readability of the stacked bars. */
-  width: 100%; height: 128px; position: relative;
+  /* 0.0.203 — clamp() for fully fluid scaling so the chart never
+     dominates the viewport ("grafico de barra ainda muito largo
+     ... otimizar para mostrar circulos maiores"). Tuned so:
+       • 1080p (height 1080): 7 vh ≈ 76 px → uses preferred
+       • 4K   (height 2160): 7 vh = 151 px → capped at 88 px
+       • 768 p (height 768): 7 vh ≈ 54 px → uses min 64 px
+     Net: large monitors stop wasting space, small laptops keep
+     the bars readable. All freed pixels go into the constellation
+     via the reservation drop below. */
+  width: 100%; height: clamp(64px, 7vh, 88px); position: relative;
+}
+@media (max-width: 1023px) {
+  /* Tablet — clamp tuned for typical portrait/landscape heights
+     (768-1180 px). Lower bound 80 px guarantees legend + bars +
+     X-axis ticks fit without overlap. */
+  .neo-pulse { height: clamp(80px, 8vh, 100px); }
+}
+@media (max-width: 640px) {
+  /* Mobile — 0.0.210 bump from clamp(48,5vh,64) to clamp(96,14vh,120).
+     The previous values were too aggressive: on iPhone-class
+     portrait viewports the chart collapsed to 48-64 px and the
+     Y-axis labels ("2056" / "1370") stacked on top of each
+     other ("bao diminuir muito na versao mobile"). The new
+     values still leave plenty of room for the constellation
+     below — typical phone viewport 800 px tall:
+        header + filters + pulse(108) + constellation(596) +
+        tabbar (50) = 754 px, scrolls comfortably. */
+  .neo-pulse { height: clamp(96px, 14vh, 120px); }
 }
 /* `pan-y` on the canvas lets the browser handle vertical scroll
    (so the user can still scroll the page by touching the chart)
@@ -1246,29 +1292,35 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
 }
 .neo-constellation {
   width: 100%;
-  /* Fill remaining viewport so the full dashboard fits without scroll.
-     0.0.114 recount: 340 was too tight — pulse chart is actually
-     138 px (was estimated 100), filter strip is ~56 (was 40), and
-     the page's own padding-bottom (64) plus the tabbar reservation
-     stack on top. Real reservation:
+  /* 0.0.203 — Reservation drops again now that pulse uses
+     clamp(64, 7vh, 88) instead of a flat 96 px. Worst-case
+     pulse on a 1080p screen is ~76 px (7 vh), best case 64 px
+     on small laptops. Reservation tuned for the 1080p case:
         header        50
         filter bar    56
-        pulse         138
+        pulse         76  (was 96; -20)
+        container m   4   (was 10; -6)
         title         30
         legend strip  40
         tabbar (fixed)50
-        page padding  24 (page has 64, of which 50 is taken by the
-                          fixed tabbar overlay — net flow buffer 14)
-     Total ≈ 388 px. Earlier 340 left the canvas 48 px taller than
-     available space; the .neo-page's overflow:hidden then clipped
-     the last 48 px of the canvas — the user saw the RESOLVED
-     delta pills and "1h ago" line cut off ("ainda cortando"). */
-  height: calc(100vh - 388px);
-  min-height: 360px;
+        page padding  24
+     Total ≈ 320 px. The constellation gets ~26 px more height
+     than v0.0.202, which translates to ~13 px taller cell rows
+     — visible bump to the Stuck/Total/Rising rings. */
+  height: calc(100vh - 320px);
+  min-height: 460px;
   position: relative;
   border-radius: var(--neo-radius);
   border: 1px solid var(--neo-border);
   overflow: hidden;
+}
+@media (max-width: 1023px) {
+  /* Tablet — pulse clamp 56-76 px here, filter bar wraps onto
+     two rows (+56 px). Reservation tuned to the 76 px case. */
+  .neo-constellation {
+    height: calc(100vh - 360px);
+    min-height: 500px;
+  }
 }
 .neo-constellation-legend {
   position: absolute; bottom: 8px; left: 8px;
@@ -4537,8 +4589,10 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   /* Larger tap targets in lists */
   .neo-toggle-btn { padding: 10px 14px; min-width: 44px; min-height: 44px; }
 
-  /* Constellation needs a sensible minimum on mobile so dots can breathe */
-  .neo-constellation { height: 540px; min-height: 540px; max-height: none; }
+  /* Constellation needs a sensible minimum on mobile so dots can
+     breathe. 0.0.202 — bumped from 540 to 596 to take back the
+     ~56 px we trimmed off the pulse chart on mobile. */
+  .neo-constellation { height: 596px; min-height: 596px; max-height: none; }
 
   /* Page padding-bottom larger to clear the tab bar on iOS */
   .neo-page { padding-bottom: max(72px, env(safe-area-inset-bottom, 72px)); }
@@ -4558,6 +4612,62 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   .neo-float-card { max-width: 400px; left: 50%; right: auto; transform: translateX(-50%); }
   .neo-stats-footer { max-width: 500px; margin-left: auto; margin-right: auto; }
   .neo-kpi-grid { max-width: 500px; margin-left: auto; margin-right: auto; }
+}
+
+/* 0.0.202 — Landscape phone (e.g. iPhone rotated). Mobile media
+   query above already adapts most controls, but the constellation
+   needs viewport-based sizing in this case because a fixed 596 px
+   blows past the available height (~390 px on iPhone landscape).
+   The pulse chart also gets one more trim so the rings don't get
+   crushed. */
+@media (max-width: 1023px) and (orientation: landscape) and (max-height: 500px) {
+  .neo-pulse { height: 64px; }
+  .neo-constellation {
+    height: calc(100vh - 240px);
+    min-height: 260px;
+  }
+}
+
+/* 0.0.202 — Galaxy Z Fold (and similar large foldables) when
+   UNFOLDED. The inner screen is ~700-850 CSS px in both
+   dimensions (nearly square aspect, ~0.83-1.20), distinct from
+   regular tablets that are clearly portrait-tall or
+   landscape-wide. The default tablet reservation (380 px) plus
+   a 480 px min-height blows past the short height (~704 px
+   landscape), causing overflow. This block trims reservation
+   and lowers the min so the canvas fits exactly. */
+@media (min-width: 641px)
+   and (max-width: 1023px)
+   and (min-aspect-ratio: 3/4)
+   and (max-aspect-ratio: 4/3) {
+  .neo-pulse { height: 72px; }
+  .neo-constellation {
+    height: calc(100vh - 320px);
+    min-height: 360px;
+  }
+}
+
+/* 0.0.202 — Generic short-viewport guard. Catches everything
+   below ≈800 px tall: Z Fold landscape, ChromeOS tablet split,
+   external monitors at non-standard aspect. Ensures the
+   constellation never asks for more pixels than available. */
+@media (max-height: 800px) and (min-width: 641px) {
+  .neo-constellation { min-height: 320px; }
+}
+
+/* 0.0.202 — True foldable awareness. CSS Viewport-Segments
+   queries surface the hinge crease so we can adjust layout
+   when the device reports two segments. Supported on Z Fold
+   Browser (Chrome 110+), Surface Duo, etc. Future-proof — no
+   regression on devices that don't expose the API. */
+@media (vertical-viewport-segments: 2) {
+  /* Two horizontally-stacked segments (folded book-style).
+     Keeps the constellation in the larger primary segment. */
+  .neo-pulse { height: 72px; }
+}
+@media (horizontal-viewport-segments: 2) {
+  /* Two side-by-side segments (some Android dual-screen). */
+  .neo-pulse { height: 64px; }
 }
 @media (min-width: 961px) {
   /* Desktop+ — give cards more room */

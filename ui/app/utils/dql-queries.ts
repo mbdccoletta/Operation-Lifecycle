@@ -250,7 +250,20 @@ export function buildStuckProblemsByCategoryQuery(filters: {
     ? `toTimestamp("${filters.stuckCutoff}")`
     : `now() - 4h`;
   query += `\n| filter event.start < ${stuckExpr2}`;
-  query += `\n| fields event.name, event.status, event.category, event.start, event.end, event.severity, affected_entity_ids, affected_entity_names, affected_entity_types, root_cause_entity_id, root_cause_entity_name, display_id, management_zones`;
+  // 0.0.226 — Project the Davis-problem-id aliases so a dot
+  // clicked in the modal injects a Problem object that
+  // `buildOfficialProblemUrl()` can resolve into the native
+  // Davis Problems deep link AND `useProblemTimeline` can use
+  // to fetch annotations + workflows. Without this every Stuck
+  // drilldown landed on an empty activity feed ("No events
+  // match the current filter") and the row was missing the
+  // "Open in Davis" link — both symptoms of `davis_problem_id`
+  // coming back undefined.
+  query += `\n| fieldsAdd davis_problem_id = event.id`;
+  query += `\n| fieldsAdd davis_problem_id_alt1 = dt.davis.problem.id`;
+  query += `\n| fieldsAdd davis_problem_id_alt2 = problem.id`;
+  query += `\n| fieldsAdd davis_problem_id_alt3 = event.problem_id`;
+  query += `\n| fields davis_problem_id, davis_problem_id_alt1, davis_problem_id_alt2, davis_problem_id_alt3, event.name, event.status, event.category, event.start, event.end, event.severity, affected_entity_ids, affected_entity_names, affected_entity_types, root_cause_entity_id, root_cause_entity_name, display_id, management_zones`;
   // Dedup by display_id so each problem contributes once even
   // when Davis emits multiple state-change records.
   query += `\n| sort event.start asc`; // oldest first → most stuck
@@ -300,7 +313,13 @@ export function buildRisingProblemsByCategoryQuery(filters: {
   // Rising = newly arrived ACTIVE problems (started in the last
   // hour, i.e. wasn't alive 1h ago).
   query += `\n| filter event.start >= now() - 1h`;
-  query += `\n| fields event.name, event.status, event.category, event.start, event.end, event.severity, affected_entity_ids, affected_entity_names, affected_entity_types, root_cause_entity_id, root_cause_entity_name, display_id, management_zones`;
+  // 0.0.226 — Same davis_problem_id projection as the Stuck
+  // query above (see comment there for rationale).
+  query += `\n| fieldsAdd davis_problem_id = event.id`;
+  query += `\n| fieldsAdd davis_problem_id_alt1 = dt.davis.problem.id`;
+  query += `\n| fieldsAdd davis_problem_id_alt2 = problem.id`;
+  query += `\n| fieldsAdd davis_problem_id_alt3 = event.problem_id`;
+  query += `\n| fields davis_problem_id, davis_problem_id_alt1, davis_problem_id_alt2, davis_problem_id_alt3, event.name, event.status, event.category, event.start, event.end, event.severity, affected_entity_ids, affected_entity_names, affected_entity_types, root_cause_entity_id, root_cause_entity_name, display_id, management_zones`;
   query += `\n| sort event.start desc`; // newest first → most "rising"
   query += `\n| dedup display_id`;
   const requested = filters.limit;

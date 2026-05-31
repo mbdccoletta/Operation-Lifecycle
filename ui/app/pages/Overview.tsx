@@ -18,6 +18,7 @@ import {
 } from "../utils/formatters";
 import { buildOfficialProblemUrl, buildAppShareUrl } from "../utils/dynatrace-links";
 import { ShareWhatsApp } from "../components/ShareWhatsApp";
+import { SegmentSelectorAutoExpand } from "../components/SegmentSelectorAutoExpand";
 import { ProblemActivityFeed } from "../components/ProblemActivityFeed";
 import { MobileIncidentList } from "../components/MobileIncidentList";
 import { DisplaySettingsPanel } from "../components/DisplaySettingsPanel";
@@ -692,7 +693,19 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
    *  selecting a dot in the constellation. A banner at the top of the
    *  list lets the user clear it and see the full set again. */
   const [pinnedProblemId, setPinnedProblemId] = useState<string | null>(null);
-  const clearPinnedProblem = useCallback(() => setPinnedProblemId(null), []);
+  // 0.0.201 — Carry the FULL Problem object pinned by drilldown so we
+  // can render the row even when it's outside the 250-newest sample
+  // loaded by `useProblems`. Common case on busy tenants (thousands
+  // of incidents in 30 d): the dot the user clicked started days
+  // ago, the limit-250 query returns only newer problems, the
+  // pinned filter then narrows the list to nothing. The injection
+  // is consumed inside `filtered` as a fallback when the pinned
+  // id isn't found in the loaded sample.
+  const [pinnedInjected, setPinnedInjected] = useState<Problem | null>(null);
+  const clearPinnedProblem = useCallback(() => {
+    setPinnedProblemId(null);
+    setPinnedInjected(null);
+  }, []);
 
   /** Page-level "back to neutral" — clears the pinned problem, every
    *  expanded card, the chart's brushed range selection, and the
@@ -1718,8 +1731,18 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
     let out = sorted;
     // Pinned single-problem view — takes precedence over every other
     // filter so the user always sees the specific dot they selected.
+    // 0.0.201 — Fall back to `pinnedInjected` when the pinned id
+    // is NOT in the loaded sample. Happens on busy tenants where
+    // the 250-newest sample doesn't include older Stuck problems
+    // (the user just drilled into one). The injected object is
+    // the full Problem record we captured at click time, so the
+    // row renders with name / category / entities the same way
+    // any other row does.
     if (pinnedProblemId) {
-      return out.filter((p) => p.display_id === pinnedProblemId);
+      const hit = out.filter((p) => p.display_id === pinnedProblemId);
+      if (hit.length > 0) return hit;
+      if (pinnedInjected && pinnedInjected.display_id === pinnedProblemId) return [pinnedInjected];
+      return [];
     }
     if (catFilter.size > 0) {
       if (groupBy === "segment") {
@@ -1876,7 +1899,7 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
       });
     }
     return out;
-  }, [sorted, searchDebounced, catFilter, pinnedProblemId, groupBy, segMembership, resolveGrouping, selectedRange, entityFilter, rceFilter, segmentFilter, statusFilter, stuckHoursFilter, highlightedSubsetMode, viewMode, stuckCutoffMs]);
+  }, [sorted, searchDebounced, catFilter, pinnedProblemId, pinnedInjected, groupBy, segMembership, resolveGrouping, selectedRange, entityFilter, rceFilter, segmentFilter, statusFilter, stuckHoursFilter, highlightedSubsetMode, viewMode, stuckCutoffMs]);
 
   const entityCount = useMemo(() => {
     const set = new Set<string>();
@@ -1917,6 +1940,10 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
   // the list.
   const onConstellationSelect = useCallback((p: Problem) => {
     setPinnedProblemId(p.display_id);
+    // 0.0.201 — symmetric to onQuadrantProblemSelect: inject the
+    // full Problem object so the row renders even if it's outside
+    // the loaded 250-newest sample.
+    setPinnedInjected(p);
     setExpandedRows(new Set([p.display_id]));
     setViewMode("list");
   }, []);
@@ -1948,6 +1975,7 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
     setSearch("");
     setCatFilter(new Set());
     setPinnedProblemId(null);
+    setPinnedInjected(null); // 0.0.201 — keep injection symmetric with pin
     // 0.0.167 — also clear the drilldown-style filters that the URL
     // carries (entity, rce, segment, stuck-hours). Without this a
     // previous deep-link or AT A GLANCE drilldown can leave a
@@ -2197,13 +2225,58 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
   // Closing both `quadrantDetail` and `enlargedQuadrant` keeps the
   // selection mutually exclusive: the user never lands on the list
   // with a stale overlay still painted on top.
+  //
+  // 0.0.200 — Stuck drilldown fix. The picked problem may have
+  // started weeks ago (typical of "stuck" categories: a single
+  // incident can stay ACTIVE for days). When the current
+  // timeframe filter excludes its `event.start`, the list page
+  // we're about to land on filters the very problem we just
+  // pinned out of view — user sees an empty list with the pin
+  // tag orphaned. Detect the case and widen the timeframe just
+  // enough to encompass the start (rounded up to the next
+  // canonical preset: 30 d / 90 d / 365 d, then 30 d-aligned for
+  // anything older). `selectedRange` (chart brush) takes
+  // precedence over `timeframe` in the filter, so we clear it
+  // too so the widening actually takes effect. No-op when the
+  // problem is already inside the window.
   const onQuadrantProblemSelect = useCallback((p: Problem) => {
     setQuadrantDetail(null);
     setEnlargedQuadrant(null);
+
+    const startIso = p["event.start"];
+    const startMs = startIso ? new Date(startIso).getTime() : NaN;
+    const windowFromMs = (() => {
+      if (selectedRange) return selectedRange.from.getTime();
+      if (timeframe?.from?.absoluteDate) return new Date(timeframe.from.absoluteDate).getTime();
+      return NaN;
+    })();
+    if (Number.isFinite(startMs) && Number.isFinite(windowFromMs) && startMs < windowFromMs) {
+      const now = new Date();
+      const daysAgo = Math.ceil((now.getTime() - startMs) / 86_400_000);
+      const widenDays = daysAgo <= 30
+        ? 30
+        : daysAgo <= 90
+          ? 90
+          : daysAgo <= 365
+            ? 365
+            : Math.ceil(daysAgo / 30) * 30; // 30 d-aligned headroom
+      const newFromDate = new Date(now.getTime() - widenDays * 86_400_000);
+      setTimeframe({
+        from: { absoluteDate: newFromDate.toISOString(), value: `now()-${widenDays}d`, type: "expression" },
+        to:   { absoluteDate: now.toISOString(),         value: "now()",                type: "expression" },
+      });
+      if (selectedRange) clearRange();
+    }
+
     setPinnedProblemId(p.display_id);
+    // 0.0.201 — also capture the FULL problem object so the list
+    // can render it even when the 250-newest sample doesn't
+    // include it (see pinnedInjected state above).
+    setPinnedInjected(p);
     setExpandedRows(new Set([p.display_id]));
     setViewMode("list");
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [timeframe, selectedRange, clearRange]);
 
   // Manual refresh — re-runs the same DQL query the page is already using.
   // Mirrors the "manual refresh" button in the official Davis Problems app.
@@ -2271,7 +2344,13 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
               on mobile/tablet — the user reported the segment
               chip felt orphaned over there with no related
               control beside it. */}
-          {!isMobileOrTablet && <SegmentSelector />}
+          {/* 0.0.225 — Strato's `<SegmentSelector />` wrapped to
+              auto-click "Show more" on open. Skips the
+              Recently-used-only intermediate state that the
+              user reported as visually broken ("ao expandir os
+              Segments, parece carregar por baixo do frame
+              inicial"). */}
+          {!isMobileOrTablet && <SegmentSelectorAutoExpand />}
           {/* Display settings chip — sits immediately to the right
               of the SegmentSelector. Lets the user adjust font
               scale without leaving the header. */}
@@ -2293,7 +2372,9 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
               before TimeframeSelector, so segments + timeframe form
               a related cluster on small screens. On desktop the
               segment chip lives on the left next to view toggles. */}
-          {isMobileOrTablet && <SegmentSelector />}
+          {/* 0.0.225 — Mobile sibling of the auto-expand wrapper
+              (same rationale as the desktop slot above). */}
+          {isMobileOrTablet && <SegmentSelectorAutoExpand />}
           {/* Visualization mode + View-by grouping toggles — both
               are constellation-view affordances:
                 • `dataMode` (Rising/Oldest/Crit/Total) drives how
