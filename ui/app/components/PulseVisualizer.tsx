@@ -382,7 +382,13 @@ const PulseVisualizerImpl: React.FC<PulseVisualizerProps> = ({
           xMid, baseY - totalH / 2, Math.max(8, barW * 1.4),
         );
         const haloA = (isHover ? 0.45 : 0.18) + breath * 0.08;
-        const haloRgb = activeH > closedH ? COLORS.active.rgb : COLORS.closed.rgb;
+        // 0.0.249 — Halo locked to the ACTIVE colour. Previously
+        // it tracked whichever stack was taller (ACTIVE vs
+        // CLOSED), which made the halo green for buckets where
+        // the CLOSED count was larger — those greens accumulated
+        // across the chart and read as a continuous green wash
+        // behind the bars (user: "remover esse efeito verde").
+        const haloRgb = COLORS.active.rgb;
         halo.addColorStop(0, `rgba(${haloRgb},${haloA})`);
         halo.addColorStop(1, `rgba(${haloRgb},0)`);
         ctx.fillStyle = halo;
