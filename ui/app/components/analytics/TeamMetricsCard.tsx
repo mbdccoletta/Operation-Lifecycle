@@ -469,39 +469,14 @@ export const TeamMetricsCard: React.FC<Props> = ({
                   >
                     ⤺ Reset zoom
                   </button>
-                ) : isMobileOrTablet ? (
-                  /* Mobile / tablet: drag-to-zoom is awkward on touch
-                     (especially with the existing tooltip layer); we
-                     swap the hint for a row of preset-duration chips
-                     that anchor on `now()`. Tap a chip → zoom into
-                     that window via the same `onZoomRangeSelect`
-                     callback the brush uses. */
-                  <div className="neo-mtta-zoom-presets" role="group" aria-label="Zoom presets">
-                    {[
-                      { label: "6 h",  ms: 6 * 60 * 60_000 },
-                      { label: "24 h", ms: 24 * 60 * 60_000 },
-                      { label: "3 d",  ms: 3 * 24 * 60 * 60_000 },
-                      { label: "7 d",  ms: 7 * 24 * 60 * 60_000 },
-                    ].map((p) => (
-                      <button
-                        key={p.label}
-                        type="button"
-                        className="neo-mtta-zoom-preset"
-                        onClick={() => {
-                          const now = Date.now();
-                          onZoomRangeSelect(now - p.ms, now);
-                        }}
-                        title={`Zoom into the last ${p.label}`}
-                      >
-                        {p.label}
-                      </button>
-                    ))}
-                  </div>
-                ) : (
-                  <span className="neo-mtta-zoom-hint" aria-hidden="true">
-                    Drag on the chart to zoom in →
-                  </span>
-                )}
+                ) : null /* 0.0.270 — Removed both the mobile preset
+                          chips (6h/24h/3d/7d) AND the desktop
+                          "Drag on the chart to zoom in →" hint per
+                          user request ("remover da visao desktop e
+                          mobile"). The reset-zoom button above
+                          still surfaces when the user IS zoomed,
+                          which is the only state where the control
+                          is actionable. */}
               </div>
             )}
           </div>
@@ -1022,38 +997,13 @@ export const TeamMetricsCard: React.FC<Props> = ({
             );
           })()}
 
-          {/* Data-density footer — surfaces the gap between "total
-              problems in window" and "problems contributing to each
-              metric series" so the user can validate why some lines
-              look sparse. Most common gotcha: MTTA only counts
-              problems that received a human comment, MTTR only
-              CLOSED ones, MTBF/MTTF skip the first problem in the
-              window. Showing the breakdown here turns "the chart is
-              empty?" into "ah, only N of M problems contribute". */}
-          {!m.loading && !m.error && m.totalProblems > 0 && (
-            <div className="neo-mtta-density" role="note">
-              <span className="neo-mtta-density-label">Samples</span>
-              {METRIC_DEFS.map((d) => {
-                const n = metrics[d.key].count;
-                const pct = m.totalProblems > 0 ? Math.round((n / m.totalProblems) * 100) : 0;
-                return (
-                  <span
-                    key={d.key}
-                    className={`neo-mtta-density-stat${n === 0 ? " neo-mtta-density-stat-zero" : ""}`}
-                    style={{ ["--metric-accent" as string]: d.color }}
-                    title={`${n} of ${m.totalProblems} problems contribute to ${d.label} (${pct}%)`}
-                  >
-                    <span className="neo-mtta-density-dot" />
-                    <span className="neo-mtta-density-name">{d.label}</span>
-                    <span className="neo-mtta-density-count">{n}</span>
-                  </span>
-                );
-              })}
-              <span className="neo-mtta-density-total">
-                of {m.totalProblems} problem{m.totalProblems === 1 ? "" : "s"} in window
-              </span>
-            </div>
-          )}
+          {/* 0.0.270 — Data-density footer ("Samples MTTA n • MTTR n
+              • MTBF n • MTTF n  of X problems in window") removed
+              per user request ("remover da visao desktop e mobile").
+              The breakdown was useful diagnostically but the user
+              found it visually noisy on both viewports. Tooltips on
+              individual dots in the chart still expose the per-
+              bucket sample counts when needed. */}
         </div>
       )}
     </div>
