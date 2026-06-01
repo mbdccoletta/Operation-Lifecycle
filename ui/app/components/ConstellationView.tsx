@@ -4107,18 +4107,25 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
 // so it's obvious from the UI which variant is active.
 // Local-test only for now — DO NOT deploy until the design is
 // signed off.
-type FxVariant = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
+type FxVariant = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
 declare global {
   // eslint-disable-next-line no-var
   var __fx: number | string | undefined;
 }
 // 0.0.227 — Default variant for production. `0` keeps the
-// baseline production look. The futuristic skins (1-6) remain
-// reachable from devtools (`window.__fx = 6`) or via the
-// `?fx=6` URL param / `localStorage.setItem("fx","6")`. They
+// baseline production look. The futuristic skins (1-7) remain
+// reachable from devtools (`window.__fx = 7`) or via the
+// `?fx=7` URL param / `localStorage.setItem("fx","7")`. They
 // are NOT enabled by default in production until the final
 // design is signed off.
-const FX_DEFAULT_LOCAL: FxVariant = 0;
+//
+// 0.0.238 — Default flipped to `8` ("Stealth HUD") after sign-off.
+// Contained-inside-the-disc design: clipping path keeps every
+// decoration strictly within the satellite ring, so the layout
+// above (category titles) and the trend pill below remain
+// untouched. Reachable from devtools (`window.__fx = 0`) to
+// revert to the original look.
+const FX_DEFAULT_LOCAL: FxVariant = 8;
 function readFxVariant(): FxVariant {
   try {
     if (typeof window === "undefined") return FX_DEFAULT_LOCAL;
@@ -4149,6 +4156,7 @@ function readFxVariant(): FxVariant {
       if (v === "5" || v === "backdrop" || v === "tinted") return 5;
       if (v === "6" || v === "tech" || v === "substrate") return 6;
       if (v === "7" || v === "holo" || v === "hud") return 7;
+      if (v === "8" || v === "stealth" || v === "contained") return 8;
     }
     // No override → default to the impactful skin in local dev
     return FX_DEFAULT_LOCAL;
@@ -4478,6 +4486,8 @@ function drawSatellite(
     drawReactorCoreOverlay(ctx, cx, cy, r, rgb, label);
   } else if (fxNow === 7) {
     drawHoloHudOverlay(ctx, cx, cy, r, rgb, label);
+  } else if (fxNow === 8) {
+    drawStealthHudOverlay(ctx, cx, cy, r, rgb);
   }
   // fx=5 (Tinted Backdrop) has no overlay — its only effect is
   // the disc-fill replacement above.
@@ -5126,6 +5136,122 @@ function drawHoloHudOverlay(
     ctx.fill();
   }
   ctx.restore();
+}
+
+/** 0.0.237-fx v8 — "Stealth HUD". Direct response to v7 feedback
+ *  ("nao gostei"): the v7 bracketed label `[ TOT-001 ]` collided
+ *  with the category title in the row above and the rotating arc
+ *  sweep + wide halo bled into neighbouring cells. This variant
+ *  is the opposite — EVERY decoration lives strictly inside the
+ *  disc via a clipping path. Nothing outside the ring stroke is
+ *  modified, so the layout above the satellite is untouched.
+ *  Layers (all clipped to a circle one pixel inside the ring):
+ *    1. Very faint radial tint (alpha 0–0.06) — subtle "screen"
+ *       feel without colouring the digit area.
+ *    2. 4 inward-pointing chevrons at N/E/S/W (just inside the
+ *       ring) — `< > ^ v` style indicators, tech and minimal.
+ *    3. Breathing inner ring at r * 0.72, alpha pulsing 0.10..0.25.
+ *    4. 8 micro-ticks at 45° increments at r * 0.92 (very thin).
+ *    5. A single slow scan line behind the digit: 1 px high,
+ *       sweeps top→bottom inside the disc in ~8 s. Alpha 0.08.
+ *  No external label. No rotating arc outside. No wide halo.
+ *  Reads as "instrument display from a HUD" without ever
+ *  reaching past the ring. */
+function drawStealthHudOverlay(
+  ctx: CanvasRenderingContext2D,
+  cx: number, cy: number, r: number,
+  rgb: string,
+) {
+  const tc = Date.now();
+
+  // Clip everything to the disc (1 px in so the ring stroke is
+  // untouched and nothing visually bleeds past the ring).
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(cx, cy, r - 1, 0, Math.PI * 2);
+  ctx.clip();
+
+  // ── Layer 1: faint radial tint ──────────────────────────────
+  const tint = ctx.createRadialGradient(cx, cy, r * 0.2, cx, cy, r);
+  tint.addColorStop(0, `rgba(${rgb},0)`);
+  tint.addColorStop(0.85, `rgba(${rgb},0.04)`);
+  tint.addColorStop(1, `rgba(${rgb},0.10)`);
+  ctx.fillStyle = tint;
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.fill();
+
+  // ── Layer 2: 4 inward chevron indicators (N/E/S/W) ──────────
+  // Each chevron points TOWARD the centre. Sits just inside the
+  // ring at r * 0.85. Lines drawn as two stroke segments.
+  ctx.strokeStyle = `rgba(${rgb},0.55)`;
+  ctx.lineWidth = 1.2;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  const chevR = r * 0.85;
+  const chevSize = r * 0.075;
+  // top chevron (^ pointing down toward centre)
+  ctx.beginPath();
+  ctx.moveTo(cx - chevSize, cy - chevR);
+  ctx.lineTo(cx,            cy - chevR + chevSize);
+  ctx.lineTo(cx + chevSize, cy - chevR);
+  ctx.stroke();
+  // bottom chevron (v pointing up toward centre)
+  ctx.beginPath();
+  ctx.moveTo(cx - chevSize, cy + chevR);
+  ctx.lineTo(cx,            cy + chevR - chevSize);
+  ctx.lineTo(cx + chevSize, cy + chevR);
+  ctx.stroke();
+  // left chevron (> pointing right toward centre)
+  ctx.beginPath();
+  ctx.moveTo(cx - chevR,            cy - chevSize);
+  ctx.lineTo(cx - chevR + chevSize, cy);
+  ctx.lineTo(cx - chevR,            cy + chevSize);
+  ctx.stroke();
+  // right chevron (< pointing left toward centre)
+  ctx.beginPath();
+  ctx.moveTo(cx + chevR,            cy - chevSize);
+  ctx.lineTo(cx + chevR - chevSize, cy);
+  ctx.lineTo(cx + chevR,            cy + chevSize);
+  ctx.stroke();
+
+  // ── Layer 3: breathing inner ring ───────────────────────────
+  const breathe = 0.10 + ((Math.sin(tc * 0.0018) + 1) / 2) * 0.15;
+  ctx.strokeStyle = `rgba(${rgb},${breathe.toFixed(3)})`;
+  ctx.lineWidth = 0.6;
+  ctx.beginPath();
+  ctx.arc(cx, cy, r * 0.72, 0, Math.PI * 2);
+  ctx.stroke();
+
+  // ── Layer 4: 8 micro-ticks at 45° increments at r * 0.92 ────
+  ctx.strokeStyle = `rgba(${rgb},0.35)`;
+  ctx.lineWidth = 0.7;
+  const microIn = r * 0.92;
+  const microOut = r * 0.97;
+  for (let i = 0; i < 8; i++) {
+    const a = (Math.PI / 4) * i;
+    const cosA = Math.cos(a), sinA = Math.sin(a);
+    ctx.beginPath();
+    ctx.moveTo(cx + cosA * microIn, cy + sinA * microIn);
+    ctx.lineTo(cx + cosA * microOut, cy + sinA * microOut);
+    ctx.stroke();
+  }
+
+  // ── Layer 5: slow horizontal scan line ──────────────────────
+  // Period ~8 s so it reads as ambient instrument motion, not
+  // an active scan. Alpha 0.08 so it sits behind the digit
+  // without competing for attention.
+  const scanPhase = (tc % 8000) / 8000;
+  const scanY = cy - r + scanPhase * (r * 2);
+  const beamH = Math.max(8, r * 0.12);
+  const beam = ctx.createLinearGradient(0, scanY - beamH / 2, 0, scanY + beamH / 2);
+  beam.addColorStop(0, `rgba(${rgb},0)`);
+  beam.addColorStop(0.5, `rgba(${rgb},0.08)`);
+  beam.addColorStop(1, `rgba(${rgb},0)`);
+  ctx.fillStyle = beam;
+  ctx.fillRect(cx - r, scanY - beamH / 2, r * 2, beamH);
+
+  ctx.restore(); // end disc clip
 }
 
 // Memoized export — see PulseVisualizer for the same rationale.
