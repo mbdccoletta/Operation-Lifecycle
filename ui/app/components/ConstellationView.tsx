@@ -4249,7 +4249,10 @@ function readHubBandGrid(): boolean {
     return HUB_GRID_DEFAULT_LOCAL;
   }
 }
-const HUB_GRID_DEFAULT_LOCAL = true;
+// 0.0.248 — Default flipped to `false`. User: "efeito central
+// muito sutil, nao gostei". The grid stays available via
+// `window.__hubGrid = true` until a better design is signed off.
+const HUB_GRID_DEFAULT_LOCAL = false;
 function readFxVariant(): FxVariant {
   try {
     if (typeof window === "undefined") return FX_DEFAULT_LOCAL;
