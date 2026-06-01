@@ -2671,11 +2671,17 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
           >
             <span className="neo-mobile-ring-label">RISING</span>
             <span className="neo-mobile-ring-value">{mobileSubsetTotals.rising}</span>
-            {/* 0.0.275 — Match the trend pill on TOTAL / ACTIVE /
-                RESOLVED above. `risingDelta` = newly started in the
-                last 1 h minus the previous 1 h, signed. Rising-is-
-                bad because more new arrivals = worse. */}
-            <MobileRingTrend mode="delta" value={mobileRingTrends.risingDelta} risingIsBad />
+            {/* 0.0.277 — switched from `delta` (HoH change) to
+                `rate`. User: "vejo aumento de 15 mas vejo 26
+                problemas" — the delta-mode trend ("+14 /1h" =
+                arrival rate accelerated by 14 vs prev hour) read
+                disconnected from the value (26 = total arrivals
+                this hour, also what the list shows when Rising
+                is pinned). `rate` mode matches the visual contract
+                of TOTAL / RESOLVED above (cumulative value + per-
+                hour rate), and the rate number IS the Rising
+                count, so the card reads "26 arrived this hour". */}
+            <MobileRingTrend mode="rate" value={mobileSubsetTotals.rising} risingIsBad />
           </button>
           <button
             type="button"
