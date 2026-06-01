@@ -4760,12 +4760,23 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   /* Crush the header so the controls stack tight, no big black
      gaps between rows. Padding 8/12 → 2/6, gap 8 → 2. The 2 px
      gap is barely visible to the eye but stops the buttons
-     from touching, which matters for touch targets. */
+     from touching, which matters for touch targets.
+     0.0.230 — `align-content: flex-start` + explicit `row-gap`
+     stop flex-wrap from adding a "stretch row" that read as
+     two big empty rectangles (user feedback "tem como remover
+     os espaço vaziio"). With flex-start, wrapped rows pack to
+     the top with no growth. */
   .neo-header {
     padding: 2px 6px !important;
     gap: 2px !important;
+    row-gap: 2px !important;
+    align-content: flex-start !important;
+    align-items: center !important;
   }
-  .neo-refresh-group { gap: 2px !important; }
+  .neo-refresh-group {
+    gap: 2px !important;
+    min-height: 0 !important;
+  }
   /* Trim individual control heights — Strato selects default to
      ~32 px tall, which at 4 wrapped rows = 128 px just for the
      header. Reducing to ~26 px tall buys 24 px of vertical
@@ -4778,10 +4789,39 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
     padding-top: 0 !important;
     padding-bottom: 0 !important;
   }
+  /* Suppress empty flex slots. `.neo-header-left` becomes
+     a passthrough via `display: contents` so its children
+     participate directly in the header flex (no orphan slot).
+     Same for any wrapper rendered with no visible children. */
+  .neo-header-left:empty,
+  .neo-header-right:empty,
+  .neo-header-left > div:empty,
+  .neo-header-right > div:empty { display: none !important; }
+  /* SegmentSelector + TimeframeSelector ship with their own
+     internal padding (Strato chip styling: ~6-10 px vertical).
+     Override to 0 so each pill sits flush within its row. */
+  .neo-header [data-testid="segment-selector"],
+  .neo-header [class*="SegmentSelector"],
+  .neo-header [class*="TimeframeSelector"] {
+    min-height: 0 !important;
+  }
   /* Belt-and-braces: kill any rogue horizontal scroll on the
      outermost app root. */
   .neo-app, .neo-page, .neo-page-overview {
     overflow-x: hidden;
+  }
+  /* The shared FILTER chip strip (Davis category chips) renders
+     empty when no categories are selected — its 10/12/8 padding
+     becomes pure dead space. Collapse it to 0 when empty so it
+     doesn't look like a black-empty banner under the header.
+     `.neo-category-filters:empty` would only match if NO chips
+     are rendered; we use a class hook + JS could later add
+     `data-empty` for more nuanced cases. For now, target the
+     visible-empty case via :empty. */
+  .neo-category-filters:empty {
+    padding: 0 !important;
+    border: 0 !important;
+    min-height: 0 !important;
   }
 }
 @media (min-width: 961px) {
