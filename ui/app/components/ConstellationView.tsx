@@ -1410,6 +1410,19 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
         const tc = Date.now();
         // Accent rgb — cyan-ish for dark, indigo for light.
         const accent = dk ? "120,180,255" : "70,90,180";
+        // 0.0.257 — Horizontal bounds tied to the satellite span.
+        // User: "ela não pode sair da areas central" — the
+        // previous version drew hexes / borders / labels all the
+        // way to the canvas edges, which made the effect look
+        // like it was spilling past the leftmost TOTAL and the
+        // rightmost RESOLVED. Now the whole HUD is clipped to a
+        // panel that starts ~one satellite-radius left of TOTAL
+        // and ends ~one satellite-radius right of RESOLVED. Side
+        // labels (SECT.A / SECT.B) sit just inside that boundary.
+        const PANEL_PAD_X = satRForGrid + 16;
+        const xStart = Math.max(0, satXsForGrid[0] - PANEL_PAD_X);
+        const xEnd   = Math.min(w, satXsForGrid[satXsForGrid.length - 1] + PANEL_PAD_X);
+        const panelW = xEnd - xStart;
         // ── Hex tile substrate — alpha per hex depends on the
         // animation variant picked via `window.__hubAnim`:
         //   1 wave   crest travels L→R (6 s)
@@ -1432,7 +1445,11 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
         const radialWidth  = Math.max(60, w * 0.08);
         for (let row = 0, ry = hubBandTop + hexR; ry < hubBandBottom + hexR; ry += hexH, row++) {
           const rowOffset = (row % 2) * (hexW / 2);
-          for (let cx2 = -hexW + rowOffset; cx2 < w + hexW; cx2 += hexW) {
+          // 0.0.257 — Restrict hex centres to within the
+          // satellite-span panel. Snap to the hex grid by
+          // starting at the first hexW step inside `xStart`.
+          const xLoopStart = xStart + ((rowOffset - xStart) % hexW + hexW) % hexW;
+          for (let cx2 = xLoopStart; cx2 < xEnd; cx2 += hexW) {
             // Skip hex centres inside the satellites.
             let inside = false;
             for (let s = 0; s < satXsForGrid.length; s++) {
@@ -1503,11 +1520,11 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
           ctx.strokeStyle = `rgba(${accent},0.55)`;
           ctx.lineWidth = 1;
           ctx.lineCap = "round";
-          // Tick marks every ~50 px along top + bottom borders.
-          const tickStep = Math.max(40, Math.min(60, w * 0.04));
-          for (let tx = tickStep; tx < w - tickStep; tx += tickStep) {
-            // Major tick (3 px) every 4th, minor (1.5 px) others.
-            const isMajor = (Math.round(tx / tickStep) % 4) === 0;
+          // Tick marks every ~50 px along top + bottom borders,
+          // bounded to the satellite-span panel.
+          const tickStep = Math.max(40, Math.min(60, panelW * 0.05));
+          for (let tx = xStart + tickStep; tx < xEnd - tickStep; tx += tickStep) {
+            const isMajor = (Math.round((tx - xStart) / tickStep) % 4) === 0;
             const tlen = isMajor ? 4 : 2;
             ctx.beginPath();
             ctx.moveTo(tx, hubBandTop);
@@ -1516,28 +1533,30 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
             ctx.lineTo(tx, hubBandBottom - tlen);
             ctx.stroke();
           }
-          // Thin horizontal hub-line at midband, dashed.
+          // Thin horizontal hub-line at midband, dashed, within
+          // the panel span.
           ctx.setLineDash([4, 6]);
           ctx.strokeStyle = `rgba(${accent},0.18)`;
           ctx.lineWidth = 0.6;
           ctx.beginPath();
-          ctx.moveTo(0, hubMidY);
-          ctx.lineTo(w, hubMidY);
+          ctx.moveTo(xStart, hubMidY);
+          ctx.lineTo(xEnd, hubMidY);
           ctx.stroke();
           ctx.setLineDash([]);
-          // Tiny coordinate-style labels at the band's two side
-          // edges (rotated 90°). Reads as instrument ID.
+          // Side labels — sit just INSIDE the panel edges so they
+          // stay within the satellite-span and never reach the
+          // canvas edges.
           ctx.font = `600 8px "Roboto Mono","SF Mono",monospace`;
           ctx.fillStyle = `rgba(${accent},0.55)`;
           ctx.save();
-          ctx.translate(8, hubMidY);
+          ctx.translate(xStart + 14, hubMidY);
           ctx.rotate(-Math.PI / 2);
           ctx.textAlign = "center";
           ctx.textBaseline = "middle";
           ctx.fillText("SECT.A", 0, 0);
           ctx.restore();
           ctx.save();
-          ctx.translate(w - 8, hubMidY);
+          ctx.translate(xEnd - 14, hubMidY);
           ctx.rotate(Math.PI / 2);
           ctx.textAlign = "center";
           ctx.textBaseline = "middle";
@@ -1547,20 +1566,22 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
         }
 
         // ── Layer 3: Neon top + bottom borders with glow ────
+        // Bounded to the satellite-span panel (xStart..xEnd).
         ctx.save();
         ctx.shadowColor = `rgba(${accent},0.55)`;
         ctx.shadowBlur = 4;
         ctx.strokeStyle = `rgba(${accent},0.75)`;
         ctx.lineWidth = 1.2;
         ctx.beginPath();
-        ctx.moveTo(0, hubBandTop);
-        ctx.lineTo(w, hubBandTop);
-        ctx.moveTo(0, hubBandBottom);
-        ctx.lineTo(w, hubBandBottom);
+        ctx.moveTo(xStart, hubBandTop);
+        ctx.lineTo(xEnd, hubBandTop);
+        ctx.moveTo(xStart, hubBandBottom);
+        ctx.lineTo(xEnd, hubBandBottom);
         ctx.stroke();
         ctx.restore();
 
-        // ── Layer 4: L-bracket markers at the 4 corners ─────
+        // ── Layer 4: L-bracket markers at the 4 panel corners ─
+        // Anchored to xStart/xEnd so they hug the satellite span.
         ctx.save();
         ctx.strokeStyle = `rgba(${accent},0.85)`;
         ctx.lineWidth = 1.6;
@@ -1569,27 +1590,27 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
         const bIn = 6;
         // top-left
         ctx.beginPath();
-        ctx.moveTo(bIn, hubBandTop + bArm);
-        ctx.lineTo(bIn, hubBandTop + bIn);
-        ctx.lineTo(bIn + bArm, hubBandTop + bIn);
+        ctx.moveTo(xStart + bIn, hubBandTop + bArm);
+        ctx.lineTo(xStart + bIn, hubBandTop + bIn);
+        ctx.lineTo(xStart + bIn + bArm, hubBandTop + bIn);
         ctx.stroke();
         // top-right
         ctx.beginPath();
-        ctx.moveTo(w - bIn - bArm, hubBandTop + bIn);
-        ctx.lineTo(w - bIn, hubBandTop + bIn);
-        ctx.lineTo(w - bIn, hubBandTop + bArm);
+        ctx.moveTo(xEnd - bIn - bArm, hubBandTop + bIn);
+        ctx.lineTo(xEnd - bIn, hubBandTop + bIn);
+        ctx.lineTo(xEnd - bIn, hubBandTop + bArm);
         ctx.stroke();
         // bottom-left
         ctx.beginPath();
-        ctx.moveTo(bIn, hubBandBottom - bArm);
-        ctx.lineTo(bIn, hubBandBottom - bIn);
-        ctx.lineTo(bIn + bArm, hubBandBottom - bIn);
+        ctx.moveTo(xStart + bIn, hubBandBottom - bArm);
+        ctx.lineTo(xStart + bIn, hubBandBottom - bIn);
+        ctx.lineTo(xStart + bIn + bArm, hubBandBottom - bIn);
         ctx.stroke();
         // bottom-right
         ctx.beginPath();
-        ctx.moveTo(w - bIn - bArm, hubBandBottom - bIn);
-        ctx.lineTo(w - bIn, hubBandBottom - bIn);
-        ctx.lineTo(w - bIn, hubBandBottom - bArm);
+        ctx.moveTo(xEnd - bIn - bArm, hubBandBottom - bIn);
+        ctx.lineTo(xEnd - bIn, hubBandBottom - bIn);
+        ctx.lineTo(xEnd - bIn, hubBandBottom - bArm);
         ctx.stroke();
         ctx.restore();
 
