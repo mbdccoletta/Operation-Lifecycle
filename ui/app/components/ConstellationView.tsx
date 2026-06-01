@@ -2840,7 +2840,20 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
       // bubble fill more of its slot when the cell is wide and only
       // hosts 2 sub-bubbles (Stuck + Total, the common case in
       // non-rising modes).
-      const baseR = Math.min(56, Math.max(10, Math.min(spacing * 0.44, verticalCap)));
+      // 0.0.241 — Cap the category bubble radius at the central
+      // satellite's radius (hubRadius, the same value used by
+      // `satR`). User: "os circulos de grupos das categorias
+      // não devem ser maiores que os circulos centrais". The
+      // previous ceiling of 56 px allowed bottom-row cells (with
+      // tall safe areas) to grow visibly bigger than the central
+      // TOTAL / ACTIVE / RESOLVED rings on small-medium canvases.
+      // Mirror the `satR = Math.max(40, hubRadius)` formula so
+      // the cap tracks the satellites at every viewport size.
+      // Multiply by 0.92 so the bubble is *slightly* smaller than
+      // the satellite (a visual hint that the satellites lead).
+      const SATELLITE_R = Math.max(40, hubRadius);
+      const satelliteCap = SATELLITE_R * 0.92;
+      const baseR = Math.min(satelliteCap, Math.max(10, Math.min(spacing * 0.44, verticalCap)));
       // Bubble animation removed — user 0.0.109 follow-up: "porem
       // sem animacao". The earlier breathing pulse (±6 % radius)
       // and the dashed-rotating focus ring both made highlighted
