@@ -4843,15 +4843,15 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
     flex: 0 0 auto !important;
     min-width: 0 !important;
   }
-  /* 0.0.264 — Aggressive clearance trim. `.neo-page` was at
-     32 px (v0.0.263); user reports a visible gap remains
-     between the tabbar and Aa Display ("muito espaço em
-     livre"). Drop to 24 px — accepts a 4-6 px overlap risk on
-     viewports where the tabbar is slightly taller, in trade
-     for killing the gap on Z Fold cover where the tabbar
-     actually collapses to ~28 px. */
+  /* 0.0.269 — Match the Trend page (`.neo-analytics-page`)
+     which renders without any padding-top and looks perfect
+     ("Trend esta perfeito. Incidents possui espaço superior
+     ainda."). The sticky `.neo-header` inside this page is
+     positioned with `top: 0` which already places it correctly
+     against the fixed tabbar — the explicit padding was just
+     stacking an extra gap on top. Drop to 0. */
   .neo-page {
-    padding-top: calc(24px + env(safe-area-inset-top, 0px)) !important;
+    padding-top: 0 !important;
   }
   .neo-header {
     padding-top: 0 !important;
@@ -4941,8 +4941,13 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
     padding-top: max(2px, env(safe-area-inset-top, 2px)) !important;
     padding-bottom: 2px !important;
   }
+  /* 0.0.269 — Zeroed to match the Trend page (`.neo-analytics-page`
+     which has no padding-top and renders correctly). The previous
+     40 px stacked an extra gap above the sticky header on Overview
+     that didn't exist on Trend. The sticky header itself handles
+     positioning against the fixed tabbar. */
   .neo-page {
-    padding-top: calc(40px + env(safe-area-inset-top, 0px)) !important;
+    padding-top: 0 !important;
   }
   /* 0.0.233 — Strato SegmentSelector dropdown overflow on Z Fold
      cover ("cortou o texto do learning"). The "Learn more about
