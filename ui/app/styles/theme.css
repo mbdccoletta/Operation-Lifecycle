@@ -4816,7 +4816,25 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
     letter-spacing: 0 !important;
     opacity: 0.7;
   }
-  .neo-refresh-status { display: none !important; }
+  /* 0.0.235 — "refreshed Xm ago" kept VISIBLE on user request
+     ("nao quero que oculte texto, apenas reposicione para
+     baixo"). Wraps to its own line below the Auto-refresh
+     Select via .neo-refresh-group's flex-wrap. Font tightened
+     to 10 px + flex-basis 100 % so it always claims a new row. */
+  .neo-refresh-status {
+    display: inline !important;
+    font-size: 10px !important;
+    flex: 0 0 100% !important;
+    width: 100% !important;
+    margin: 0 !important;
+    opacity: 0.7;
+  }
+  /* Allow .neo-refresh-group to wrap so the status text drops
+     below the select instead of being clipped or hidden. */
+  .neo-refresh-group {
+    flex-wrap: wrap !important;
+    row-gap: 0 !important;
+  }
   /* Trim individual control heights so 4 stacked rows take
      ~4×26 + 3×2 = 110 px instead of ~4×32 + 3×8 = 152 px. */
   .neo-header .neo-refresh-btn,
