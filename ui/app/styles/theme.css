@@ -1672,16 +1672,9 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   background: rgba(245,158,11,0.08);
   border-color: rgba(245,158,11,0.55);
 }
-/* Sub-label rendered below the value — mirrors the trend pill's
-   vertical position from the first row so the two rows align
-   visually. Lower-case + low-contrast so it reads as metadata. */
-.neo-mobile-ring-sub {
-  font: 500 10px var(--neo-mono);
-  letter-spacing: 0;
-  color: var(--neo-text-3);
-  opacity: 0.7;
-  margin-top: 2px;
-}
+/* 0.0.275 — `.neo-mobile-ring-sub` removed; Rising / Stuck now
+   use the same `<MobileRingTrend>` pill as TOTAL / ACTIVE /
+   RESOLVED for full visual parity. */
 
 /* Trend chip rendered below the value — same `▲ +N /1h` / `▼ -N` /
    `— neutral` vocabulary the desktop ring uses. Re-mounts via React

@@ -1161,10 +1161,22 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
   // problems — no extra DQL needed.
   const mobileRingTrends = useMemo(() => {
     const now = Date.now();
-    const oneHourAgo = now - 3_600_000;
+    const oneHourAgo  = now - 3_600_000;
+    const twoHoursAgo = now - 2 * 3_600_000;
+    // STUCK threshold: ACTIVE problems whose start < (cutoff - 4h).
+    // The "4 h" matches the default `stuckCutoffMs` the constellation
+    // uses; see `useStatusCategoryCounts` for the server-side mirror.
+    const fourHoursAgo = now - 4  * 3_600_000;
+    const fiveHoursAgo = now - 5  * 3_600_000;
     let totalRate    = 0;
     let activeRecent = 0, activeOlder = 0;
     let resolvedRate = 0;
+    // 0.0.275 — Rising / Stuck hour-over-hour deltas to feed the
+    // trend pill on the Rising / Stuck cards. Both are signed (▲ or
+    // ▼) and both are rising-is-bad (more new arrivals or more
+    // stuck problems is worse).
+    let risingRecent = 0, risingPrev = 0;
+    let stuckNow = 0, stuckOneHourAgo = 0;
     for (const p of rawProblems) {
       const startTs = new Date(p["event.start"]).getTime();
       const endTs   = p["event.end"] ? new Date(p["event.end"]).getTime() : null;
@@ -1181,11 +1193,23 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
       if (p["event.status"] === "CLOSED" && endTs !== null && endTs >= oneHourAgo) {
         resolvedRate++;
       }
+      // RISING: newly started in last 1 h vs previous 1 h. Tells the
+      // user whether arrival rate is accelerating or slowing.
+      if (startTs >= oneHourAgo) risingRecent++;
+      else if (startTs >= twoHoursAgo) risingPrev++;
+      // STUCK: count of ACTIVE problems older than 4 h, now vs 1 h
+      // ago. At "1 h ago" the cutoff was (oneHourAgo - 4 h) =
+      // fiveHoursAgo, AND the problem had to be active at that
+      // point in time.
+      if (isActiveNow && startTs < fourHoursAgo) stuckNow++;
+      if (wasActiveAt1hAgo && startTs < fiveHoursAgo) stuckOneHourAgo++;
     }
     return {
       totalRate,
       activeDelta: activeRecent - activeOlder,
       resolvedRate,
+      risingDelta: risingRecent - risingPrev,
+      stuckDelta:  stuckNow - stuckOneHourAgo,
     };
   }, [rawProblems]);
 
@@ -2647,7 +2671,11 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
           >
             <span className="neo-mobile-ring-label">RISING</span>
             <span className="neo-mobile-ring-value">{mobileSubsetTotals.rising}</span>
-            <span className="neo-mobile-ring-sub">started /1h</span>
+            {/* 0.0.275 — Match the trend pill on TOTAL / ACTIVE /
+                RESOLVED above. `risingDelta` = newly started in the
+                last 1 h minus the previous 1 h, signed. Rising-is-
+                bad because more new arrivals = worse. */}
+            <MobileRingTrend mode="delta" value={mobileRingTrends.risingDelta} risingIsBad />
           </button>
           <button
             type="button"
@@ -2658,7 +2686,11 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
           >
             <span className="neo-mobile-ring-label">STUCK</span>
             <span className="neo-mobile-ring-value">{mobileSubsetTotals.stuck}</span>
-            <span className="neo-mobile-ring-sub">active &gt; 4h</span>
+            {/* `stuckDelta` = current stuck count minus stuck count
+                at "1 h ago" (same 4 h cutoff applied to that
+                vantage). Rising-is-bad (a growing stuck pile is
+                worse). */}
+            <MobileRingTrend mode="delta" value={mobileRingTrends.stuckDelta} risingIsBad />
           </button>
         </div>
       )}
