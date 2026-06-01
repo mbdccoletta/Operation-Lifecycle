@@ -3040,26 +3040,22 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
               tenants stay below this cap because `useProblems.HARD_CEILING`
               limits the source to 10k. Belt-and-braces in case a future
               regression lifts the source cap.
-              0.0.172 — also surfaces when more matches exist server-
-              side than the current batch (`hasMore`). Tells the user
-              the list paginates 250 at a time and points at the
-              "Load more" affordance at the bottom. */}
-          {(filtered.length > MAX_RENDER_ROWS || !teamMetricsEnabled || (hasMore && expectedListTotal !== null && expectedListTotal > filtered.length)) && (
+              0.0.276 — removed the "Showing 250 of X" paginated batch
+              warning per user request — the count chip at the top of
+              the list and the "Load more" affordance at the bottom
+              already carry that information, so the banner was
+              redundant. The "Large dataset detected" branch (genuine
+              degradation) and the team-metrics-paused notice still
+              fire here. */}
+          {(filtered.length > MAX_RENDER_ROWS || !teamMetricsEnabled) && (
             <div className="neo-large-dataset-banner" role="status">
-              {filtered.length > MAX_RENDER_ROWS ? (
+              {filtered.length > MAX_RENDER_ROWS && (
                 <>
                   <strong>Large dataset detected</strong>{" "}
                   ({filtered.length.toLocaleString()} problems matched).{" "}
                   Showing the first {MAX_RENDER_ROWS.toLocaleString()} rows — refine the filter / search / timeframe to narrow.
                 </>
-              ) : (hasMore && expectedListTotal !== null && expectedListTotal > filtered.length) ? (
-                <>
-                  <strong>Showing {filtered.length.toLocaleString()} of {expectedListTotal.toLocaleString()}</strong>{" "}
-                  matching problems. The list loads in batches of 250 —
-                  use <strong>Load more</strong> at the bottom of the list to fetch the next batch,
-                  or refine the timeframe / filters to narrow.
-                </>
-              ) : null}
+              )}
               {!teamMetricsEnabled && (
                 <> Team-metrics KPIs are paused above {TEAM_METRICS_CAP.toLocaleString()} problems — they re-enable automatically once you filter down.</>
               )}
