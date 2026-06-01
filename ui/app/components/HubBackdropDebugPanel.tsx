@@ -23,17 +23,23 @@ const ANIM_VARIANTS: Array<{ id: AnimVariant; label: string; hint: string }> = [
   { id: 4, label: "Static", hint: "No animation" },
 ];
 
+// 0.0.254 — Panel now shows by default. The earlier
+// "?hubDebug=1" URL gate didn't fire when the app ran inside
+// the Dynatrace shell iframe (window.location.search belonged
+// to the iframe, not the parent URL the user was editing). Easier
+// to just show it for everyone; the user can dismiss with × and
+// re-open with Ctrl + Shift + B. The dismissed state is
+// persisted to localStorage so it survives reloads.
 function isDebugActive(): boolean {
   try {
-    if (typeof window === "undefined") return false;
-    const p = new URLSearchParams(window.location.search).get("hubDebug");
-    if (p === "1" || p === "true") return true;
+    if (typeof window === "undefined") return true;
+    // Explicit hide takes precedence over everything.
     try {
       const ls = window.localStorage?.getItem("hubDebug");
-      if (ls === "1" || ls === "true") return true;
+      if (ls === "0" || ls === "false" || ls === "hide") return false;
     } catch { /* private mode */ }
-    return false;
-  } catch { return false; }
+    return true;
+  } catch { return true; }
 }
 
 function readInitialOn(): boolean {
@@ -80,6 +86,27 @@ export const HubBackdropDebugPanel: React.FC = () => {
     (window as unknown as { __hubGrid?: boolean }).__hubGrid = on;
     try { window.localStorage?.setItem("hubGrid", on ? "1" : "0"); } catch { /* private mode */ }
   }, [on]);
+
+  // 0.0.254 — Keyboard shortcut: Ctrl + Shift + B (B for
+  // "Backdrop") toggles visibility. Lets the user resurrect
+  // the panel after dismissing without leaving the page.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.ctrlKey && e.shiftKey && (e.key === "B" || e.key === "b")) {
+        e.preventDefault();
+        setVisible((v) => {
+          const next = !v;
+          try {
+            window.localStorage?.setItem("hubDebug", next ? "1" : "0");
+          } catch { /* private mode */ }
+          return next;
+        });
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -154,7 +181,10 @@ export const HubBackdropDebugPanel: React.FC = () => {
         </button>
         <button
           type="button"
-          onClick={() => setVisible(false)}
+          onClick={() => {
+            setVisible(false);
+            try { window.localStorage?.setItem("hubDebug", "0"); } catch { /* private mode */ }
+          }}
           style={{
             background: "transparent",
             border: "none",
@@ -163,7 +193,7 @@ export const HubBackdropDebugPanel: React.FC = () => {
             font: "inherit",
             padding: "0 4px",
           }}
-          title="Hide panel (re-open with ?hubDebug=1)"
+          title="Hide panel (re-open with Ctrl+Shift+B)"
         >
           ×
         </button>
