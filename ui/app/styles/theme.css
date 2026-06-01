@@ -4840,6 +4840,23 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   .neo-page {
     padding-top: calc(40px + env(safe-area-inset-top, 0px)) !important;
   }
+  /* 0.0.233 — Strato SegmentSelector dropdown overflow on Z Fold
+     cover ("cortou o texto do learning"). The "Learn more about
+     segments ↗" footer link is `white-space: nowrap` by default,
+     which clips the trailing ↗ icon when the portaled overlay is
+     narrower than the link. Cap the overlay container to the
+     viewport minus a small gutter, and let any anchor inside
+     wrap to multiple lines instead of clipping. Targets the
+     overlay portal globally so it covers SegmentSelector,
+     TimeframeSelector, Select dropdowns, etc. */
+  [data-overlay-container] {
+    max-width: calc(100vw - 16px) !important;
+  }
+  [data-overlay-container] a {
+    white-space: normal !important;
+    overflow-wrap: anywhere !important;
+    word-break: break-word !important;
+  }
 }
 @media (min-width: 961px) {
   /* Desktop+ — give cards more room */
