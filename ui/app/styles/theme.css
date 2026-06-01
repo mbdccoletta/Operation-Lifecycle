@@ -4876,11 +4876,18 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
     height: 0;
     order: 0;
   }
+  /* 0.0.266 — `flex: 1 1 auto` was making the refresh status
+     grow to fill the row width, which pushed the version chip
+     to the far right edge and left a visible gap between them
+     (user: comparing Overview vs Trend — Trend looked cleaner
+     because it has no version chip). With `flex: 0 0 auto` the
+     status sizes to its content, and the version chip lands
+     packed immediately after it. */
   .neo-refresh-status {
     display: inline-block !important;
     font-size: 10px !important;
     order: -1 !important;
-    flex: 1 1 auto !important;
+    flex: 0 0 auto !important;
     width: auto !important;
     margin: 0 !important;
     opacity: 0.7;
