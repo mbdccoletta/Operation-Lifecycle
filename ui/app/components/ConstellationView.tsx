@@ -1322,10 +1322,20 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
     // rendering below; everything the user needs (category, count,
     // delta /1h) still fits. Recovered ~32 px is handed to the
     // constellation cells via the hub-band shifts below.
-    const RESOLVED_ZONE_H = 96;
-    const activeAreaH = showResolvedZone
-      ? Math.max(h * 0.78, h - RESOLVED_ZONE_H)
-      : h;
+    // 0.0.246 — `activeAreaH` was `max(h * 0.78, h - 96)`. The
+    // `h - 96` floor meant on tall canvases (h > 436) the active
+    // area ended at `h - 96` (e.g. 484 for h=580), but the
+    // bottom cellRect tops out at `0.51 + 0.27 = 0.78h` = 452.
+    // The 32 px gap between 452 and 484 read as visible empty
+    // space at the bottom (user: "espaço na parte inferior").
+    // Drop the floor — keep `activeAreaH = 0.78h` so the bottom
+    // cell extends right up to the resolved-zone boundary and
+    // there's no orphan gap. Resolved zone gets the remaining
+    // 22 % of the canvas height (≈ 128 px at h=580, plenty for
+    // its single-row chip strip).
+    const RESOLVED_ZONE_H = 96; // kept for any legacy reference
+    void RESOLVED_ZONE_H;
+    const activeAreaH = showResolvedZone ? h * 0.78 : h;
     // Hub band coordinates — only used when showHub is true. Kept at
     // module scope so trend / spoke / satellite code below can reference
     // them; guarded against rendering when the hub is hidden.
@@ -2840,21 +2850,28 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
       // bubble fill more of its slot when the cell is wide and only
       // hosts 2 sub-bubbles (Stuck + Total, the common case in
       // non-rising modes).
-      // 0.0.244 — Cap MUST account for the highlight boost
-      // (1.25×) + breathing (1.05×) = 1.3125× peak multiplier
-      // applied AFTER baseR. Earlier attempts (v0.0.241
-      // `satR × 0.92`, v0.0.242 `hubRadius − 6`) left the
-      // boosted bubble visibly bigger than the satellite ring
-      // (hubRadius ≈ 58 on a typical canvas → cap = 52 → boosted
-      // peak = 68, but satR = 58).
-      // New formula: `satR × 0.70` so even the boosted peak
-      // stays at `satR × 0.70 × 1.3125 ≈ satR × 0.92` — visibly
-      // smaller than the central satellite at every viewport
-      // size. `satR` follows the same `max(40, hubRadius)`
-      // formula used by the satellite renderer so the cap
-      // tracks the actual drawn ring exactly. */
+      // 0.0.246 — Cap accounts for BOTH the highlight boost
+      // (1.25×) + breathing (1.05×) = 1.3125× peak AND the
+      // outer animated halo ring drawn at `r + 6 + ringPulse * 4`
+      // (≈ r + 10 at peak). User: "ainda maior" — the v0.0.244
+      // cap of `satR × 0.70` kept `r` itself under the satellite
+      // but the animated dashed halo extending +10 px beyond `r`
+      // crossed the satellite radius.
+      //
+      // For h ≈ 500 the satellite is drawn at satR ≈ 46:
+      //   v0.0.244 cap = 32 → highlighted r = 42 → halo outer 52
+      //   satR = 46 → halo (52) > satR (46) ❌
+      //
+      // New formula: `satR × 0.55`. Math:
+      //   cap = satR × 0.55
+      //   r_peak = cap × 1.3125 = satR × 0.722
+      //   halo_peak = r_peak + 10 = satR × 0.722 + 10
+      //   For satR ≥ 50, halo_peak ≤ satR × 0.92 (under satR ✅)
+      //   For smaller satR the +10 absolute term tightens the
+      //   ratio further, still keeping halo under satR.
+      // */
       const SATELLITE_R = Math.max(40, hubRadius);
-      const satelliteCap = SATELLITE_R * 0.70;
+      const satelliteCap = SATELLITE_R * 0.55;
       const baseR = Math.min(satelliteCap, Math.max(10, Math.min(spacing * 0.44, verticalCap)));
       // Bubble animation removed — user 0.0.109 follow-up: "porem
       // sem animacao". The earlier breathing pulse (±6 % radius)
