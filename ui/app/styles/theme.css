@@ -4805,30 +4805,33 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
     grid-column: 1 / -1 !important;
     gap: 2px !important;
   }
-  /* 0.0.239 — TimeframeSelector full-row coverage. The previous
-     selector `[class*="TimeframeSelector"]` missed Strato's
-     hashed kebab-case class names — Today got truncated to
-     "T..." on Z Fold cover ("visao mobile cortando Today").
-     Multiple fallbacks now:
-       • Case-insensitive class substring (`i` flag) — catches
-         `_strato-timeframe-selector_xyz`.
-       • DOM position fallback: 2nd direct child of
-         `.neo-header-right` (Segment is 1st, Timeframe is 2nd,
-         refresh-group is 3rd). Robust against Strato class
-         renames.
-       • Same coverage for SegmentSelector wrappers as a
-         defensive measure. */
-  .neo-header [class*="Timeframe" i],
-  .neo-header [class*="timeframe" i],
-  .neo-header [data-testid*="timeframe" i],
-  .neo-header-right > *:nth-child(2) {
+  /* 0.0.240 — TimeframeSelector full-row coverage. The previous
+     two attempts at class-substring + nth-child selectors
+     failed: Strato's TimeframeSelector renders as either a
+     React Fragment (no outer element to target) or with a
+     hashed kebab-case class. Switched to an EXPLICIT WRAPPER
+     `.neo-tf-slot` added in Overview.tsx so the CSS targets a
+     class we control. Same pattern for the segment chip slot
+     (`.neo-seg-slot`) for consistency. */
+  .neo-tf-slot {
     grid-column: 1 / -1 !important;
+    display: block !important;
+    width: 100% !important;
+    min-width: 0 !important;
   }
-  /* If Strato's internal button still has a max-width that
-     truncates "Today", un-cap it so the digit fills the row. */
-  .neo-header-right > *:nth-child(2) button,
-  .neo-header [class*="Timeframe" i] button {
+  /* Defensively un-cap any internal Strato button so "Today"
+     uses the full slot width. */
+  .neo-tf-slot button {
     max-width: none !important;
+    min-width: 0 !important;
+  }
+  /* SegmentSelector slot keeps its single-column slot (paired
+     with Display on row 1) — no grid-column override needed,
+     the 1fr 1fr template handles it. Just ensure the wrapper
+     stretches to fill its cell. */
+  .neo-seg-slot {
+    display: block !important;
+    width: 100% !important;
     min-width: 0 !important;
   }
   /* 0.0.236 — Meta info (refresh status + version) moved to the

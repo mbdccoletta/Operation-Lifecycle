@@ -2373,8 +2373,15 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
               a related cluster on small screens. On desktop the
               segment chip lives on the left next to view toggles. */}
           {/* 0.0.225 — Mobile sibling of the auto-expand wrapper
-              (same rationale as the desktop slot above). */}
-          {isMobileOrTablet && <SegmentSelectorAutoExpand />}
+              (same rationale as the desktop slot above).
+              0.0.240 — Wrapped in `.neo-seg-slot` so the narrow-
+              viewport CSS can target the chip reliably (the
+              Strato class is hashed). */}
+          {isMobileOrTablet && (
+            <div className="neo-seg-slot">
+              <SegmentSelectorAutoExpand />
+            </div>
+          )}
           {/* Visualization mode + View-by grouping toggles — both
               are constellation-view affordances:
                 • `dataMode` (Rising/Oldest/Crit/Total) drives how
@@ -2449,12 +2456,20 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
           {/* Strato TimeframeSelector — exposes the official preset
               list (Last 30 min, 1h, 2h, Today, Yesterday, 24h, 7d,
               custom range, recently used). Bound to local state and
-              translated to ProblemFilters above. */}
-          <TimeframeSelector
-            value={timeframe}
-            onChange={handleTimeframeChange}
-            clearable={false}
-          />
+              translated to ProblemFilters above.
+              0.0.240 — Wrapped in `.neo-tf-slot` so the narrow-
+              viewport CSS can force `grid-column: 1 / -1` without
+              guessing Strato's hashed class name (the previous
+              `[class*="Timeframe"]` selector missed the kebab-case
+              variant and "Today" was truncated to "T..." on Z
+              Fold cover). */}
+          <div className="neo-tf-slot">
+            <TimeframeSelector
+              value={timeframe}
+              onChange={handleTimeframeChange}
+              clearable={false}
+            />
+          </div>
           {/* Manual refresh + freshness indicator + auto-refresh
               interval picker — matches the Dynatrace pattern at the
               top-right of analysis screens. */}
