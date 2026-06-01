@@ -870,12 +870,30 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
   // 9, list shows only 5. The 4 missing actives were long-running
   // problems beyond the first 250 by start date. Server-side filter
   // fixes this — DQL returns all 9 actives directly.
+  // 0.0.279 — When the STUCK card is pinned (mobile: clicking the
+  // STUCK ring; desktop: Stuck pill in the constellation modal) the
+  // user wants the LIST to show stuck problems. Without intervention,
+  // `useProblems` fetches the 250 NEWEST problems server-side, which
+  // on busy tenants are almost all <4h old — meaning the client-side
+  // `startTs < stuckCutoffMs` filter (at ~line 1836 below) returned
+  // zero. User: "stuck nao vejo nada".
+  // Fix at the query layer:
+  //   • Force `status: "ACTIVE"` (Stuck is by definition ACTIVE)
+  //   • Set `sortAsc: true` so the 250 returned are the OLDEST active
+  //     problems — which are exactly the stuck ones once the client
+  //     filter applies `event.start < stuckCutoffMs`.
+  // Mirrors the dedicated `useStuckProblemsByCategory` hook the
+  // desktop modal uses, but reuses the same `useProblems` pipeline
+  // so pagination, demo-mode, and segment filtering keep working
+  // unchanged.
+  const stuckPinned = highlightedSubsetMode === "open_time";
   const problemsFilter = useMemo(() => ({
-    status: statusFilter ?? "",
+    status: stuckPinned ? "ACTIVE" : (statusFilter ?? ""),
     category: "",
     categories: categoriesArr,
+    sortAsc: stuckPinned,
     ...timeframeFilter,
-  }), [statusFilter, categoriesArr, timeframeFilter]);
+  }), [statusFilter, categoriesArr, timeframeFilter, stuckPinned]);
 
   const {
     problems: tenantProblems,

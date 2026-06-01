@@ -61,6 +61,13 @@ export interface ProblemFilters {
   timeframe?: string;
   from?: string;
   to?: string;
+  /** 0.0.279 — flip the server-side ordering from "newest first"
+   *  to "oldest first". Set by the Overview page when the STUCK
+   *  card is pinned so the 250-row sample lands on the long-
+   *  running ACTIVE problems (the ones that match the
+   *  `startTs < stuckCutoffMs` client filter) instead of an
+   *  empty list of all-too-new rows. */
+  sortAsc?: boolean;
 }
 
 export interface UseProblemsOptions {
@@ -107,7 +114,7 @@ export function useProblems(
   const filterKey =
     `${filters.status ?? ""}|${filters.category ?? ""}|${categoriesKey}|` +
     `${filters.timeframe ?? ""}|${filters.from ?? ""}|${filters.to ?? ""}|` +
-    `${initialLimit}|${segmentIds}`;
+    `${initialLimit}|${segmentIds}|sortAsc=${filters.sortAsc ? "1" : "0"}`;
 
   const [paginationState, setPaginationState] = useState<{ filterKey: string; limit: number }>(
     () => ({ filterKey, limit: initialLimit }),
@@ -131,7 +138,7 @@ export function useProblems(
   const query = useMemo(
     () => buildFilteredQuery({ ...filters, limit: activeLimit }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [filters.status, filters.category, categoriesKey, filters.timeframe, filters.from, filters.to, activeLimit],
+    [filters.status, filters.category, categoriesKey, filters.timeframe, filters.from, filters.to, activeLimit, filters.sortAsc],
   );
 
   const params = useMemo(() => ({

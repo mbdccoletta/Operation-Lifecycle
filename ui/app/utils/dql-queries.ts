@@ -72,6 +72,13 @@ export function buildFilteredQuery(filters: {
    *  via Load-more to a hard ceiling of 10 000 (same as the legacy
    *  unlimited path). */
   limit?: number;
+  /** 0.0.279 — invert the default `event.start desc` (newest first)
+   *  ordering to `asc` (oldest first). Set by the Overview page when
+   *  the STUCK card is pinned so the 250-row sample contains the
+   *  oldest ACTIVE problems (the stuck ones) instead of the newest
+   *  — matches `buildStuckProblemsByCategoryQuery`'s ordering used
+   *  by the desktop modal Stuck pill. */
+  sortAsc?: boolean;
 }): string {
   // Use the platform's native "-Xh → now" timeframe — same as the Dynatrace
   // Problems UI selector. Dynatrace Intelligence (Davis) emits state-transition records inside this
@@ -185,10 +192,14 @@ export function buildFilteredQuery(filters: {
   // both fields in the projection until we can isolate root cause
   // and re-evaluate independently.
   query += `\n| fields davis_problem_id, davis_problem_id_alt1, davis_problem_id_alt2, davis_problem_id_alt3, event.name, event.status, event.category, event.start, event.end, event.severity, affected_entity_ids, affected_entity_names, affected_entity_types, root_cause_entity_id, root_cause_entity_name, display_id, management_zones`;
-  // Display ordering — newest problems first. Independent of the
-  // dedup-by-timestamp sort above (that one was about "which row
-  // wins"; this one is about "what does the user see first").
-  query += `\n| sort event.start desc`;
+  // Display ordering — newest problems first by default. Independent
+  // of the dedup-by-timestamp sort above (that one was about "which
+  // row wins"; this one is about "what does the user see first").
+  // 0.0.279 — `sortAsc` flips to oldest-first so callers can surface
+  // long-running ACTIVE problems (Stuck) within the 250-row sample.
+  query += filters.sortAsc
+    ? `\n| sort event.start asc`
+    : `\n| sort event.start desc`;
   // Clamp the caller-supplied limit to a safe integer in
   // [1, 10000]. The upper bound matches the legacy "fetch
   // everything" path so the Load-more ramp never accidentally
