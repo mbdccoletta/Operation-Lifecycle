@@ -338,11 +338,14 @@ export const TrendAnalysis = () => {
               onChange={(e) => setRefreshIntervalSec(Number(e.target.value))}
               title="Auto refresh interval"
             >
-              <option value={0}>Auto-refresh: Off</option>
-              <option value={30}>Every 30s</option>
-              <option value={60}>Every 1m</option>
-              <option value={300}>Every 5m</option>
-              <option value={1800}>Every 30m</option>
+              {/* 0.0.262 — Compact labels to keep the select small
+                  on Z Fold cover (~280 px wide). The select's title
+                  attr carries the full "Auto refresh interval" context. */}
+              <option value={0}>Off</option>
+              <option value={30}>30 s</option>
+              <option value={60}>1 min</option>
+              <option value={300}>5 min</option>
+              <option value={1800}>30 min</option>
             </select>
             <span className="neo-refresh-status">refreshed {refreshedAgoLabel}</span>
           </div>

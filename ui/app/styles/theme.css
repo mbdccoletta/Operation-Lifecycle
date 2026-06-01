@@ -4821,14 +4821,26 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
     max-width: none !important;
     min-width: 0 !important;
   }
-  /* SegmentSelector slot keeps its single-column slot (paired
-     with Display on row 1) — no grid-column override needed,
-     the 1fr 1fr template handles it. Just ensure the wrapper
-     stretches to fill its cell. */
+  /* SegmentSelector slot — paired with Display on row 1 of
+     the grid. Force `order: 0` so it precedes the refresh group
+     (which inherits `order: 1` from the @media (max-width: 960px)
+     block); without this override Segment ended up below the
+     refresh group on a row by itself (user: "é possivel otimizar
+     para utilizar melhor os espaços"). */
   .neo-seg-slot {
     display: block !important;
     width: 100% !important;
     min-width: 0 !important;
+    order: 0 !important;
+  }
+  /* 0.0.262 — Slim down the Auto-refresh select: smaller font,
+     tighter padding. Combined with the JSX label shortening
+     ("Off" / "5 min" / etc.), the select now takes ~50% less
+     horizontal space than v0.0.261. */
+  .neo-header .neo-refresh-interval {
+    font-size: 11px !important;
+    padding: 0 22px 0 8px !important;
+    background-position: right 4px center !important;
   }
   /* 0.0.236 — Meta info (refresh status + version) moved to the
      FIRST row of the refresh group, filling the empty space the

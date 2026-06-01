@@ -2499,11 +2499,16 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
               title="Auto refresh interval (min 5m to control DPS)"
               aria-label="Auto refresh interval"
             >
-              <option value={0}>Auto-refresh: Off</option>
-              <option value={300}>Every 5m</option>
-              <option value={900}>Every 15m</option>
-              <option value={1800}>Every 30m</option>
-              <option value={3600}>Every 1h</option>
+              {/* 0.0.262 — Labels shortened. "Auto-refresh: Off" -> "Off",
+                  "Every 5m" -> "5 min", etc. Frees ~80 px on narrow
+                  viewports without losing meaning — the select's
+                  title tooltip + the label `<span>Auto-refresh</span>`
+                  in the header carry the full context. */}
+              <option value={0}>Off</option>
+              <option value={300}>5 min</option>
+              <option value={900}>15 min</option>
+              <option value={1800}>30 min</option>
+              <option value={3600}>1 hr</option>
             </select>
             {/* Visual intensity + font-scale controls moved out of
                 this header into a globally-rendered floating panel
