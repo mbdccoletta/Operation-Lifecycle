@@ -4824,6 +4824,22 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   .neo-app, .neo-page, .neo-page-overview {
     overflow-x: hidden;
   }
+  /* 0.0.232 — Tighten the tabbar + the .neo-page clearance gap
+     that sits above the .neo-header. The mobile rule at <=720
+     px sets .neo-page { padding-top: 72px } to clear the fixed
+     tabbar. On Z Fold cover (~284 px wide) the tabbar collapses
+     to ~52 px tall, leaving a ~20 px black band between the
+     tabbar and the page header — that's what the user is still
+     seeing as "espaço vazio". Shrink the tabbar's vertical
+     padding (8/0/8 -> 2/0/2 -> ~36 px total) and bring the
+     page clearance down to match (52 -> 40 px). */
+  .neo-tabbar {
+    padding-top: max(2px, env(safe-area-inset-top, 2px)) !important;
+    padding-bottom: 2px !important;
+  }
+  .neo-page {
+    padding-top: calc(40px + env(safe-area-inset-top, 0px)) !important;
+  }
 }
 @media (min-width: 961px) {
   /* Desktop+ — give cards more room */
