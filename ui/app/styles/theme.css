@@ -3653,8 +3653,14 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
      tabbar — on mobile we move that clearance to the top. The
      relocated tabbar is taller than 64 px on viewports with
      a notch / status bar (env(safe-area-inset-top) adds 24-44 px
-     on iOS), so we account for that explicitly. */
-  .neo-page {
+     on iOS), so we account for that explicitly.
+     0.0.272 — Also target `.neo-analytics-page` (Trend page wrapper)
+     which previously had no padding-top and overlapped the fixed
+     tabbar at 421-720 px widths (Z Fold 5 folded at 690 px showed
+     the overlap; <=420 px hides it because the tabbar is trimmed
+     to ~36 px and the sticky header offset covers the gap). */
+  .neo-page,
+  .neo-analytics-page {
     padding-top: calc(72px + env(safe-area-inset-top, 0px));
     padding-bottom: 0;
   }
@@ -4846,14 +4852,11 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
     flex: 0 0 auto !important;
     min-width: 0 !important;
   }
-  /* 0.0.269 — Match the Trend page (`.neo-analytics-page`)
-     which renders without any padding-top and looks perfect
-     ("Trend esta perfeito. Incidents possui espaço superior
-     ainda."). The sticky `.neo-header` inside this page is
-     positioned with `top: 0` which already places it correctly
-     against the fixed tabbar — the explicit padding was just
-     stacking an extra gap on top. Drop to 0. */
-  .neo-page {
+  /* 0.0.269 — Zero the top padding so the sticky header sits
+     tight under the trimmed tabbar at <=420 px.
+     0.0.272 — Mirror on `.neo-analytics-page`. */
+  .neo-page,
+  .neo-analytics-page {
     padding-top: 0 !important;
   }
   .neo-header {
@@ -4944,12 +4947,13 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
     padding-top: max(2px, env(safe-area-inset-top, 2px)) !important;
     padding-bottom: 2px !important;
   }
-  /* 0.0.269 — Zeroed to match the Trend page (`.neo-analytics-page`
-     which has no padding-top and renders correctly). The previous
-     40 px stacked an extra gap above the sticky header on Overview
-     that didn't exist on Trend. The sticky header itself handles
-     positioning against the fixed tabbar. */
-  .neo-page {
+  /* 0.0.269 — Zero padding so the sticky header parks tight under
+     the trimmed tabbar.
+     0.0.272 — Mirror on `.neo-analytics-page` so Trend behaves the
+     same as Overview at narrow widths (was inherited via the
+     720 px rule we just unified). */
+  .neo-page,
+  .neo-analytics-page {
     padding-top: 0 !important;
   }
   /* 0.0.233 — Strato SegmentSelector dropdown overflow on Z Fold
