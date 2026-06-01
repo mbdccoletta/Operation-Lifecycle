@@ -4809,32 +4809,49 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   .neo-header [data-testid*="timeframe"] { order: 3; }
   .neo-header [class*="DisplaySettings"],
   .neo-header [data-testid*="display"] { order: 4; }
-  /* Version chip — kept visible, but ULTRA compact. */
-  .neo-app-version {
-    font-size: 9px !important;
-    margin-left: 4px !important;
-    letter-spacing: 0 !important;
-    opacity: 0.7;
+  /* 0.0.236 — Meta info (refresh status + version) moved to the
+     FIRST row of the refresh group, filling the empty space the
+     user pointed out at the top of the page header ("mover para
+     a area vazia superior"). The refresh button + select sit
+     below as the second row. Achieved with:
+       • flex-wrap + flex-direction: row on .neo-refresh-group
+       • order: -1 on .neo-refresh-status and .neo-app-version
+         so they precede the button + select
+       • ::after pseudo-element with width: 100%, order: 0
+         forces the row break between meta row (order: -1) and
+         controls row (order: 1) */
+  .neo-refresh-group {
+    flex-wrap: wrap !important;
+    flex-direction: row !important;
+    align-items: center !important;
   }
-  /* 0.0.235 — "refreshed Xm ago" kept VISIBLE on user request
-     ("nao quero que oculte texto, apenas reposicione para
-     baixo"). Wraps to its own line below the Auto-refresh
-     Select via .neo-refresh-group's flex-wrap. Font tightened
-     to 10 px + flex-basis 100 % so it always claims a new row. */
+  .neo-refresh-group::after {
+    content: "";
+    width: 100%;
+    height: 0;
+    order: 0;
+  }
   .neo-refresh-status {
-    display: inline !important;
+    display: inline-block !important;
     font-size: 10px !important;
-    flex: 0 0 100% !important;
-    width: 100% !important;
+    order: -1 !important;
+    flex: 1 1 auto !important;
+    width: auto !important;
     margin: 0 !important;
     opacity: 0.7;
   }
-  /* Allow .neo-refresh-group to wrap so the status text drops
-     below the select instead of being clipped or hidden. */
-  .neo-refresh-group {
-    flex-wrap: wrap !important;
-    row-gap: 0 !important;
+  .neo-app-version {
+    font-size: 9px !important;
+    order: -1 !important;
+    flex: 0 0 auto !important;
+    margin: 0 0 0 6px !important;
+    letter-spacing: 0 !important;
+    opacity: 0.7;
   }
+  /* Refresh button + select fall to the SECOND row inside the
+     group, after the ::after break. */
+  .neo-refresh-btn { order: 1 !important; flex: 0 0 auto !important; }
+  .neo-refresh-interval { order: 1 !important; flex: 1 1 auto !important; }
   /* Trim individual control heights so 4 stacked rows take
      ~4×26 + 3×2 = 110 px instead of ~4×32 + 3×8 = 152 px. */
   .neo-header .neo-refresh-btn,
