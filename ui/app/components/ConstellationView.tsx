@@ -2840,19 +2840,22 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
       // bubble fill more of its slot when the cell is wide and only
       // hosts 2 sub-bubbles (Stuck + Total, the common case in
       // non-rising modes).
-      // 0.0.241 — Cap the category bubble radius at the central
-      // satellite's radius (hubRadius, the same value used by
-      // `satR`). User: "os circulos de grupos das categorias
-      // não devem ser maiores que os circulos centrais". The
-      // previous ceiling of 56 px allowed bottom-row cells (with
-      // tall safe areas) to grow visibly bigger than the central
-      // TOTAL / ACTIVE / RESOLVED rings on small-medium canvases.
-      // Mirror the `satR = Math.max(40, hubRadius)` formula so
-      // the cap tracks the satellites at every viewport size.
-      // Multiply by 0.92 so the bubble is *slightly* smaller than
-      // the satellite (a visual hint that the satellites lead).
-      const SATELLITE_R = Math.max(40, hubRadius);
-      const satelliteCap = SATELLITE_R * 0.92;
+      // 0.0.242 — Cap derived DIRECTLY from `hubRadius`, not from
+      // `satR = max(40, hubRadius)`. With the previous v0.0.241
+      // cap, `hubRadius` typically collapses to 30 (because the
+      // ERROR/CONTENTION middle cells contain the hub centre →
+      // their distance to the hub centre is 0 → `_maxR` ends
+      // negative → `hubRadius = max(30, …) = 30`), so satR = 40
+      // (the floor). Multiplied by 0.92 the cap was 36.8 — but
+      // the visible satellite circle is drawn at satR = 40,
+      // while bubbles boosted by the highlight factor of 1.25
+      // could still hit 36.8 × 1.25 ≈ 46, visibly bigger than
+      // the satellites. New formula: cap at `hubRadius − 6` so
+      // even highlighted+breathing bubbles (1.25 × 1.05) stay
+      // under the satellite. Minimum 10 to avoid degenerate
+      // bubbles on collapse, NO upper ceiling so wider canvases
+      // still get proportionally larger bubbles. */
+      const satelliteCap = Math.max(10, hubRadius - 6);
       const baseR = Math.min(satelliteCap, Math.max(10, Math.min(spacing * 0.44, verticalCap)));
       // Bubble animation removed — user 0.0.109 follow-up: "porem
       // sem animacao". The earlier breathing pulse (±6 % radius)
