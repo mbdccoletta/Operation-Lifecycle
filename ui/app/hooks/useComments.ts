@@ -3,6 +3,7 @@ import { documentsClient } from "@dynatrace-sdk/client-document";
 import { getCurrentUserDetails } from "@dynatrace-sdk/app-environment";
 import { postCommentToDavisProblem } from "../utils/davis-comments";
 import { useRefreshTick } from "../contexts/RefreshSignalContext";
+import { useDemoMode } from "../contexts/DemoModeContext";
 import { logger } from "../utils/logger";
 
 export interface Comment {
@@ -13,12 +14,22 @@ export interface Comment {
 }
 
 export function useComments(problemId: string, davisProblemId?: string) {
+  const demo = useDemoMode();
   const [comments, setComments] = useState<Comment[]>([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const fetchComments = useCallback(async () => {
     if (!problemId) return;
+    // 0.0.282 — Demo-mode read guard. Skip the documents API round-
+    // trip so the user's local optimistic comments aren't overwritten
+    // by an empty list (or, on the lab tenant, by real comments left
+    // over from a previous session). Demo `comments` state stays in
+    // memory for the lifetime of the page.
+    if (demo.enabled) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       // Defensive: documentsClient filters are an expression string,
@@ -159,7 +170,7 @@ export function useComments(problemId: string, davisProblemId?: string) {
     } finally {
       setLoading(false);
     }
-  }, [problemId]);
+  }, [problemId, demo.enabled]);
 
   const addComment = useCallback(
     async (comment: string, author?: string): Promise<{ ok: boolean; error?: string }> => {
@@ -190,6 +201,22 @@ export function useComments(problemId: string, davisProblemId?: string) {
         timestamp: new Date().toISOString(),
       };
       try {
+        // 0.0.282 — Demo-mode write guard. When demo is enabled
+        // (URL `?demo=1` AND host on the demo allow-list), neither
+        // `postCommentToDavisProblem` (CUSTOM_ANNOTATION event ingest
+        // to Davis) nor `documentsClient.createDocument` (local
+        // document store write) fires. Instead we just push the new
+        // comment onto the local `comments` state so the UI behaves
+        // exactly as it would after a real save — the demo flow stays
+        // authentic but zero bytes leave the browser.
+        if (demo.enabled) {
+          setComments((prev) => [payload, ...prev]);
+          logger.info("Comment add short-circuited (demo mode)", {
+            category: "comments",
+            problemId,
+          });
+          return { ok: true };
+        }
         // Davis-first: the official Problems app is the source of
         // truth. If we can't post there, we DON'T persist the comment
         // anywhere — preventing drift between hub and Davis.
@@ -259,7 +286,7 @@ export function useComments(problemId: string, davisProblemId?: string) {
         setSaving(false);
       }
     },
-    [problemId, davisProblemId, fetchComments]
+    [problemId, davisProblemId, fetchComments, demo.enabled]
   );
 
   useEffect(() => {
