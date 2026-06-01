@@ -6246,21 +6246,26 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   text-anchor: middle;
 }
 .neo-mtta-tick-y { text-anchor: end; }
-/* Mobile / narrow viewports: viewBox text scales DOWN as the SVG
-   shrinks horizontally, so the same `font-size: 7` reads as ~3 px
-   on a 360 px phone — illegible. Bump the viewBox font + relax the
-   aspect ratio so the chart isn't stretched to a 6:1 ribbon
-   (`preserveAspectRatio="none"` is in the JSX; we counter-act by
-   giving the wrap an explicit aspect-ratio so the wrap height
-   grows when width shrinks). */
+/* 0.0.273 — Mobile / narrow viewports.
+   PREVIOUSLY this block forced the wrap to `aspect-ratio: 3/2`
+   (and 4/3 at <=480) to give the chart vertical room. But the
+   SVG uses `preserveAspectRatio="none"` with a viewBox of
+   880×130 (~6.77:1), so stretching the wrap into a 1.5:1 box
+   stretched the viewBox content vertically by ~4.5×. Result:
+   tall oval dots, vertically-stretched fonts, uneven Y-tick
+   spacing — visible distortion the user reported ("distorceu o
+   grafico e fontes").
+
+   Fix: drop the aspect-ratio override and let `height: auto` on
+   the SVG honour the intrinsic viewBox ratio. The chart renders
+   shorter on narrow viewports (height ≈ width × 130/880) but
+   stays proportional. Tick font-size bumps still apply so
+   labels remain readable at small sizes. */
 @media (max-width: 720px) {
-  .neo-mtta-chart-wrap { aspect-ratio: 3 / 2; }
-  .neo-mtta-chart      { height: 100%; }
-  .neo-mtta-tick       { font-size: 11px; }
+  .neo-mtta-tick { font-size: 11px; }
 }
 @media (max-width: 480px) {
-  .neo-mtta-chart-wrap { aspect-ratio: 4 / 3; }
-  .neo-mtta-tick       { font-size: 13px; }
+  .neo-mtta-tick { font-size: 13px; }
 }
 
 /* p50–p95 band — semi-transparent fill behind the avg line. */
