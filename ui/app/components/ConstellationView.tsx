@@ -1393,65 +1393,163 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
       ctx.setLineDash([]);
       ctx.restore();
 
-      // 0.0.257 — Hub band backdrop, "Glassmorphic + Scanlines".
-      // User picked option 2 from `pilots/hub-backdrop.html`.
-      // Four layers, all bounded to the satellite-span panel:
-      //   1. Vertical gradient glass fill (subtle frost)
-      //   2. Hairline border around the panel
-      //   3. Faint horizontal scanlines every 4 px (CRT feel)
-      //   4. One bright scan beam slowly sweeping top→bottom (~4 s)
+      // 0.0.258 — Hub band backdrop, "Subtle hex circuit".
+      // Restored the etched hex design but with every alpha
+      // ~halved compared to v0.0.256, and the HUB.CORE tag
+      // removed (it was overlapping the top row's "Stuck"
+      // label). All layers bounded to the satellite-span panel
+      // so the effect never reaches the canvas edges.
       // Toggle live via `window.__hubGrid = true | false`.
       if (readHubBandGrid()) {
         const satRForGrid = Math.max(40, hubRadius);
+        const satYForGrid = hubCy;
         const satXsForGrid = [w * 0.18, w / 2, w * 0.82];
-        const tc = Date.now();
+        const SAT_PAD = satRForGrid + 12;
         const accent = dk ? "120,180,255" : "70,90,180";
-        // Horizontal bounds tied to the satellite span so the
-        // panel never spills past TOTAL on the left or RESOLVED
-        // on the right.
+        // Horizontal bounds tied to the satellite span.
         const PANEL_PAD_X = satRForGrid + 16;
         const xStart = Math.max(0, satXsForGrid[0] - PANEL_PAD_X);
         const xEnd   = Math.min(w, satXsForGrid[satXsForGrid.length - 1] + PANEL_PAD_X);
         const panelW = xEnd - xStart;
-        const panelH = hubBandBottom - hubBandTop;
+        const hubMidY = (hubBandTop + hubBandBottom) / 2;
 
-        // ── Layer 1: glass fill (vertical gradient) ──────────
+        // ── Hex tile substrate — static circuit pattern ──────
+        // Deterministic 25 % of hexes are "lit" (slightly
+        // brighter stroke + faint fill) — reads as etched
+        // circuit board, no animation cost.
         ctx.save();
-        const glassGrad = ctx.createLinearGradient(0, hubBandTop, 0, hubBandBottom);
-        glassGrad.addColorStop(0,   `rgba(${accent},0.04)`);
-        glassGrad.addColorStop(0.5, `rgba(${accent},0.08)`);
-        glassGrad.addColorStop(1,   `rgba(${accent},0.04)`);
-        ctx.fillStyle = glassGrad;
-        ctx.fillRect(xStart, hubBandTop, panelW, panelH);
-
-        // ── Layer 2: subtle hairline border ──────────────────
-        ctx.strokeStyle = `rgba(${accent},0.20)`;
-        ctx.lineWidth = 0.8;
-        ctx.strokeRect(
-          xStart + 0.5,
-          hubBandTop + 0.5,
-          panelW - 1,
-          panelH - 1,
-        );
-
-        // ── Layer 3: CRT-style scanlines (faint) ─────────────
-        ctx.fillStyle = `rgba(${accent},0.025)`;
-        for (let y = hubBandTop; y < hubBandBottom; y += 4) {
-          ctx.fillRect(xStart, y, panelW, 1);
+        const hexR = Math.max(14, Math.min(22, w * 0.014));
+        const hexW = hexR * Math.sqrt(3);
+        const hexH = hexR * 1.5;
+        ctx.lineWidth = 1;
+        for (let row = 0, ry = hubBandTop + hexR; ry < hubBandBottom + hexR; ry += hexH, row++) {
+          const rowOffset = (row % 2) * (hexW / 2);
+          const xLoopStart = xStart + ((rowOffset - xStart) % hexW + hexW) % hexW;
+          for (let cx2 = xLoopStart; cx2 < xEnd; cx2 += hexW) {
+            let inside = false;
+            for (let s = 0; s < satXsForGrid.length; s++) {
+              if (Math.hypot(cx2 - satXsForGrid[s], ry - satYForGrid) < SAT_PAD) {
+                inside = true; break;
+              }
+            }
+            if (inside) continue;
+            const ix = Math.round(cx2 / hexW);
+            const iy = Math.round(ry / hexH);
+            const hash = (ix * 73856093) ^ (iy * 19349663);
+            const isLit = (Math.abs(hash) % 7) < 2;
+            // 0.0.258 — Alphas halved vs v0.0.256 for a more
+            // subtle "etched circuit" feel.
+            const alpha = isLit ? 0.22 : 0.07;
+            ctx.strokeStyle = `rgba(${accent},${alpha.toFixed(3)})`;
+            ctx.beginPath();
+            for (let i = 0; i < 6; i++) {
+              const a = (Math.PI / 3) * i - Math.PI / 2;
+              const px = cx2 + Math.cos(a) * hexR;
+              const py = ry + Math.sin(a) * hexR;
+              if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+            }
+            ctx.closePath();
+            ctx.stroke();
+            if (isLit) {
+              ctx.fillStyle = `rgba(${accent},0.05)`;
+              ctx.fill();
+            }
+          }
         }
-
-        // ── Layer 4: slow sweep beam top → bottom (~4 s) ────
-        const SWEEP_PERIOD_MS = 4000;
-        const sweepPhase = (tc % SWEEP_PERIOD_MS) / SWEEP_PERIOD_MS; // 0..1
-        const sweepY = hubBandTop + sweepPhase * panelH;
-        const beamH = 24;
-        const sweepGrad = ctx.createLinearGradient(0, sweepY - beamH / 2, 0, sweepY + beamH / 2);
-        sweepGrad.addColorStop(0,   `rgba(${accent},0)`);
-        sweepGrad.addColorStop(0.5, `rgba(${accent},0.18)`);
-        sweepGrad.addColorStop(1,   `rgba(${accent},0)`);
-        ctx.fillStyle = sweepGrad;
-        ctx.fillRect(xStart, sweepY - beamH / 2, panelW, beamH);
         ctx.restore();
+
+        // ── Static extras: tick marks + midline + side labels ─
+        ctx.save();
+        ctx.strokeStyle = `rgba(${accent},0.25)`;
+        ctx.lineWidth = 1;
+        ctx.lineCap = "round";
+        const tickStep = Math.max(40, Math.min(60, panelW * 0.05));
+        for (let tx = xStart + tickStep; tx < xEnd - tickStep; tx += tickStep) {
+          const isMajor = (Math.round((tx - xStart) / tickStep) % 4) === 0;
+          const tlen = isMajor ? 4 : 2;
+          ctx.beginPath();
+          ctx.moveTo(tx, hubBandTop);
+          ctx.lineTo(tx, hubBandTop + tlen);
+          ctx.moveTo(tx, hubBandBottom);
+          ctx.lineTo(tx, hubBandBottom - tlen);
+          ctx.stroke();
+        }
+        // Dashed midline
+        ctx.setLineDash([4, 6]);
+        ctx.strokeStyle = `rgba(${accent},0.10)`;
+        ctx.lineWidth = 0.6;
+        ctx.beginPath();
+        ctx.moveTo(xStart, hubMidY);
+        ctx.lineTo(xEnd, hubMidY);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        // Side labels SECT.A / SECT.B — kept but more subtle.
+        ctx.font = `600 8px "Roboto Mono","SF Mono",monospace`;
+        ctx.fillStyle = `rgba(${accent},0.30)`;
+        ctx.save();
+        ctx.translate(xStart + 14, hubMidY);
+        ctx.rotate(-Math.PI / 2);
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText("SECT.A", 0, 0);
+        ctx.restore();
+        ctx.save();
+        ctx.translate(xEnd - 14, hubMidY);
+        ctx.rotate(Math.PI / 2);
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText("SECT.B", 0, 0);
+        ctx.restore();
+        ctx.restore();
+
+        // ── Neon top + bottom borders (subtle) ──────────────
+        ctx.save();
+        ctx.strokeStyle = `rgba(${accent},0.35)`;
+        ctx.lineWidth = 0.9;
+        ctx.beginPath();
+        ctx.moveTo(xStart, hubBandTop);
+        ctx.lineTo(xEnd, hubBandTop);
+        ctx.moveTo(xStart, hubBandBottom);
+        ctx.lineTo(xEnd, hubBandBottom);
+        ctx.stroke();
+        ctx.restore();
+
+        // ── L-bracket markers at the 4 panel corners ─────────
+        ctx.save();
+        ctx.strokeStyle = `rgba(${accent},0.40)`;
+        ctx.lineWidth = 1.2;
+        ctx.lineCap = "round";
+        const bArm = 14;
+        const bIn = 6;
+        // top-left
+        ctx.beginPath();
+        ctx.moveTo(xStart + bIn, hubBandTop + bArm);
+        ctx.lineTo(xStart + bIn, hubBandTop + bIn);
+        ctx.lineTo(xStart + bIn + bArm, hubBandTop + bIn);
+        ctx.stroke();
+        // top-right
+        ctx.beginPath();
+        ctx.moveTo(xEnd - bIn - bArm, hubBandTop + bIn);
+        ctx.lineTo(xEnd - bIn, hubBandTop + bIn);
+        ctx.lineTo(xEnd - bIn, hubBandTop + bArm);
+        ctx.stroke();
+        // bottom-left
+        ctx.beginPath();
+        ctx.moveTo(xStart + bIn, hubBandBottom - bArm);
+        ctx.lineTo(xStart + bIn, hubBandBottom - bIn);
+        ctx.lineTo(xStart + bIn + bArm, hubBandBottom - bIn);
+        ctx.stroke();
+        // bottom-right
+        ctx.beginPath();
+        ctx.moveTo(xEnd - bIn - bArm, hubBandBottom - bIn);
+        ctx.lineTo(xEnd - bIn, hubBandBottom - bIn);
+        ctx.lineTo(xEnd - bIn, hubBandBottom - bArm);
+        ctx.stroke();
+        ctx.restore();
+
+        // NOTE: 0.0.258 — HUB.CORE.001 tag + flanking LEDs
+        // removed (they were overlapping the top row's "Stuck"
+        // bubble label). Clean panel without the heading.
       }
     } else if (layout.length > 0) {
       // Hub-free layout (Segments page): draw dotted dividers between
