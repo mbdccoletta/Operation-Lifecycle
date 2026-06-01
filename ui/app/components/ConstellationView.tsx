@@ -1691,12 +1691,50 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
         // outer frame when Total is active. The ★ TOP / ▲ UP seal
         // below still draws so the leader cue isn't lost.
         if (!leaderCellIds || leaderCellIds.size === 0) {
+          // 0.0.227-fx — When the Tech Substrate skin is active
+          // (fx=6) we swap the solid rectangular border for the
+          // same 4 L-shaped corner brackets + mid-side ticks
+          // used by the Total-mode leader frame (line ~1949).
+          // Keeps the visual language consistent: the satellites
+          // have inscribed L-brackets inside their discs, and
+          // the leader cell echoes the same motif at the cell
+          // boundary. Production (fx=0) keeps the original
+          // strokeRect untouched.
+          const fxForBracket = getFxVariant();
           ctx.save();
           ctx.strokeStyle = `rgba(${rgb},${0.7 + ringPulse * 0.25})`;
-          ctx.lineWidth = 2;
           ctx.shadowColor = `rgba(${rgb},0.65)`;
-          ctx.shadowBlur = 10;
-          ctx.strokeRect(z.x + 1.5, z.y + 1.5, z.w - 3, z.h - 3);
+          ctx.lineCap = "round";
+          if (fxForBracket === 6) {
+            ctx.lineWidth = 2.5;
+            ctx.shadowBlur = 12;
+            const inset = 1.5;
+            const x0 = z.x + inset;
+            const y0 = z.y + inset;
+            const x1 = z.x + z.w - inset;
+            const y1 = z.y + z.h - inset;
+            const mx = (x0 + x1) / 2;
+            const my = (y0 + y1) / 2;
+            const minSide = Math.min(z.w, z.h);
+            const cornerLen = Math.max(14, Math.min(30, minSide * 0.12));
+            const tickLen = Math.max(6, cornerLen * 0.36);
+            // Four L-shaped corner brackets
+            ctx.beginPath(); ctx.moveTo(x0, y0 + cornerLen); ctx.lineTo(x0, y0); ctx.lineTo(x0 + cornerLen, y0); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(x1 - cornerLen, y0); ctx.lineTo(x1, y0); ctx.lineTo(x1, y0 + cornerLen); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(x0, y1 - cornerLen); ctx.lineTo(x0, y1); ctx.lineTo(x0 + cornerLen, y1); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(x1 - cornerLen, y1); ctx.lineTo(x1, y1); ctx.lineTo(x1, y1 - cornerLen); ctx.stroke();
+            // Mid-side ticks — thinner, no halo
+            ctx.lineWidth = 1.5;
+            ctx.shadowBlur = 6;
+            ctx.beginPath(); ctx.moveTo(mx, y0); ctx.lineTo(mx, y0 + tickLen); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(mx, y1); ctx.lineTo(mx, y1 - tickLen); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(x0, my); ctx.lineTo(x0 + tickLen, my); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(x1, my); ctx.lineTo(x1 - tickLen, my); ctx.stroke();
+          } else {
+            ctx.lineWidth = 2;
+            ctx.shadowBlur = 10;
+            ctx.strokeRect(z.x + 1.5, z.y + 1.5, z.w - 3, z.h - 3);
+          }
           ctx.restore();
         }
 
@@ -3999,6 +4037,216 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
   );
 };
 
+// 0.0.227-fx — Opt-in futuristic skin variants for the central
+// TOTAL / ACTIVE / RESOLVED rings. Activated via one of THREE
+// override mechanisms (in priority order):
+//   1. `window.__fx`           — set from devtools, e.g.
+//                                 `window.__fx = 3; // reload not needed`
+//   2. `localStorage.getItem("fx")` — survives reload, e.g.
+//                                 `localStorage.setItem("fx", "3")`
+//   3. URL search param `?fx=` — works only when app is at the
+//                                 top of the frame tree (dt-app
+//                                 dev sometimes nests in an iframe,
+//                                 in which case `window.location`
+//                                 belongs to the host page — that's
+//                                 why we read it dynamically and
+//                                 fall through to the localStorage
+//                                 mechanism)
+//
+// Variants:
+//   • `1` (or `futuristic`) — **Orbital**. Slow-rotating dashed
+//     orbit + 4 cardinal ticks + breathing pulse ring + bracket
+//     corners around the digit. Tron-ish, organic feel.
+//   • `2` (or `hex`)        — **Hex Engineered**. Static hexagonal
+//     outer frame + 12 clock-face ticks + inner crosshair + HUD
+//     underscores flanking the digit. Halo-HUD / precision-
+//     instrument feel. Zero animation (no RAF cost).
+//   • `3` (or `quantum`)    — **Quantum Pulse**. No outer frame
+//     at all — 8 small dots at clock positions outside the ring,
+//     each pulsing with a phase-shifted alpha (chase wave around
+//     the satellite). Two chevrons `‹ ›` flank the digit.
+//     Particle-accelerator / quantum-core feel. Minimal, animated.
+//   • `4` (or `reactor`)    — **Reactor Core**. Maximum-impact
+//     skin: thick neon outer ring with shadowBlur=18 glow + 3
+//     animated arc shields rotating around the ring + counter-
+//     rotating inner dashed orbit + holographic "T-CORE / A-CORE
+//     / R-CORE" label above + 4 L-shaped targeting brackets at
+//     extreme corners + animated scan beam sweeping top→bottom
+//     inside the disc + 8 inner perimeter pin marks. Heavy,
+//     reactor-control-room aesthetic for maximum tech impact.
+//   • `5` (or `backdrop`)   — **Tinted Backdrop**. NO outer
+//     decoration at all. The only change: the satellite's disc
+//     fill becomes a soft radial gradient tinted with the ring's
+//     colour (red for ACTIVE, green for RESOLVED, slate for
+//     TOTAL), plus a subtle top-of-disc highlight (light-from-
+//     above for 3D feel) and a 1 px inner rim shadow. Goal: make
+//     the 3 central circles feel more substantial without adding
+//     any tech-y ornamentation around them.
+//   • `6` (or `tech`)       — **Tech Substrate**. Builds on the
+//     neutral-elevated base from v5 (so it stays harmonic with
+//     the surrounding cells) but adds INSIDE-the-disc tech
+//     elements: a faint dotted grid substrate, 4 internal
+//     L-bracket markers at the corners of an inscribed square,
+//     a tiny hex ID readout above the digit (`0x01` / `0x02` /
+//     `0x03`), and a slow vertical scan beam. All clipped to the
+//     disc — nothing leaks outside, so the harmony with the
+//     surrounding category cells is preserved.
+//
+// The value is re-read on every frame (cheap — three property
+// reads) so toggling at runtime via devtools is instant. When
+// `>0` we also paint a small "fx:N" tag below the satellite row
+// so it's obvious from the UI which variant is active.
+// Local-test only for now — DO NOT deploy until the design is
+// signed off.
+type FxVariant = 0 | 1 | 2 | 3 | 4 | 5 | 6;
+declare global {
+  // eslint-disable-next-line no-var
+  var __fx: number | string | undefined;
+}
+// 0.0.227 — Default variant for production. `0` keeps the
+// baseline production look. The futuristic skins (1-6) remain
+// reachable from devtools (`window.__fx = 6`) or via the
+// `?fx=6` URL param / `localStorage.setItem("fx","6")`. They
+// are NOT enabled by default in production until the final
+// design is signed off.
+const FX_DEFAULT_LOCAL: FxVariant = 0;
+function readFxVariant(): FxVariant {
+  try {
+    if (typeof window === "undefined") return FX_DEFAULT_LOCAL;
+    // Priority 1: live override on the global. Accept 0 explicitly
+    // so the user can force the baseline view if they want to
+    // compare. The `=== undefined` check (not `?? null`) keeps
+    // `window.__fx = 0` honoured.
+    const g = (window as unknown as { __fx?: number | string }).__fx;
+    const candidates: Array<unknown> = [];
+    if (g !== undefined) candidates.push(g);
+    // Priority 2: localStorage (survives reload, works in iframe)
+    try {
+      const ls = window.localStorage?.getItem("fx");
+      if (ls !== null && ls !== undefined) candidates.push(ls);
+    } catch { /* private mode */ }
+    // Priority 3: URL search param (only when not iframed)
+    try {
+      const u = new URLSearchParams(window.location.search).get("fx");
+      if (u !== null) candidates.push(u);
+    } catch { /* xorigin */ }
+    for (const raw of candidates) {
+      const v = String(raw).toLowerCase().trim();
+      if (v === "0" || v === "off" || v === "baseline" || v === "false") return 0;
+      if (v === "1" || v === "true" || v === "futuristic" || v === "orbital") return 1;
+      if (v === "2" || v === "hex" || v === "engineered") return 2;
+      if (v === "3" || v === "quantum" || v === "pulse") return 3;
+      if (v === "4" || v === "reactor" || v === "core") return 4;
+      if (v === "5" || v === "backdrop" || v === "tinted") return 5;
+      if (v === "6" || v === "tech" || v === "substrate") return 6;
+    }
+    // No override → default to the impactful skin in local dev
+    return FX_DEFAULT_LOCAL;
+  } catch {
+    return FX_DEFAULT_LOCAL;
+  }
+}
+// Log once on first non-zero detection so it's obvious in devtools
+// whether the toggle is actually being picked up by the bundle.
+let __fxLastSeen: FxVariant = -1 as FxVariant;
+function getFxVariant(): FxVariant {
+  const v = readFxVariant();
+  if (v !== __fxLastSeen) {
+    __fxLastSeen = v;
+    if (typeof window !== "undefined") {
+      // eslint-disable-next-line no-console
+      console.info(`[problems-hub:fx] variant=${v} (0=baseline, 1=orbital, 2=hex, 3=quantum)`);
+    }
+  }
+  return v;
+}
+// Back-compat constant — still consulted by the boolean
+// `FUTURISTIC_FX` flag elsewhere in this file. Live reads
+// happen via `getFxVariant()` inside drawSatellite.
+const FX_VARIANT: FxVariant = readFxVariant();
+const FUTURISTIC_FX = FX_VARIANT > 0;
+
+/** 0.0.227-fx — Decorative HUD overlay drawn ON TOP of the
+ *  standard satellite (TOTAL / ACTIVE / RESOLVED). Adds:
+ *   • Cardinal tick marks (N/E/S/W) extending out from the ring
+ *   • Slow-rotating outer dashed orbit at r + 8
+ *   • Inner pulse ring at r * 0.86 with breathing alpha
+ *   • Bracket corners around the central digit
+ *  No layout impact — sits entirely inside the existing halo
+ *  budget so the cell rows don't shift. */
+function drawFuturisticOverlay(
+  ctx: CanvasRenderingContext2D,
+  cx: number, cy: number, r: number,
+  rgb: string,
+) {
+  const tc = Date.now();
+  // Outer rotating dashed orbit
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.rotate(tc * 0.0003);
+  ctx.setLineDash([5, 9]);
+  ctx.strokeStyle = `rgba(${rgb},0.35)`;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.arc(0, 0, r + 8, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.restore();
+
+  // Cardinal tick marks
+  ctx.save();
+  ctx.strokeStyle = `rgba(${rgb},0.65)`;
+  ctx.lineWidth = 1.5;
+  ctx.lineCap = "round";
+  const tickInner = r + 4;
+  const tickOuter = r + 11;
+  for (let i = 0; i < 4; i++) {
+    const a = (Math.PI / 2) * i;
+    const cosA = Math.cos(a), sinA = Math.sin(a);
+    ctx.beginPath();
+    ctx.moveTo(cx + cosA * tickInner, cy + sinA * tickInner);
+    ctx.lineTo(cx + cosA * tickOuter, cy + sinA * tickOuter);
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  // Inner pulse ring with breathing alpha
+  const breathe = 0.18 + Math.sin(tc * 0.003) * 0.12;
+  ctx.save();
+  ctx.strokeStyle = `rgba(${rgb},${breathe})`;
+  ctx.lineWidth = 0.8;
+  ctx.beginPath();
+  ctx.arc(cx, cy, r * 0.86, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.restore();
+
+  // Bracket corners around the central digit area
+  // Frames a rectangle of width r * 1.1 × height r * 0.85
+  const bw = r * 0.55;
+  const bh = r * 0.42;
+  const arm = 4;
+  ctx.save();
+  ctx.strokeStyle = `rgba(${rgb},0.55)`;
+  ctx.lineWidth = 1.2;
+  ctx.lineCap = "round";
+  const corners: Array<[number, number, number, number]> = [
+    [cx - bw, cy - bh, +arm,  0], // TL arm right
+    [cx - bw, cy - bh,  0,   +arm], // TL arm down
+    [cx + bw, cy - bh, -arm,  0], // TR arm left
+    [cx + bw, cy - bh,  0,   +arm], // TR arm down
+    [cx - bw, cy + bh, +arm,  0], // BL arm right
+    [cx - bw, cy + bh,  0,   -arm], // BL arm up
+    [cx + bw, cy + bh, -arm,  0], // BR arm left
+    [cx + bw, cy + bh,  0,   -arm], // BR arm up
+  ];
+  for (const [x, y, dx, dy] of corners) {
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(x + dx, y + dy);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
 // Helper: draw a hub circle (used for TOTAL, ACTIVE, RESOLVED — all same size)
 function drawSatellite(
   ctx: CanvasRenderingContext2D,
@@ -4026,11 +4274,83 @@ function drawSatellite(
     ctx.restore();
   }
 
-  // Disc background
-  ctx.fillStyle = dk ? "rgba(5,8,15,0.95)" : "rgba(255,255,255,0.97)";
-  ctx.beginPath();
-  ctx.arc(cx, cy, r, 0, Math.PI * 2);
-  ctx.fill();
+  // Disc background — flat by default. When `fx=5` (Tinted
+  // Backdrop) we replace the flat fill with a radial gradient
+  // tinted in the ring's colour + a soft top-of-disc highlight
+  // for a 3D "light from above" feel + a 1 px inner rim shadow.
+  // Everything else about the satellite (label, digit, trend
+  // pill) is untouched. Read `fxNow` once here so the same value
+  // is used by the optional overlay dispatcher below — keeps the
+  // two reads in lockstep within a single frame.
+  const fxNowEarly = getFxVariant();
+  if (fxNowEarly === 5 || fxNowEarly === 6) {
+    // v5 (Tinted Backdrop) — REWORKED for harmony. Earlier
+    // attempt used a strongly colour-tinted radial gradient which
+    // made the 3 central rings pop hard against the neutral
+    // black-backed category cells around them (user feedback:
+    // "nao parece harmonico"). New approach: NO colour tint at
+    // all — just an **elevated neutral card** look. The base is
+    // 5-6 shades lighter than the page background, plus a soft
+    // vertical highlight at the top and a 1 px rim shadow at the
+    // bottom-half. The satellites read as "raised panels" of the
+    // same family as the other cells, without screaming colour.
+    //
+    // Layer 1: neutral elevated base
+    const base = dk ? "rgba(20,25,36,0.98)" : "rgba(248,250,253,0.99)";
+    ctx.fillStyle = base;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.fill();
+    // Layer 2: extremely subtle top-of-disc highlight (white wash
+    // anchored above the disc centre, fades out by the bottom).
+    // Alpha 0.05 in dark mode, 0.02 in light — barely there.
+    const hlAlpha = dk ? 0.05 : 0.02;
+    const hl = ctx.createRadialGradient(cx, cy - r * 0.55, 0, cx, cy - r * 0.55, r * 1.15);
+    hl.addColorStop(0, `rgba(255,255,255,${hlAlpha})`);
+    hl.addColorStop(1, `rgba(255,255,255,0)`);
+    ctx.fillStyle = hl;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.fill();
+    // Layer 3: bottom-half soft shadow (dark wash anchored below
+    // disc centre). Adds a subtle "weight" to the panel.
+    const shAlpha = dk ? 0.18 : 0.04;
+    const sh = ctx.createRadialGradient(cx, cy + r * 0.55, 0, cx, cy + r * 0.55, r * 1.2);
+    sh.addColorStop(0, `rgba(0,0,0,${shAlpha})`);
+    sh.addColorStop(1, `rgba(0,0,0,0)`);
+    ctx.fillStyle = sh;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.fill();
+    // Layer 4: tiny colour accent — VERY low-alpha radial wash
+    // (alpha 0.05) from the rim, so each satellite still has a
+    // hint of its identity (red / green / slate) without
+    // dominating. Goes from transparent at centre to colour at
+    // rim, so the digit area stays neutral.
+    const accent = ctx.createRadialGradient(cx, cy, r * 0.45, cx, cy, r);
+    accent.addColorStop(0,   `rgba(${rgb},0)`);
+    accent.addColorStop(0.85, `rgba(${rgb},0.03)`);
+    accent.addColorStop(1,   `rgba(${rgb},0.07)`);
+    ctx.fillStyle = accent;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.fill();
+    // v6 (Tech Substrate) — additive layers ON TOP of the v5
+    // elevated base. All drawn inside the disc (clipped) so the
+    // satellite still feels like a single panel — no decoration
+    // leaks outside the ring to break harmony with the cells
+    // around it. Sequence: grid → inscribed brackets → ID
+    // readout → scan beam. See drawTechSubstrateInner for the
+    // details.
+    if (fxNowEarly === 6) {
+      drawTechSubstrateInner(ctx, cx, cy, r, rgb, label, dk);
+    }
+  } else {
+    ctx.fillStyle = dk ? "rgba(5,8,15,0.95)" : "rgba(255,255,255,0.97)";
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
 
   // Ring (no shadow glow when noHalo, keeps it crisp)
   ctx.save();
@@ -4131,6 +4451,521 @@ function drawSatellite(
     ctx.fillText(text, cx, cy + r - 22);
     ctx.restore();
   }
+
+  // 0.0.227-fx — Optional HUD overlay. Variant is read PER FRAME
+  // from window.__fx / localStorage / URL so it can be toggled
+  // live in devtools without a reload. Layered on top of the
+  // baseline rendering so disabling reverts cleanly to production.
+  // Reuse `fxNowEarly` read above for consistency within one frame.
+  const fxNow = fxNowEarly;
+  if (fxNow === 1) {
+    drawFuturisticOverlay(ctx, cx, cy, r, rgb);
+  } else if (fxNow === 2) {
+    drawHexEngineeredOverlay(ctx, cx, cy, r, rgb);
+  } else if (fxNow === 3) {
+    drawQuantumPulseOverlay(ctx, cx, cy, r, rgb);
+  } else if (fxNow === 4) {
+    drawReactorCoreOverlay(ctx, cx, cy, r, rgb, label);
+  }
+  // fx=5 (Tinted Backdrop) has no overlay — its only effect is
+  // the disc-fill replacement above.
+}
+
+/** 0.0.227-fx v2 — "Hex Engineered" overlay. Sibling to
+ *  drawFuturisticOverlay above; selected via `?fx=2`. Static
+ *  rendering (no RAF dependency) for the precision-instrument
+ *  aesthetic. Adds:
+ *    • Hexagonal outer frame at r + 7 (6 sharp corners)
+ *    • 12 short tick marks at clock-face positions outside the
+ *      hex (1.5 px lines, alpha 0.55)
+ *    • Inner crosshair: 4 tiny line segments meeting at center,
+ *      drawn behind the digit so it reads as a sniper-sight reticle
+ *    • HUD underscores `___` flanking the digit at the same
+ *      y-baseline so the number reads like a terminal readout */
+function drawHexEngineeredOverlay(
+  ctx: CanvasRenderingContext2D,
+  cx: number, cy: number, r: number,
+  rgb: string,
+) {
+  // Hexagonal outer frame
+  ctx.save();
+  ctx.strokeStyle = `rgba(${rgb},0.55)`;
+  ctx.lineWidth = 1.2;
+  ctx.lineJoin = "miter";
+  const hexR = r + 7;
+  ctx.beginPath();
+  for (let i = 0; i < 6; i++) {
+    const a = (Math.PI / 3) * i - Math.PI / 2;
+    const x = cx + Math.cos(a) * hexR;
+    const y = cy + Math.sin(a) * hexR;
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  }
+  ctx.closePath();
+  ctx.stroke();
+  ctx.restore();
+
+  // 12 clock-face tick marks just outside the hex
+  ctx.save();
+  ctx.strokeStyle = `rgba(${rgb},0.55)`;
+  ctx.lineWidth = 1.5;
+  ctx.lineCap = "round";
+  const tickInner = hexR + 3;
+  const tickOuter = hexR + 8;
+  for (let i = 0; i < 12; i++) {
+    const a = (Math.PI / 6) * i - Math.PI / 2;
+    const cosA = Math.cos(a), sinA = Math.sin(a);
+    ctx.beginPath();
+    ctx.moveTo(cx + cosA * tickInner, cy + sinA * tickInner);
+    ctx.lineTo(cx + cosA * tickOuter, cy + sinA * tickOuter);
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  // Inner crosshair — four short arms meeting near the centre
+  // (do NOT touch r * 0.35 inside the digit so the number stays
+  // unobstructed). Alpha lower than the hex so it reads as a
+  // background detail.
+  ctx.save();
+  ctx.strokeStyle = `rgba(${rgb},0.25)`;
+  ctx.lineWidth = 0.8;
+  ctx.lineCap = "round";
+  const inner = r * 0.55;
+  const gap = r * 0.32;
+  const cross: Array<[number, number]> = [
+    [0, -1], [0, 1], [-1, 0], [1, 0],
+  ];
+  for (const [dx, dy] of cross) {
+    ctx.beginPath();
+    ctx.moveTo(cx + dx * gap, cy + dy * gap);
+    ctx.lineTo(cx + dx * inner, cy + dy * inner);
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  // HUD underscores flanking the digit — tiny horizontal lines
+  // at the same baseline as the number, on the inner-ring
+  // boundary. Reads as a terminal readout `___ 112 ___`.
+  ctx.save();
+  ctx.strokeStyle = `rgba(${rgb},0.6)`;
+  ctx.lineWidth = 1;
+  ctx.lineCap = "round";
+  const usY = cy + r * 0.06;
+  const usInner = r * 0.55;
+  const usOuter = r * 0.85;
+  ctx.beginPath();
+  ctx.moveTo(cx - usOuter, usY);
+  ctx.lineTo(cx - usInner, usY);
+  ctx.moveTo(cx + usInner, usY);
+  ctx.lineTo(cx + usOuter, usY);
+  ctx.stroke();
+  ctx.restore();
+}
+
+/** 0.0.227-fx v3 — "Quantum Pulse" overlay. Selected via `?fx=3`.
+ *  Deliberately omits any continuous outer ring or frame — the
+ *  whole effect is built from 8 discrete particles around the
+ *  satellite plus two chevrons flanking the digit:
+ *    • 8 small filled dots at clock positions (45° apart), placed
+ *      just outside the ring (r + 9). Each dot's alpha is offset
+ *      by index so the "lit" point chases around the perimeter
+ *      like a particle on a synchrotron. Period ≈ 1.6 s.
+ *    • Each dot carries a soft outer halo (radial gradient) when
+ *      its alpha is high — gives the impression of a bright pulse
+ *      passing through it rather than a static decoration.
+ *    • Two chevrons `‹  ›` at the digit's vertical centre. Drawn
+ *      as 2-line caret strokes, low alpha. Read as "value:".
+ *  Animated (relies on Date.now via the running RAF loop). */
+function drawQuantumPulseOverlay(
+  ctx: CanvasRenderingContext2D,
+  cx: number, cy: number, r: number,
+  rgb: string,
+) {
+  const tc = Date.now();
+  const PARTICLES = 8;
+  const dotR = Math.max(1.4, r * 0.045);
+  const orbitR = r + 9;
+  // Speed: full chase loop in ~1.6 s
+  const phase = (tc * 0.0011) % (Math.PI * 2);
+
+  for (let i = 0; i < PARTICLES; i++) {
+    const a = (Math.PI * 2 * i) / PARTICLES - Math.PI / 2;
+    const cosA = Math.cos(a), sinA = Math.sin(a);
+    const px = cx + cosA * orbitR;
+    const py = cy + sinA * orbitR;
+    // Wave that peaks at one dot at a time, normalized [0,1]
+    const wave = (Math.cos(a - phase) + 1) / 2;
+    const alpha = 0.18 + Math.pow(wave, 3) * 0.72; // sharper peak
+
+    // Bright dot core
+    ctx.fillStyle = `rgba(${rgb},${alpha.toFixed(3)})`;
+    ctx.beginPath();
+    ctx.arc(px, py, dotR, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Soft halo only when the dot is near the wave peak — avoids
+    // visual clutter from 8 simultaneous glows.
+    if (wave > 0.6) {
+      const haloR = dotR * 4;
+      const halo = ctx.createRadialGradient(px, py, 0, px, py, haloR);
+      const haloA = (wave - 0.6) * 0.6; // 0 .. 0.24
+      halo.addColorStop(0, `rgba(${rgb},${haloA.toFixed(3)})`);
+      halo.addColorStop(1, `rgba(${rgb},0)`);
+      ctx.fillStyle = halo;
+      ctx.beginPath();
+      ctx.arc(px, py, haloR, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  // Chevrons flanking the digit — drawn as two short open carets
+  // `‹  ›` at the digit's vertical centre (cy). Each chevron is
+  // two short line segments meeting at a point, opening inward.
+  ctx.save();
+  ctx.strokeStyle = `rgba(${rgb},0.55)`;
+  ctx.lineWidth = 1.2;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  const cheX = r * 0.78;   // distance from centre to the tip of the chevron
+  const cheW = r * 0.12;   // arm length on x
+  const cheH = r * 0.18;   // arm length on y (height of the chevron)
+  // Left chevron ‹  (tip points left, arms open right)
+  ctx.beginPath();
+  ctx.moveTo(cx - cheX + cheW, cy - cheH);
+  ctx.lineTo(cx - cheX,        cy);
+  ctx.lineTo(cx - cheX + cheW, cy + cheH);
+  ctx.stroke();
+  // Right chevron ›  (tip points right, arms open left)
+  ctx.beginPath();
+  ctx.moveTo(cx + cheX - cheW, cy - cheH);
+  ctx.lineTo(cx + cheX,        cy);
+  ctx.lineTo(cx + cheX - cheW, cy + cheH);
+  ctx.stroke();
+  ctx.restore();
+}
+
+/** 0.0.227-fx v4 — "Reactor Core". Maximum-impact futuristic skin
+ *  selected via `?fx=4` or `window.__fx = 4`. Designed to be
+ *  unmistakable at a glance — all the previous variants were
+ *  subtle decorations; this one rebuilds the satellite into a
+ *  full reactor-control-room readout. Layers (back to front):
+ *    1. Thick neon outer ring at r + 9 with shadowBlur=18 — the
+ *       "hot" element that defines the silhouette
+ *    2. 3 animated arc shields at r + 16 (each 70° wide, gaps
+ *       between), rotating clockwise — like Saturn-ring loaders
+ *    3. Inner dashed orbit at r - 4 counter-rotating
+ *    4. 8 inner perimeter pin marks at r * 0.92 (small radial
+ *       ticks reading inward, evoke a reactor containment ring)
+ *    5. Holographic title tag above: `▌ T-CORE ▐` / `▌ A-CORE ▐`
+ *       / `▌ R-CORE ▐`. Tiny power-LED dots flank it.
+ *    6. 4 L-shaped targeting brackets at the four extreme corners
+ *       (well outside the ring) so the satellite reads as "locked"
+ *    7. Vertical scan beam sweeping top→bottom inside the disc
+ *       (subtle, low alpha — gives the "instrument is live" feel)
+ *  All animated via Date.now (RAF already running). Costs ~6
+ *  extra fillRect/stroke calls per frame; negligible. */
+function drawReactorCoreOverlay(
+  ctx: CanvasRenderingContext2D,
+  cx: number, cy: number, r: number,
+  rgb: string,
+  label: string,
+) {
+  const tc = Date.now();
+
+  // ── Layer 1: Thick neon outer ring (glow) ───────────────────
+  ctx.save();
+  ctx.shadowColor = `rgb(${rgb})`;
+  ctx.shadowBlur = 18;
+  ctx.strokeStyle = `rgba(${rgb},0.95)`;
+  ctx.lineWidth = 2.5;
+  ctx.beginPath();
+  ctx.arc(cx, cy, r + 9, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.restore();
+
+  // ── Layer 2: 3 rotating arc shields (clockwise) ─────────────
+  // Each shield is 70° wide; 50° gap between them.
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.rotate(tc * 0.0008);
+  ctx.shadowColor = `rgb(${rgb})`;
+  ctx.shadowBlur = 10;
+  ctx.strokeStyle = `rgba(${rgb},0.85)`;
+  ctx.lineWidth = 3;
+  ctx.lineCap = "round";
+  const shieldR = r + 16;
+  const shieldW = (Math.PI * 2) * (70 / 360); // 70°
+  for (let i = 0; i < 3; i++) {
+    const start = i * (Math.PI * 2 / 3);
+    ctx.beginPath();
+    ctx.arc(0, 0, shieldR, start, start + shieldW);
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  // ── Layer 3: Counter-rotating inner dashed orbit ────────────
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.rotate(-tc * 0.0014);
+  ctx.setLineDash([3, 4]);
+  ctx.strokeStyle = `rgba(${rgb},0.45)`;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.arc(0, 0, r - 4, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.restore();
+
+  // ── Layer 4: 8 inner perimeter pin marks ────────────────────
+  ctx.save();
+  ctx.strokeStyle = `rgba(${rgb},0.7)`;
+  ctx.lineWidth = 1.4;
+  ctx.lineCap = "round";
+  const pinOuter = r - 0.5;
+  const pinInner = r * 0.92;
+  for (let i = 0; i < 8; i++) {
+    const a = (Math.PI * 2 * i) / 8 - Math.PI / 2;
+    const cosA = Math.cos(a), sinA = Math.sin(a);
+    ctx.beginPath();
+    ctx.moveTo(cx + cosA * pinOuter, cy + sinA * pinOuter);
+    ctx.lineTo(cx + cosA * pinInner, cy + sinA * pinInner);
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  // ── Layer 5: Holographic title tag above the ring ───────────
+  // Build the tag from the satellite's label: take first letter
+  // + "-CORE". `TOTAL → T-CORE`, `ACTIVE → A-CORE`, `RESOLVED → R-CORE`.
+  const sigil = `${label.charAt(0)}-CORE`;
+  const tagY = cy - r - 16;
+  ctx.save();
+  ctx.font = `700 11px "Roboto Mono", "SF Mono", monospace`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  // Background pill for legibility
+  const tagW = ctx.measureText(`▌ ${sigil} ▐`).width;
+  ctx.fillStyle = `rgba(${rgb},0.10)`;
+  const padX = 8, padY = 5;
+  ctx.beginPath();
+  // Manual rounded rect for older canvas runtimes
+  const rectX = cx - tagW / 2 - padX;
+  const rectY = tagY - padY;
+  const rectW = tagW + padX * 2;
+  const rectH = padY * 2 + 11;
+  const rectR = 3;
+  ctx.moveTo(rectX + rectR, rectY);
+  ctx.lineTo(rectX + rectW - rectR, rectY);
+  ctx.quadraticCurveTo(rectX + rectW, rectY, rectX + rectW, rectY + rectR);
+  ctx.lineTo(rectX + rectW, rectY + rectH - rectR);
+  ctx.quadraticCurveTo(rectX + rectW, rectY + rectH, rectX + rectW - rectR, rectY + rectH);
+  ctx.lineTo(rectX + rectR, rectY + rectH);
+  ctx.quadraticCurveTo(rectX, rectY + rectH, rectX, rectY + rectH - rectR);
+  ctx.lineTo(rectX, rectY + rectR);
+  ctx.quadraticCurveTo(rectX, rectY, rectX + rectR, rectY);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = `rgba(${rgb},0.55)`;
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  // The sigil text itself
+  ctx.fillStyle = `rgba(${rgb},0.95)`;
+  ctx.shadowColor = `rgb(${rgb})`;
+  ctx.shadowBlur = 6;
+  ctx.fillText(`▌ ${sigil} ▐`, cx, tagY + 5.5);
+  ctx.restore();
+
+  // Power-LED dots flanking the tag (blink)
+  const blink = (Math.sin(tc * 0.006) + 1) / 2;
+  ctx.save();
+  ctx.fillStyle = `rgba(${rgb},${(0.4 + blink * 0.55).toFixed(3)})`;
+  ctx.shadowColor = `rgb(${rgb})`;
+  ctx.shadowBlur = 5;
+  ctx.beginPath();
+  ctx.arc(cx - tagW / 2 - padX - 6, tagY + 5.5, 1.6, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(cx + tagW / 2 + padX + 6, tagY + 5.5, 1.6, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+
+  // ── Layer 6: L-shaped targeting brackets at extreme corners ─
+  // 4 brackets at r + 22 outward, each is a short L pointing
+  // inward toward the satellite centre. Reads as "locked target".
+  ctx.save();
+  ctx.strokeStyle = `rgba(${rgb},0.65)`;
+  ctx.lineWidth = 1.5;
+  ctx.lineCap = "round";
+  const br = r + 22;
+  const arm = 7;
+  // Diagonals: NE, NW, SE, SW
+  const diag = Math.SQRT1_2; // cos/sin of 45°
+  const corners: Array<[number, number, number, number]> = [
+    // [bracket-tip-x, bracket-tip-y, arm1-dx, arm1-dy] (arm2 is the perpendicular)
+    [+br * diag, -br * diag, -arm, 0], // NE corner — arms point left & down
+    [+br * diag, -br * diag, 0, +arm],
+    [-br * diag, -br * diag, +arm, 0], // NW corner — arms point right & down
+    [-br * diag, -br * diag, 0, +arm],
+    [+br * diag, +br * diag, -arm, 0], // SE corner — arms point left & up
+    [+br * diag, +br * diag, 0, -arm],
+    [-br * diag, +br * diag, +arm, 0], // SW corner — arms point right & up
+    [-br * diag, +br * diag, 0, -arm],
+  ];
+  for (const [tx, ty, dx, dy] of corners) {
+    ctx.beginPath();
+    ctx.moveTo(cx + tx, cy + ty);
+    ctx.lineTo(cx + tx + dx, cy + ty + dy);
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  // ── Layer 7: Vertical scan beam sweeping top→bottom ─────────
+  // Period ≈ 2.4 s. Drawn as a thin horizontal line clipped to
+  // the disc with a soft glow. Very subtle (low alpha) so it
+  // reads as a live-instrument tell.
+  const scanPhase = ((tc % 2400) / 2400);
+  const scanY = cy - r + scanPhase * (r * 2);
+  ctx.save();
+  // Clip to the disc so the scan doesn't bleed outside
+  ctx.beginPath();
+  ctx.arc(cx, cy, r - 1, 0, Math.PI * 2);
+  ctx.clip();
+  // Scan line with vertical gradient for a "beam" look
+  const beamH = 14;
+  const beam = ctx.createLinearGradient(0, scanY - beamH / 2, 0, scanY + beamH / 2);
+  beam.addColorStop(0,   `rgba(${rgb},0)`);
+  beam.addColorStop(0.5, `rgba(${rgb},0.28)`);
+  beam.addColorStop(1,   `rgba(${rgb},0)`);
+  ctx.fillStyle = beam;
+  ctx.fillRect(cx - r, scanY - beamH / 2, r * 2, beamH);
+  ctx.restore();
+}
+
+/** 0.0.227-fx v6 — "Tech Substrate" inner layer. Runs strictly
+ *  INSIDE the disc (clipped to a circle one pixel smaller than
+ *  the ring), so the satellite reads as a single self-contained
+ *  panel — no decoration spills outside, harmony with the
+ *  surrounding category cells stays intact. Five sub-layers:
+ *    1. Faint dotted grid substrate (skip the centre ring where
+ *       the digit lives, and the outer 5 % where the rim shadow
+ *       sits, so neither contrast point is muddied).
+ *    2. Four L-shaped corner brackets at the corners of an
+ *       inscribed square (r * 0.62) — read as "instrument frame".
+ *    3. Hex ID readout above the digit: `0x01` for TOTAL, `0x02`
+ *       for ACTIVE, `0x03` for RESOLVED. Tiny monospace.
+ *    4. Status-LED dots flanking the ID readout (alternating
+ *       phase-shifted blink — gives the satellite a "live" tell).
+ *    5. Vertical scan beam sweeping top→bottom across the disc
+ *       (period ≈ 4 s, very low alpha — subtle background motion).
+ *  All elements use the ring's rgb colour at low alpha so they
+ *  carry the satellite's identity without screaming. */
+function drawTechSubstrateInner(
+  ctx: CanvasRenderingContext2D,
+  cx: number, cy: number, r: number,
+  rgb: string,
+  label: string,
+  dk: boolean,
+) {
+  const tc = Date.now();
+
+  // Clip to disc (1 px in so we don't paint over the ring stroke)
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(cx, cy, r - 1, 0, Math.PI * 2);
+  ctx.clip();
+
+  // ── Layer 1: dotted grid substrate ──────────────────────────
+  // Step size scales with r so the dot density looks consistent
+  // across mobile (smaller r) and desktop (larger r). Skip dots
+  // inside r*0.32 (digit zone) and outside r*0.93 (rim).
+  const step = Math.max(6, Math.round(r * 0.085));
+  const gridA = dk ? 0.085 : 0.055;
+  ctx.fillStyle = `rgba(${rgb},${gridA})`;
+  const dotR = 0.7;
+  const innerSafe = r * 0.34;
+  const outerSafe = r * 0.93;
+  for (let y = cy - r; y <= cy + r; y += step) {
+    for (let x = cx - r; x <= cx + r; x += step) {
+      const dx = x - cx, dy = y - cy;
+      const d = Math.hypot(dx, dy);
+      if (d > innerSafe && d < outerSafe) {
+        ctx.beginPath();
+        ctx.arc(x, y, dotR, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+  }
+
+  // ── Layer 2: 4 inscribed L-bracket corners ──────────────────
+  const sq = r * 0.62;
+  const arm = Math.max(4, r * 0.075);
+  ctx.strokeStyle = `rgba(${rgb},0.55)`;
+  ctx.lineWidth = 1.2;
+  ctx.lineCap = "round";
+  const corners: Array<[number, number, number, number]> = [
+    [cx - sq, cy - sq, +arm, 0], [cx - sq, cy - sq, 0, +arm], // TL
+    [cx + sq, cy - sq, -arm, 0], [cx + sq, cy - sq, 0, +arm], // TR
+    [cx - sq, cy + sq, +arm, 0], [cx - sq, cy + sq, 0, -arm], // BL
+    [cx + sq, cy + sq, -arm, 0], [cx + sq, cy + sq, 0, -arm], // BR
+  ];
+  for (const [x, y, dx, dy] of corners) {
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(x + dx, y + dy);
+    ctx.stroke();
+  }
+
+  // ── Layer 3: vertical scan beam (subtle, animated) ──────────
+  // 0.0.227-fx — Period bumped from 4 s → 10 s on user feedback
+  // ("diminuir velocidade da animação de radar"). At 10 s the
+  // beam reads as ambient instrument motion rather than an
+  // active scan, which feels less distracting in a dashboard.
+  const SCAN_PERIOD_MS = 10000;
+  const phase = ((tc % SCAN_PERIOD_MS) / SCAN_PERIOD_MS);
+  const beamY = cy - r + phase * (r * 2);
+  const beamH = Math.max(10, r * 0.18);
+  const beam = ctx.createLinearGradient(0, beamY - beamH / 2, 0, beamY + beamH / 2);
+  beam.addColorStop(0,   `rgba(${rgb},0)`);
+  beam.addColorStop(0.5, `rgba(${rgb},0.10)`);
+  beam.addColorStop(1,   `rgba(${rgb},0)`);
+  ctx.fillStyle = beam;
+  ctx.fillRect(cx - r, beamY - beamH / 2, r * 2, beamH);
+
+  // End disc clip — the ID readout sits above the digit but
+  // inside the disc already, so it would be inside the clip
+  // either way; keep it clipped to play safe with very tight
+  // satellite sizes.
+  // ── Layer 4: hex ID readout above the digit ─────────────────
+  // Map: TOTAL → 0x01, ACTIVE → 0x02, RESOLVED → 0x03. Falls
+  // back to first-letter+01 for unknown labels (e.g. future
+  // satellites). Sits roughly 8 px below the LABEL line drawn
+  // by drawSatellite — just enough vertical room to be its own
+  // visual element without colliding.
+  const idCode = label === "TOTAL"    ? "0x01"
+               : label === "ACTIVE"   ? "0x02"
+               : label === "RESOLVED" ? "0x03"
+               : `${label.charAt(0)}01`;
+  const idY = cy - r + 38; // a hair below the LABEL line (cy - r + 22)
+  ctx.font = `600 ${Math.max(8, r * 0.085).toFixed(2)}px "Roboto Mono", "SF Mono", monospace`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillStyle = `rgba(${rgb},0.55)`;
+  ctx.fillText(idCode, cx, idY);
+
+  // ── Layer 5: 2 status-LED dots flanking the ID ──────────────
+  // Phase-shifted blink so it reads as "two channels live".
+  const ledA1 = 0.35 + ((Math.sin(tc * 0.005) + 1) / 2) * 0.55;
+  const ledA2 = 0.35 + ((Math.sin(tc * 0.005 + Math.PI) + 1) / 2) * 0.55;
+  const idWidth = ctx.measureText(idCode).width;
+  const ledR = Math.max(1.2, r * 0.018);
+  const ledOffset = idWidth / 2 + 8;
+  ctx.fillStyle = `rgba(${rgb},${ledA1.toFixed(3)})`;
+  ctx.beginPath();
+  ctx.arc(cx - ledOffset, idY, ledR, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = `rgba(${rgb},${ledA2.toFixed(3)})`;
+  ctx.beginPath();
+  ctx.arc(cx + ledOffset, idY, ledR, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.restore(); // end disc clip
 }
 
 // Memoized export — see PulseVisualizer for the same rationale.

@@ -4489,6 +4489,52 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
    Minimum viewport: 320px (WCAG 2.1)
    ═══════════════════════════════════════════════════════════ */
 
+/* ── TABLET-OR-NARROWER HEADER WRAP (≤ 960 px) + UA-forced ────────────
+   0.0.227 — Z Fold UNFOLDED (~720-853 px) and Galaxy Tab S4
+   (712 × 1138) fall in the tablet band, where the desktop
+   header layout (single flex row, no wrap) cannot fit the
+   left-cluster (FontScale + SegmentSelector + Display button)
+   AND the right-cluster (TimeframeSelector + arrows + Refresh
+   + Auto-refresh select + status + version) on one line. The
+   result was visible overlap — multiple controls rendered on
+   top of each other at the leftmost position.
+
+   Fix: let the header wrap to multiple rows and flatten
+   `.neo-header-right` via `display: contents` so its children
+   participate as direct flex items (each able to claim its own
+   row or share a row). Mirrors the structure the mobile block
+   below already uses, just promoted to fire at all tablet
+   widths AND when the UA-based mobile override is on (covers
+   the case where viewport width says desktop but we know the
+   user is on a phone/tablet platform).
+
+   This is intentionally a SEPARATE block from the 640 px
+   mobile block so true mobile-only adaptations (card lists,
+   bottom sheet, touch-only chips) stay scoped to ≤ 640. */
+@media (max-width: 960px) {
+  .neo-header { flex-wrap: wrap; padding: 8px 12px; gap: 8px; }
+  .neo-header-right { display: contents; }
+  .neo-header-right > .neo-refresh-group { order: 1; width: 100%; }
+  .neo-header-right > *:not(.neo-refresh-group) {
+    order: 2; flex: 1 1 auto; min-width: 0;
+  }
+  .neo-header-left { order: 3; flex: 1 1 auto; min-width: 0; }
+  .neo-header-left > * { flex: 1 1 auto; min-width: 0; }
+  .neo-header-right > * { flex-shrink: 0; }
+}
+/* Mirror for forced-mobile (UA detection — fires regardless of
+   viewport width). Selector-only block (no @media) so it wins
+   even on a 1920 px viewport when the UA is a phone/tablet. */
+:root[data-force-mobile] .neo-header { flex-wrap: wrap; padding: 8px 12px; gap: 8px; }
+:root[data-force-mobile] .neo-header-right { display: contents; }
+:root[data-force-mobile] .neo-header-right > .neo-refresh-group { order: 1; width: 100%; }
+:root[data-force-mobile] .neo-header-right > *:not(.neo-refresh-group) {
+  order: 2; flex: 1 1 auto; min-width: 0;
+}
+:root[data-force-mobile] .neo-header-left { order: 3; flex: 1 1 auto; min-width: 0; }
+:root[data-force-mobile] .neo-header-left > * { flex: 1 1 auto; min-width: 0; }
+:root[data-force-mobile] .neo-header-right > * { flex-shrink: 0; }
+
 /* ── MOBILE (≤ 640px) — touch-first adaptations ───────────────────────── */
 @media (max-width: 640px) {
   /* Stack header items so the SegmentSelector doesn't squeeze view toggle.
@@ -4668,6 +4714,43 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
 @media (horizontal-viewport-segments: 2) {
   /* Two side-by-side segments (some Android dual-screen). */
   .neo-pulse { height: 64px; }
+}
+
+/* 0.0.227 — Ultra-narrow viewport guard. Catches Z Fold FOLDED
+   (cover display, ~280-380 px CSS width), older small phones,
+   and the Dynatrace shell's left icon strip eating ~50 px on
+   any device. Goals at this width:
+   1. Stop horizontal clipping of the refresh-status row by:
+      • hiding the "v0.0.226" version badge (metadata, not
+        primary UI — user can still long-press the refresh
+        status `title` tooltip to see it)
+      • shrinking "refreshed Xm ago" to just `Xm` so it fits
+        next to the Auto-refresh Select.
+   2. Make sure nothing else has min-width forcing horizontal
+      scroll. Existing card layouts already flex, but a
+      `overflow-x: hidden` on the page wrapper is a belt-and-
+      braces guard for any rogue element.
+   User reported "no z fold ficou cortando" on the folded
+   cover display — this rule targets that case specifically. */
+@media (max-width: 380px) {
+  /* Drop the metadata version chip — long-press the refresh
+     status to read it from the tooltip. */
+  .neo-app-version { display: none !important; }
+  /* Compact the refresh status to its bare minimum: "Xm ago"
+     becomes "Xm" via overflow + max-width so the Select still
+     fits next to it. */
+  .neo-refresh-status {
+    max-width: 70px;
+    overflow: hidden;
+    text-overflow: clip;
+    font-size: calc(10px * var(--neo-fs-mult, 1));
+  }
+  /* Belt-and-braces: kill any rogue horizontal scroll on the
+     outermost app root. Each card/row should already flex, but
+     this catches anything still using min-width. */
+  .neo-app, .neo-page, .neo-page-overview {
+    overflow-x: hidden;
+  }
 }
 @media (min-width: 961px) {
   /* Desktop+ — give cards more room */
