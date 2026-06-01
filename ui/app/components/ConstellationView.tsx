@@ -1442,6 +1442,7 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
             }
             if (inside) continue;
             let alpha = 0.15;
+            let isLit = false; // for variant 4 (static circuit pattern)
             if (anim === 1) {
               // Horizontal travelling crest (wave)
               const localPhase = (cx2 / w) - wavePhase;
@@ -1459,9 +1460,18 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
               // Breath — uniform alpha pulse
               alpha = breathAlpha;
             } else {
-              // Static
-              alpha = 0.15;
+              // 4 — Static circuit. Deterministic "lit" hex
+              // pattern based on integer grid coords — same hexes
+              // are bright every render so it reads as an etched
+              // circuit board, not a flicker.
+              const ix = Math.round(cx2 / hexW);
+              const iy = Math.round(ry / hexH);
+              // Pseudo-hash → 25 % of hexes are "lit".
+              const hash = (ix * 73856093) ^ (iy * 19349663);
+              isLit = (Math.abs(hash) % 7) < 2;
+              alpha = isLit ? 0.45 : 0.13;
             }
+            // Stroke the hex.
             ctx.strokeStyle = `rgba(${accent},${alpha.toFixed(3)})`;
             ctx.beginPath();
             for (let i = 0; i < 6; i++) {
@@ -1472,9 +1482,69 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
             }
             ctx.closePath();
             ctx.stroke();
+            // Static variant only: fill the "lit" hexes faintly
+            // so they read as "active circuit cells" instead of
+            // just brighter outlines.
+            if (anim === 4 && isLit) {
+              ctx.fillStyle = `rgba(${accent},0.10)`;
+              ctx.fill();
+            }
           }
         }
         ctx.restore();
+
+        // 0.0.254 — Variant 4 (static) extras: graduated tick
+        // marks along the top and bottom neon borders, plus
+        // bigger double-bracket corners and a thin horizontal
+        // hub-line connecting the satellites. All STATIC, no
+        // animation — reads as an etched instrument panel.
+        if (anim === 4) {
+          ctx.save();
+          ctx.strokeStyle = `rgba(${accent},0.55)`;
+          ctx.lineWidth = 1;
+          ctx.lineCap = "round";
+          // Tick marks every ~50 px along top + bottom borders.
+          const tickStep = Math.max(40, Math.min(60, w * 0.04));
+          for (let tx = tickStep; tx < w - tickStep; tx += tickStep) {
+            // Major tick (3 px) every 4th, minor (1.5 px) others.
+            const isMajor = (Math.round(tx / tickStep) % 4) === 0;
+            const tlen = isMajor ? 4 : 2;
+            ctx.beginPath();
+            ctx.moveTo(tx, hubBandTop);
+            ctx.lineTo(tx, hubBandTop + tlen);
+            ctx.moveTo(tx, hubBandBottom);
+            ctx.lineTo(tx, hubBandBottom - tlen);
+            ctx.stroke();
+          }
+          // Thin horizontal hub-line at midband, dashed.
+          ctx.setLineDash([4, 6]);
+          ctx.strokeStyle = `rgba(${accent},0.18)`;
+          ctx.lineWidth = 0.6;
+          ctx.beginPath();
+          ctx.moveTo(0, hubMidY);
+          ctx.lineTo(w, hubMidY);
+          ctx.stroke();
+          ctx.setLineDash([]);
+          // Tiny coordinate-style labels at the band's two side
+          // edges (rotated 90°). Reads as instrument ID.
+          ctx.font = `600 8px "Roboto Mono","SF Mono",monospace`;
+          ctx.fillStyle = `rgba(${accent},0.55)`;
+          ctx.save();
+          ctx.translate(8, hubMidY);
+          ctx.rotate(-Math.PI / 2);
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.fillText("SECT.A", 0, 0);
+          ctx.restore();
+          ctx.save();
+          ctx.translate(w - 8, hubMidY);
+          ctx.rotate(Math.PI / 2);
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.fillText("SECT.B", 0, 0);
+          ctx.restore();
+          ctx.restore();
+        }
 
         // ── Layer 3: Neon top + bottom borders with glow ────
         ctx.save();
