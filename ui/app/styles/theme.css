@@ -4530,27 +4530,38 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
    mobile block so true mobile-only adaptations (card lists,
    bottom sheet, touch-only chips) stay scoped to ≤ 640. */
 @media (max-width: 960px) {
-  .neo-header { flex-wrap: wrap; padding: 8px 12px; gap: 8px; }
+  /* 0.0.271 — `justify-content: flex-start` overrides the base
+     `space-between`. Without this, header-left (order: 3 = last)
+     gets pushed to the far right edge while tf/seg (order: 2)
+     clump on the left, leaving a visible gap between them
+     (user screenshot at ~600 px showed "Aa Display" orphaned
+     against the right edge — "ao aumentar um pouco a tela, o
+     trend comeu a palabra"). Packing left keeps all row-2 chips
+     adjacent. */
+  .neo-header { flex-wrap: wrap; padding: 8px 12px; gap: 8px; justify-content: flex-start; }
   .neo-header-right { display: contents; }
   .neo-header-right > .neo-refresh-group { order: 1; width: 100%; }
   .neo-header-right > *:not(.neo-refresh-group) {
-    order: 2; flex: 1 1 auto; min-width: 0;
+    order: 2; flex: 0 0 auto; min-width: 0;
   }
-  .neo-header-left { order: 3; flex: 1 1 auto; min-width: 0; }
-  .neo-header-left > * { flex: 1 1 auto; min-width: 0; }
+  /* 0.0.271 — `flex: 0 0 auto` (was `1 1 auto`) so Display is
+     content-sized and packs immediately after tf+seg, not
+     stretched into its own space-between target. */
+  .neo-header-left { order: 3; flex: 0 0 auto; min-width: 0; }
+  .neo-header-left > * { flex: 0 0 auto; min-width: 0; }
   .neo-header-right > * { flex-shrink: 0; }
 }
 /* Mirror for forced-mobile (UA detection — fires regardless of
    viewport width). Selector-only block (no @media) so it wins
    even on a 1920 px viewport when the UA is a phone/tablet. */
-:root[data-force-mobile] .neo-header { flex-wrap: wrap; padding: 8px 12px; gap: 8px; }
+:root[data-force-mobile] .neo-header { flex-wrap: wrap; padding: 8px 12px; gap: 8px; justify-content: flex-start; }
 :root[data-force-mobile] .neo-header-right { display: contents; }
 :root[data-force-mobile] .neo-header-right > .neo-refresh-group { order: 1; width: 100%; }
 :root[data-force-mobile] .neo-header-right > *:not(.neo-refresh-group) {
-  order: 2; flex: 1 1 auto; min-width: 0;
+  order: 2; flex: 0 0 auto; min-width: 0;
 }
-:root[data-force-mobile] .neo-header-left { order: 3; flex: 1 1 auto; min-width: 0; }
-:root[data-force-mobile] .neo-header-left > * { flex: 1 1 auto; min-width: 0; }
+:root[data-force-mobile] .neo-header-left { order: 3; flex: 0 0 auto; min-width: 0; }
+:root[data-force-mobile] .neo-header-left > * { flex: 0 0 auto; min-width: 0; }
 :root[data-force-mobile] .neo-header-right > * { flex-shrink: 0; }
 
 /* ── MOBILE (≤ 640px) — touch-first adaptations ───────────────────────── */
@@ -4564,10 +4575,13 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
      `justify-content: flex-start` makes the natural reading order
      (Rising → ... → Refresh) flow left-to-right top-to-bottom
      instead of being pushed off-screen. */
-  .neo-header { flex-wrap: wrap; padding: 8px 12px; gap: 8px; }
+  /* 0.0.271 — `justify-content: flex-start` mirrors the change
+     in the 960 px block above (Display was orphaning to the far
+     right because of base `space-between`). */
+  .neo-header { flex-wrap: wrap; padding: 8px 12px; gap: 8px; justify-content: flex-start; }
   /* Stacking order in mobile (top → bottom):
        Row 1: Refresh group (its own row, action toolbar)
-       Row 2: TimeframeSelector | SegmentSelector  (side by side)
+       Row 2: TimeframeSelector + SegmentSelector + Display (packed left)
      `.neo-header-right` flattens via `display: contents` so all
      three pieces (refresh / timeframe / segments) participate as
      direct flex children of `.neo-header`. Without it the right
@@ -4580,31 +4594,20 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
     width: 100%;
   }
 
-  /* TimeframeSelector — Strato renders its own wrapper div with no
-     reliable class, so target it via "child of header-right that
-     ISN'T the refresh group". Lives on row 2, left half. */
+  /* TimeframeSelector + SegmentSelector — share row 2, packed left. */
   .neo-header-right > *:not(.neo-refresh-group) {
     order: 2;
-    flex: 1 1 auto;
+    flex: 0 0 auto;
     min-width: 0;
   }
 
-  /* SegmentSelector — same row 2, right of timeframe. `order: 3`
-     sits AFTER the timeframe selector's `order: 2` within the
-     wrap-row, so the chip lands on the right side. `flex: 1 1 auto`
-     lets it share the available width with the timeframe; if both
-     can't fit on one row (very narrow viewport <320 px), the
-     wrap-row will spill the segments to its own line below — still
-     legible, just not paired with timeframe. */
+  /* Display panel — same row 2, after tf+seg. */
   .neo-header-left {
     order: 3;
-    flex: 1 1 auto;
+    flex: 0 0 auto;
     min-width: 0;
   }
-  /* SegmentSelector chip inside still needs to stretch within its
-     wrapper — Strato's default is auto-width which collapses to a
-     hexagon icon. */
-  .neo-header-left > * { flex: 1 1 auto; min-width: 0; }
+  .neo-header-left > * { flex: 0 0 auto; min-width: 0; }
   /* TimeframeSelector tends to have its own min-width that forces
      it onto its own line — fine, but make the dropdown stretch to
      fill the line so it's a comfortable tap target. */
