@@ -4805,9 +4805,31 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
     grid-column: 1 / -1 !important;
     gap: 2px !important;
   }
-  .neo-header [class*="TimeframeSelector"],
-  .neo-header [data-testid*="timeframe"] {
+  /* 0.0.239 — TimeframeSelector full-row coverage. The previous
+     selector `[class*="TimeframeSelector"]` missed Strato's
+     hashed kebab-case class names — Today got truncated to
+     "T..." on Z Fold cover ("visao mobile cortando Today").
+     Multiple fallbacks now:
+       • Case-insensitive class substring (`i` flag) — catches
+         `_strato-timeframe-selector_xyz`.
+       • DOM position fallback: 2nd direct child of
+         `.neo-header-right` (Segment is 1st, Timeframe is 2nd,
+         refresh-group is 3rd). Robust against Strato class
+         renames.
+       • Same coverage for SegmentSelector wrappers as a
+         defensive measure. */
+  .neo-header [class*="Timeframe" i],
+  .neo-header [class*="timeframe" i],
+  .neo-header [data-testid*="timeframe" i],
+  .neo-header-right > *:nth-child(2) {
     grid-column: 1 / -1 !important;
+  }
+  /* If Strato's internal button still has a max-width that
+     truncates "Today", un-cap it so the digit fills the row. */
+  .neo-header-right > *:nth-child(2) button,
+  .neo-header [class*="Timeframe" i] button {
+    max-width: none !important;
+    min-width: 0 !important;
   }
   /* 0.0.236 — Meta info (refresh status + version) moved to the
      FIRST row of the refresh group, filling the empty space the
