@@ -1393,70 +1393,171 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
       ctx.setLineDash([]);
       ctx.restore();
 
-      // 0.0.247-fx — Discrete dot grid + 4 cardinal chevrons.
-      // Read live so the feature can be toggled at runtime via
-      // `window.__hubGrid = true | false`.
+      // 0.0.252-fx — "Aurora Sweep HUD". User: "fundo futurista
+      // e qie impressione". Layered effect across the central
+      // hub band — bottom: hex tile pattern; mid: travelling
+      // horizontal energy pulse (left↔right sweep); top: thin
+      // neon top/bottom borders with brackets at the 4 corners;
+      // plus a centred holographic tag "▌ HUB.CORE ▐" above the
+      // band. Everything stays inside the band area, skips the
+      // satellites, and uses theme-aware colours.
+      // Toggle live via `window.__hubGrid = true | false`.
       if (readHubBandGrid()) {
         const satRForGrid = Math.max(40, hubRadius);
         const satYForGrid = hubCy;
         const satXsForGrid = [w * 0.18, w / 2, w * 0.82];
-        const SAT_PAD = satRForGrid + 10;
-        // Step scales with width so the dot density stays
-        // consistent from Z Fold cover to a 4K display.
-        const step = Math.max(10, Math.min(16, w * 0.012));
-        const dotR = 0.8;
+        const SAT_PAD = satRForGrid + 12;
+        const tc = Date.now();
+        // Accent rgb — cyan-ish for dark, indigo for light.
+        const accent = dk ? "120,180,255" : "70,90,180";
+        // ── Hex tile substrate — alpha per hex depends on the
+        // animation variant picked via `window.__hubAnim`:
+        //   1 wave   crest travels L→R (6 s)
+        //   2 radial crest expands from centre (5 s)
+        //   3 breath whole grid pulses in unison (4 s)
+        //   4 static fixed faint alpha
         ctx.save();
-        ctx.fillStyle = dk ? "rgba(160,180,220,0.10)" : "rgba(60,80,120,0.10)";
-        for (let y = hubBandTop + step / 2; y < hubBandBottom; y += step) {
-          for (let x = step / 2; x < w; x += step) {
-            // Skip dots that fall inside any satellite's bubble
-            // area so the rings render cleanly on top.
+        const hexR = Math.max(14, Math.min(22, w * 0.014));
+        const hexW = hexR * Math.sqrt(3);
+        const hexH = hexR * 1.5;
+        ctx.lineWidth = 1.1;
+        const anim = readHubAnim();
+        const hubMidY = (hubBandTop + hubBandBottom) / 2;
+        // Precompute time-based phases per variant.
+        const wavePhase    = (tc % 6000) / 6000;          // 0..1
+        const radialPhase  = (tc % 5000) / 5000;          // 0..1
+        const breathAlpha  = 0.10 + ((Math.sin(tc * 0.0016) + 1) / 2) * 0.20; // 0.10..0.30
+        // Radial wave reach (px) — expands from 0 to half-width
+        const radialReach  = radialPhase * (w * 0.55);
+        const radialWidth  = Math.max(60, w * 0.08);
+        for (let row = 0, ry = hubBandTop + hexR; ry < hubBandBottom + hexR; ry += hexH, row++) {
+          const rowOffset = (row % 2) * (hexW / 2);
+          for (let cx2 = -hexW + rowOffset; cx2 < w + hexW; cx2 += hexW) {
+            // Skip hex centres inside the satellites.
             let inside = false;
             for (let s = 0; s < satXsForGrid.length; s++) {
-              if (Math.hypot(x - satXsForGrid[s], y - satYForGrid) < SAT_PAD) {
+              if (Math.hypot(cx2 - satXsForGrid[s], ry - satYForGrid) < SAT_PAD) {
                 inside = true; break;
               }
             }
             if (inside) continue;
+            let alpha = 0.15;
+            if (anim === 1) {
+              // Horizontal travelling crest (wave)
+              const localPhase = (cx2 / w) - wavePhase;
+              const cosVal = Math.cos(localPhase * 6 * 2 * Math.PI);
+              const crest = Math.pow(Math.max(0, cosVal), 4);
+              alpha = 0.08 + crest * 0.47;
+            } else if (anim === 2) {
+              // Radial wave from canvas centre
+              const d = Math.hypot(cx2 - w / 2, ry - hubMidY);
+              const delta = Math.abs(d - radialReach);
+              const norm = Math.min(1, delta / radialWidth);
+              const crest = Math.pow(1 - norm, 4);
+              alpha = 0.08 + crest * 0.50;
+            } else if (anim === 3) {
+              // Breath — uniform alpha pulse
+              alpha = breathAlpha;
+            } else {
+              // Static
+              alpha = 0.15;
+            }
+            ctx.strokeStyle = `rgba(${accent},${alpha.toFixed(3)})`;
             ctx.beginPath();
-            ctx.arc(x, y, dotR, 0, Math.PI * 2);
-            ctx.fill();
+            for (let i = 0; i < 6; i++) {
+              const a = (Math.PI / 3) * i - Math.PI / 2;
+              const px = cx2 + Math.cos(a) * hexR;
+              const py = ry + Math.sin(a) * hexR;
+              if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+            }
+            ctx.closePath();
+            ctx.stroke();
           }
         }
-        // 4 cardinal chevrons at the band's extremities,
-        // pointing inward. Discreet alpha. Subtle indicator
-        // that this is a self-contained "central" strip.
-        ctx.strokeStyle = dk ? "rgba(160,180,220,0.32)" : "rgba(60,80,120,0.32)";
+        ctx.restore();
+
+        // ── Layer 3: Neon top + bottom borders with glow ────
+        ctx.save();
+        ctx.shadowColor = `rgba(${accent},0.55)`;
+        ctx.shadowBlur = 4;
+        ctx.strokeStyle = `rgba(${accent},0.75)`;
         ctx.lineWidth = 1.2;
-        ctx.lineCap = "round";
-        ctx.lineJoin = "round";
-        const cheLen = 6;
-        const cxC = w / 2;
-        // top — ▼
         ctx.beginPath();
-        ctx.moveTo(cxC - cheLen, hubBandTop + 4);
-        ctx.lineTo(cxC,          hubBandTop + 4 + cheLen);
-        ctx.lineTo(cxC + cheLen, hubBandTop + 4);
-        ctx.stroke();
-        // bottom — ▲
-        ctx.beginPath();
-        ctx.moveTo(cxC - cheLen, hubBandBottom - 4);
-        ctx.lineTo(cxC,          hubBandBottom - 4 - cheLen);
-        ctx.lineTo(cxC + cheLen, hubBandBottom - 4);
-        ctx.stroke();
-        // left — ▶
-        ctx.beginPath();
-        ctx.moveTo(4,          satYForGrid - cheLen);
-        ctx.lineTo(4 + cheLen, satYForGrid);
-        ctx.lineTo(4,          satYForGrid + cheLen);
-        ctx.stroke();
-        // right — ◀
-        ctx.beginPath();
-        ctx.moveTo(w - 4,          satYForGrid - cheLen);
-        ctx.lineTo(w - 4 - cheLen, satYForGrid);
-        ctx.lineTo(w - 4,          satYForGrid + cheLen);
+        ctx.moveTo(0, hubBandTop);
+        ctx.lineTo(w, hubBandTop);
+        ctx.moveTo(0, hubBandBottom);
+        ctx.lineTo(w, hubBandBottom);
         ctx.stroke();
         ctx.restore();
+
+        // ── Layer 4: L-bracket markers at the 4 corners ─────
+        ctx.save();
+        ctx.strokeStyle = `rgba(${accent},0.85)`;
+        ctx.lineWidth = 1.6;
+        ctx.lineCap = "round";
+        const bArm = 14;
+        const bIn = 6;
+        // top-left
+        ctx.beginPath();
+        ctx.moveTo(bIn, hubBandTop + bArm);
+        ctx.lineTo(bIn, hubBandTop + bIn);
+        ctx.lineTo(bIn + bArm, hubBandTop + bIn);
+        ctx.stroke();
+        // top-right
+        ctx.beginPath();
+        ctx.moveTo(w - bIn - bArm, hubBandTop + bIn);
+        ctx.lineTo(w - bIn, hubBandTop + bIn);
+        ctx.lineTo(w - bIn, hubBandTop + bArm);
+        ctx.stroke();
+        // bottom-left
+        ctx.beginPath();
+        ctx.moveTo(bIn, hubBandBottom - bArm);
+        ctx.lineTo(bIn, hubBandBottom - bIn);
+        ctx.lineTo(bIn + bArm, hubBandBottom - bIn);
+        ctx.stroke();
+        // bottom-right
+        ctx.beginPath();
+        ctx.moveTo(w - bIn - bArm, hubBandBottom - bIn);
+        ctx.lineTo(w - bIn, hubBandBottom - bIn);
+        ctx.lineTo(w - bIn, hubBandBottom - bArm);
+        ctx.stroke();
+        ctx.restore();
+
+        // ── Layer 5: Centre tag "▌ HUB.CORE ▐" + 2 LED dots ─
+        // Sits ABOVE the band (in the gap between the top row's
+        // bottom and hubBandTop). Includes 2 blinking LED dots
+        // flanking the tag for "system live" feel.
+        const tagY = hubBandTop - 12;
+        if (tagY > 14) {
+          ctx.save();
+          ctx.font = `700 11px "Roboto Mono","SF Mono",monospace`;
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.shadowColor = `rgba(${accent},0.55)`;
+          ctx.shadowBlur = 5;
+          ctx.fillStyle = `rgba(${accent},0.92)`;
+          const tag = `▌ HUB.CORE.001 ▐`;
+          ctx.fillText(tag, w / 2, tagY);
+          ctx.restore();
+
+          // LEDs flanking the tag with phase-shifted blink.
+          const blinkA = 0.4 + ((Math.sin(tc * 0.005) + 1) / 2) * 0.55;
+          const blinkB = 0.4 + ((Math.sin(tc * 0.005 + Math.PI) + 1) / 2) * 0.55;
+          ctx.save();
+          ctx.font = `700 11px "Roboto Mono","SF Mono",monospace`;
+          const tagW = ctx.measureText(`▌ HUB.CORE.001 ▐`).width;
+          ctx.shadowColor = `rgba(${accent},0.55)`;
+          ctx.shadowBlur = 4;
+          ctx.fillStyle = `rgba(${accent},${blinkA.toFixed(3)})`;
+          ctx.beginPath();
+          ctx.arc(w / 2 - tagW / 2 - 8, tagY, 2, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = `rgba(${accent},${blinkB.toFixed(3)})`;
+          ctx.beginPath();
+          ctx.arc(w / 2 + tagW / 2 + 8, tagY, 2, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+        }
       }
     } else if (layout.length > 0) {
       // Hub-free layout (Segments page): draw dotted dividers between
@@ -4249,10 +4350,37 @@ function readHubBandGrid(): boolean {
     return HUB_GRID_DEFAULT_LOCAL;
   }
 }
-// 0.0.248 — Default flipped to `false`. User: "efeito central
-// muito sutil, nao gostei". The grid stays available via
-// `window.__hubGrid = true` until a better design is signed off.
+// 0.0.252 — Default OFF in production. Hub backdrop is opt-in
+// via `window.__hubGrid = true` (or `localStorage.setItem(
+// "hubGrid","1")`). Pair with `window.__hubAnim = 1..4` to
+// pick the animation variant for evaluation.
 const HUB_GRID_DEFAULT_LOCAL = false;
+
+// 0.0.253-fx — Animation variant for the hub-band hex backdrop.
+// Read live each frame via `window.__hubAnim`:
+//   1 = wave   — crest of hexes travels L→R (~6 s loop)
+//   2 = radial — concentric crest expands from centre outward
+//   3 = breath — entire grid pulses in unison (~4 s loop)
+//   4 = static — no animation, fixed faint alpha
+// Default to 1 so the test starts on the variant that's
+// already wired below; the others are reached via console.
+function readHubAnim(): 1 | 2 | 3 | 4 {
+  try {
+    if (typeof window === "undefined") return 1;
+    const g = (window as unknown as { __hubAnim?: number | string }).__hubAnim;
+    const cand: Array<unknown> = [g];
+    try { cand.push(window.localStorage?.getItem("hubAnim")); } catch { /* private mode */ }
+    for (const raw of cand) {
+      if (raw === undefined || raw === null) continue;
+      const v = String(raw).toLowerCase();
+      if (v === "1" || v === "wave") return 1;
+      if (v === "2" || v === "radial") return 2;
+      if (v === "3" || v === "breath") return 3;
+      if (v === "4" || v === "static") return 4;
+    }
+    return 1;
+  } catch { return 1; }
+}
 function readFxVariant(): FxVariant {
   try {
     if (typeof window === "undefined") return FX_DEFAULT_LOCAL;
