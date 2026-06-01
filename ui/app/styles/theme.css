@@ -4836,11 +4836,33 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   /* 0.0.262 — Slim down the Auto-refresh select: smaller font,
      tighter padding. Combined with the JSX label shortening
      ("Off" / "5 min" / etc.), the select now takes ~50% less
-     horizontal space than v0.0.261. */
+     horizontal space than v0.0.261.
+     0.0.263 — Width tied to content (not stretched). With
+     `flex: 0 0 auto` the select shrinks to fit just "Off" + the
+     dropdown arrow (~50 px) instead of filling the refresh
+     group's row. The remaining row width stays empty, which
+     is fine — the auto-refresh select isn't important enough
+     to dominate the row. */
   .neo-header .neo-refresh-interval {
     font-size: 11px !important;
     padding: 0 22px 0 8px !important;
     background-position: right 4px center !important;
+    width: auto !important;
+    flex: 0 0 auto !important;
+    min-width: 0 !important;
+  }
+  /* 0.0.263 — Kill the dead band between the fixed tabbar and
+     the page header. `.neo-page` was reserving 40 px on the
+     cover but the tabbar itself collapses to ~32 px, leaving
+     an 8 px black gap (user: "remover esse espaço"). Drop the
+     page clearance to 32 px and zero out the header's own
+     top padding so the first row of header content (Aa Display
+     + Segment) sits flush below the tabbar. */
+  .neo-page {
+    padding-top: calc(32px + env(safe-area-inset-top, 0px)) !important;
+  }
+  .neo-header {
+    padding-top: 0 !important;
   }
   /* 0.0.236 — Meta info (refresh status + version) moved to the
      FIRST row of the refresh group, filling the empty space the
