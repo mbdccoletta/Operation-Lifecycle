@@ -7,6 +7,7 @@ import {
   AnalyticsIcon,
 } from "@dynatrace/strato-icons";
 import { ErrorBoundary, installGlobalErrorHandlers } from "./components/ErrorBoundary";
+import { HubBackdropDebugPanel } from "./components/HubBackdropDebugPanel";
 
 // One-time install — runs at module load, before any React tree
 // mounts. Captures async / event-handler errors that React's own
@@ -75,6 +76,11 @@ const AppContent = () => {
 
   return (
     <div data-theme={theme} style={{ minHeight: "100vh" }}>
+      {/* 0.0.253 — Hub backdrop debug panel. Mounts globally
+          so it floats above every page. Renders nothing unless
+          the URL carries `?hubDebug=1`, so end-users never see
+          it. */}
+      <HubBackdropDebugPanel />
       {/* Inner wrapper around the routed pages exists ONLY so the
           `[data-intensity="medium|bold"]` saturate filter (see
           theme.css `@ around line 168`) can be scoped to the page
