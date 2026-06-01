@@ -375,26 +375,13 @@ const PulseVisualizerImpl: React.FC<PulseVisualizerProps> = ({
       const breath = (Math.sin(phase * 1.6) + 1) / 2;
 
       // Ambient bar halo — always on (not just hover) for the futuristic feel.
-      if (totalH > 1) {
-        ctx.save();
-        const halo = ctx.createRadialGradient(
-          xMid, baseY - totalH / 2, 0,
-          xMid, baseY - totalH / 2, Math.max(8, barW * 1.4),
-        );
-        const haloA = (isHover ? 0.45 : 0.18) + breath * 0.08;
-        // 0.0.249 — Halo locked to the ACTIVE colour. Previously
-        // it tracked whichever stack was taller (ACTIVE vs
-        // CLOSED), which made the halo green for buckets where
-        // the CLOSED count was larger — those greens accumulated
-        // across the chart and read as a continuous green wash
-        // behind the bars (user: "remover esse efeito verde").
-        const haloRgb = COLORS.active.rgb;
-        halo.addColorStop(0, `rgba(${haloRgb},${haloA})`);
-        halo.addColorStop(1, `rgba(${haloRgb},0)`);
-        ctx.fillStyle = halo;
-        ctx.fillRect(xLeft - barW, baseY - totalH - barW, barW * 3, totalH + barW * 2);
-        ctx.restore();
-      }
+      // 0.0.250 — Per-bar radial halo removed entirely. The
+      // accumulating wash of all the halos (regardless of
+      // colour) created a continuous coloured band across the
+      // chart background. User: "agora ficou com fundo
+      // vermelho ... remover isso". Bars are still visually
+      // distinct via their own neon stroke + glow inside the
+      // ACTIVE/CLOSED draw blocks below.
 
       // CLOSED segment (bottom) — neon teal
       if (closedH > 0.3) {
