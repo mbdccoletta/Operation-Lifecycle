@@ -4420,23 +4420,20 @@ function readHubBandGrid(): boolean {
     return HUB_GRID_DEFAULT_LOCAL;
   }
 }
-// 0.0.252 — Default OFF in production. Hub backdrop is opt-in
-// via `window.__hubGrid = true` (or `localStorage.setItem(
-// "hubGrid","1")`). Pair with `window.__hubAnim = 1..4` to
-// pick the animation variant for evaluation.
-const HUB_GRID_DEFAULT_LOCAL = false;
+// 0.0.256 — Default flipped to `true` after the user picked
+// variant 4 (Static circuit) as the production default. To
+// revert to the plain hub band, set
+// `window.__hubGrid = false` or `localStorage.setItem(
+// "hubGrid","0")`.
+const HUB_GRID_DEFAULT_LOCAL = true;
 
-// 0.0.253-fx — Animation variant for the hub-band hex backdrop.
-// Read live each frame via `window.__hubAnim`:
-//   1 = wave   — crest of hexes travels L→R (~6 s loop)
-//   2 = radial — concentric crest expands from centre outward
-//   3 = breath — entire grid pulses in unison (~4 s loop)
-//   4 = static — no animation, fixed faint alpha
-// Default to 1 so the test starts on the variant that's
-// already wired below; the others are reached via console.
+// 0.0.256 — Animation variant for the hub-band hex backdrop.
+// Default = 4 (Static circuit) after user sign-off. To pick a
+// different variant set `window.__hubAnim = 1..3` or
+// `localStorage.setItem("hubAnim","1..3")`.
 function readHubAnim(): 1 | 2 | 3 | 4 {
   try {
-    if (typeof window === "undefined") return 1;
+    if (typeof window === "undefined") return 4;
     const g = (window as unknown as { __hubAnim?: number | string }).__hubAnim;
     const cand: Array<unknown> = [g];
     try { cand.push(window.localStorage?.getItem("hubAnim")); } catch { /* private mode */ }
@@ -4448,8 +4445,8 @@ function readHubAnim(): 1 | 2 | 3 | 4 {
       if (v === "3" || v === "breath") return 3;
       if (v === "4" || v === "static") return 4;
     }
-    return 1;
-  } catch { return 1; }
+    return 4;
+  } catch { return 4; }
 }
 function readFxVariant(): FxVariant {
   try {
