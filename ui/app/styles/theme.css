@@ -4800,36 +4800,29 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
     flex: 1 1 100% !important;
     gap: 2px !important;
   }
-  /* 0.0.240 — TimeframeSelector full-row coverage. The previous
-     two attempts at class-substring + nth-child selectors
-     failed: Strato's TimeframeSelector renders as either a
-     React Fragment (no outer element to target) or with a
-     hashed kebab-case class. Switched to an EXPLICIT WRAPPER
-     `.neo-tf-slot` added in Overview.tsx so the CSS targets a
-     class we control. Same pattern for the segment chip slot
-     (`.neo-seg-slot`) for consistency. */
+  /* 0.0.265 — Both slots now content-sized so they pack on the
+     same flex-wrap row as Display. Previous `width: 100%` /
+     `grid-column: 1 / -1` were leftovers from the grid era and
+     forced each slot onto its own line (user: "ainda nao ficou
+     bom, muitos espaços em branco"). The internal Strato button
+     keeps `max-width: none` so its label ("Today") still renders
+     in full. Segment slot keeps `order: 0` so it lands next to
+     Display in the wrap order. */
   .neo-tf-slot {
-    grid-column: 1 / -1 !important;
     display: block !important;
-    width: 100% !important;
+    width: auto !important;
     min-width: 0 !important;
+    flex: 0 0 auto !important;
   }
-  /* Defensively un-cap any internal Strato button so "Today"
-     uses the full slot width. */
   .neo-tf-slot button {
     max-width: none !important;
     min-width: 0 !important;
   }
-  /* SegmentSelector slot — paired with Display on row 1 of
-     the grid. Force `order: 0` so it precedes the refresh group
-     (which inherits `order: 1` from the @media (max-width: 960px)
-     block); without this override Segment ended up below the
-     refresh group on a row by itself (user: "é possivel otimizar
-     para utilizar melhor os espaços"). */
   .neo-seg-slot {
     display: block !important;
-    width: 100% !important;
+    width: auto !important;
     min-width: 0 !important;
+    flex: 0 0 auto !important;
     order: 0 !important;
   }
   /* Slim Auto-refresh select. */
