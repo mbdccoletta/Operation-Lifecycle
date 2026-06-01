@@ -1,0 +1,720 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <title>Hub Backdrop — 8 propostas</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      background: #05080f;
+      color: #cfd7e3;
+      font: 14px/1.4 "Inter", system-ui, sans-serif;
+      min-height: 100vh;
+    }
+    h1 {
+      font: 600 18px/1.2 "Inter", system-ui, sans-serif;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #94a3b8;
+      margin: 16px 24px 4px;
+    }
+    .sub {
+      font-size: 12px;
+      color: #64748b;
+      margin: 0 24px 16px;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 12px;
+      padding: 0 16px 32px;
+    }
+    .pilot {
+      position: relative;
+      width: 100%;
+      background: #060a14;
+      border: 1px solid rgba(148,163,184,0.10);
+      border-radius: 6px;
+      overflow: hidden;
+      isolation: isolate;
+    }
+    .pilot-label {
+      position: absolute;
+      top: 6px;
+      left: 10px;
+      z-index: 10;
+      font: 700 9px/1 "Roboto Mono", monospace;
+      letter-spacing: 0.10em;
+      color: rgba(148,163,184,0.65);
+      pointer-events: none;
+    }
+    .pilot canvas {
+      display: block;
+      width: 100%;
+      height: 220px;
+    }
+    footer {
+      text-align: center;
+      color: #475569;
+      font-size: 11px;
+      padding: 16px;
+    }
+    footer code {
+      color: #94a3b8;
+    }
+  </style>
+</head>
+<body>
+
+<h1>Hub Backdrop — 8 propostas tech</h1>
+<p class="sub">
+  Cada bloco abaixo mostra a mesma faixa central (3 satélites TOTAL / ACTIVE / RESOLVED) com um fundo
+  diferente. Compare e me diga qual você gosta — eu porto pro app.
+</p>
+
+<div class="grid">
+  <div class="pilot"><div class="pilot-label">1 · CONNECTION LINES</div><canvas data-variant="1"></canvas></div>
+  <div class="pilot"><div class="pilot-label">2 · GLASSMORPHIC + SCANLINES</div><canvas data-variant="2"></canvas></div>
+  <div class="pilot"><div class="pilot-label">3 · BLUEPRINT</div><canvas data-variant="3"></canvas></div>
+  <div class="pilot"><div class="pilot-label">4 · SOFT HALOS</div><canvas data-variant="4"></canvas></div>
+  <div class="pilot"><div class="pilot-label">5 · PARTICLE STREAM</div><canvas data-variant="5"></canvas></div>
+  <div class="pilot"><div class="pilot-label">6 · ENERGY CORE (rings)</div><canvas data-variant="6"></canvas></div>
+  <div class="pilot"><div class="pilot-label">7 · WIREFRAME HUD</div><canvas data-variant="7"></canvas></div>
+  <div class="pilot"><div class="pilot-label">8 · GRID DOTS + AXIS</div><canvas data-variant="8"></canvas></div>
+  <div class="pilot"><div class="pilot-label">9 · TOPOGRAPHIC CONTOURS</div><canvas data-variant="9"></canvas></div>
+  <div class="pilot"><div class="pilot-label">10 · PCB CIRCUIT TRACES</div><canvas data-variant="10"></canvas></div>
+  <div class="pilot"><div class="pilot-label">11 · AUDIO EQ BARS</div><canvas data-variant="11"></canvas></div>
+  <div class="pilot"><div class="pilot-label">12 · CONSTELLATION STARS</div><canvas data-variant="12"></canvas></div>
+  <div class="pilot"><div class="pilot-label">13 · HYPERSPACE RADIAL</div><canvas data-variant="13"></canvas></div>
+  <div class="pilot"><div class="pilot-label">14 · NEON UNDERLINE</div><canvas data-variant="14"></canvas></div>
+  <div class="pilot"><div class="pilot-label">15 · HOLO MESH (perspective)</div><canvas data-variant="15"></canvas></div>
+  <div class="pilot"><div class="pilot-label">16 · THERMAL HEATMAP</div><canvas data-variant="16"></canvas></div>
+</div>
+
+<footer>
+  Para abrir: <code>open pilots/hub-backdrop.html</code> no terminal, ou só arrastar pro Chrome.<br>
+  Todas as variantes mostram o mesmo conteúdo: 3 satélites com TOTAL=134, ACTIVE=4, RESOLVED=130.
+</footer>
+
+<script>
+const COLORS = {
+  total:    { hex: '#94a3b8', rgb: '148,163,184' },
+  active:   { hex: '#ff4d6a', rgb: '255,77,106'  },
+  resolved: { hex: '#22d3a0', rgb: '34,211,160'  },
+  accent:   { rgb: '120,180,255' },
+};
+const SATS = [
+  { x: 0.18, count: 134, label: 'TOTAL',    delta: '▼ -4 /1h',  ...COLORS.total    },
+  { x: 0.50, count: 4,   label: 'ACTIVE',   delta: '▲ +2 /1h',  ...COLORS.active   },
+  { x: 0.82, count: 130, label: 'RESOLVED', delta: '▼ -8 /1h',  ...COLORS.resolved },
+];
+
+function setupHiDPI(canvas) {
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  canvas.width  = rect.width * dpr;
+  canvas.height = rect.height * dpr;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+  return { ctx, w: rect.width, h: rect.height };
+}
+
+function drawSatellite(ctx, cx, cy, r, sat) {
+  ctx.save();
+  // Halo
+  const halo = ctx.createRadialGradient(cx, cy, r * 0.5, cx, cy, r * 2);
+  halo.addColorStop(0, `rgba(${sat.rgb},0.12)`);
+  halo.addColorStop(1, `rgba(${sat.rgb},0)`);
+  ctx.fillStyle = halo;
+  ctx.beginPath(); ctx.arc(cx, cy, r * 2, 0, Math.PI * 2); ctx.fill();
+  // Disc
+  ctx.fillStyle = 'rgba(5,8,15,0.95)';
+  ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fill();
+  // Ring
+  ctx.shadowColor = sat.hex;
+  ctx.shadowBlur = 6;
+  ctx.strokeStyle = `rgba(${sat.rgb},0.75)`;
+  ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.stroke();
+  // Inner accent ring
+  ctx.shadowBlur = 0;
+  ctx.strokeStyle = `rgba(${sat.rgb},0.28)`;
+  ctx.lineWidth = 0.6;
+  ctx.beginPath(); ctx.arc(cx, cy, r - 5, 0, Math.PI * 2); ctx.stroke();
+  // Label top
+  ctx.fillStyle = 'rgba(148,163,184,0.85)';
+  ctx.font = '500 11px "Roboto Mono", monospace';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(sat.label, cx, cy - r + 18);
+  // Number
+  ctx.fillStyle = '#fff';
+  ctx.font = '900 32px "Roboto Mono", monospace';
+  ctx.fillText(String(sat.count), cx, cy);
+  // Delta
+  ctx.fillStyle = sat.hex;
+  ctx.font = '500 10px "Roboto Mono", monospace';
+  ctx.fillText(sat.delta, cx, cy + r - 18);
+  ctx.restore();
+}
+
+// ─────── BACKDROP VARIANTS ────────
+
+function drawV1_ConnectionLines(ctx, w, h, t) {
+  // Thin glowing lines TOTAL→ACTIVE→RESOLVED with pulsing nodes
+  const cy = h / 2;
+  ctx.save();
+  // Connection line as a soft gradient
+  for (let i = 0; i < SATS.length - 1; i++) {
+    const x1 = SATS[i].x * w, x2 = SATS[i + 1].x * w;
+    const g = ctx.createLinearGradient(x1, 0, x2, 0);
+    g.addColorStop(0,   `rgba(${SATS[i].rgb},0.0)`);
+    g.addColorStop(0.5, `rgba(${COLORS.accent.rgb},0.45)`);
+    g.addColorStop(1,   `rgba(${SATS[i+1].rgb},0.0)`);
+    ctx.strokeStyle = g;
+    ctx.lineWidth = 1.2;
+    ctx.shadowColor = `rgba(${COLORS.accent.rgb},0.55)`;
+    ctx.shadowBlur = 6;
+    ctx.beginPath();
+    ctx.moveTo(x1, cy);
+    ctx.lineTo(x2, cy);
+    ctx.stroke();
+  }
+  // Travelling data dots along the lines
+  const tt = (t / 1500) % 1;
+  for (let i = 0; i < SATS.length - 1; i++) {
+    const x1 = SATS[i].x * w, x2 = SATS[i + 1].x * w;
+    const px = x1 + (x2 - x1) * tt;
+    ctx.shadowBlur = 8;
+    ctx.fillStyle = `rgba(${COLORS.accent.rgb},0.9)`;
+    ctx.beginPath(); ctx.arc(px, cy, 2.5, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.restore();
+}
+
+function drawV2_GlassScanlines(ctx, w, h, t) {
+  // Frosted panel + horizontal scanlines slow-sweep
+  const xS = SATS[0].x * w - 90, xE = SATS[2].x * w + 90;
+  const yT = h * 0.10, yB = h * 0.90;
+  // Glass fill
+  ctx.save();
+  const g = ctx.createLinearGradient(0, yT, 0, yB);
+  g.addColorStop(0, 'rgba(120,180,255,0.04)');
+  g.addColorStop(0.5, 'rgba(120,180,255,0.08)');
+  g.addColorStop(1, 'rgba(120,180,255,0.04)');
+  ctx.fillStyle = g;
+  ctx.fillRect(xS, yT, xE - xS, yB - yT);
+  // Subtle border
+  ctx.strokeStyle = 'rgba(120,180,255,0.20)';
+  ctx.lineWidth = 0.8;
+  ctx.strokeRect(xS + 0.5, yT + 0.5, xE - xS - 1, yB - yT - 1);
+  // Scanlines — horizontal lines every 4px, very faint
+  ctx.fillStyle = 'rgba(120,180,255,0.025)';
+  for (let y = yT; y < yB; y += 4) {
+    ctx.fillRect(xS, y, xE - xS, 1);
+  }
+  // One bright sweeping scan line
+  const sweepY = yT + ((t / 4000) % 1) * (yB - yT);
+  const sg = ctx.createLinearGradient(0, sweepY - 12, 0, sweepY + 12);
+  sg.addColorStop(0, 'rgba(120,180,255,0)');
+  sg.addColorStop(0.5, 'rgba(120,180,255,0.18)');
+  sg.addColorStop(1, 'rgba(120,180,255,0)');
+  ctx.fillStyle = sg;
+  ctx.fillRect(xS, sweepY - 12, xE - xS, 24);
+  ctx.restore();
+}
+
+function drawV3_Blueprint(ctx, w, h, t) {
+  // Architect blueprint — corner brackets + measurement lines + faint construction grid
+  const xS = SATS[0].x * w - 90, xE = SATS[2].x * w + 90;
+  const yT = h * 0.10, yB = h * 0.90;
+  ctx.save();
+  // Light construction grid
+  ctx.strokeStyle = 'rgba(120,180,255,0.06)';
+  ctx.lineWidth = 0.6;
+  for (let x = xS + 24; x < xE; x += 24) {
+    ctx.beginPath(); ctx.moveTo(x, yT); ctx.lineTo(x, yB); ctx.stroke();
+  }
+  for (let y = yT + 24; y < yB; y += 24) {
+    ctx.beginPath(); ctx.moveTo(xS, y); ctx.lineTo(xE, y); ctx.stroke();
+  }
+  // Cut-corner panel (brackets with cuts)
+  ctx.strokeStyle = 'rgba(120,180,255,0.55)';
+  ctx.lineWidth = 1.4;
+  ctx.lineCap = 'round';
+  const cut = 14;
+  ctx.beginPath();
+  ctx.moveTo(xS + cut, yT); ctx.lineTo(xE - cut, yT); // top
+  ctx.lineTo(xE, yT + cut);                            // top-right cut
+  ctx.lineTo(xE, yB - cut);                            // right
+  ctx.lineTo(xE - cut, yB);                            // bottom-right cut
+  ctx.lineTo(xS + cut, yB);                            // bottom
+  ctx.lineTo(xS, yB - cut);                            // bottom-left cut
+  ctx.lineTo(xS, yT + cut);                            // left
+  ctx.lineTo(xS + cut, yT);                            // top-left cut
+  ctx.stroke();
+  // Measurement label top
+  ctx.fillStyle = 'rgba(120,180,255,0.65)';
+  ctx.font = '600 9px "Roboto Mono", monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText(`◄── ${Math.round(xE - xS)}px ──►`, (xS + xE) / 2, yT - 6);
+  ctx.restore();
+}
+
+function drawV4_SoftHalos(ctx, w, h, t) {
+  // Just soft radial glow behind each satellite + 2 thin connecting lines
+  const cy = h / 2;
+  const breath = 0.5 + Math.sin(t * 0.001) * 0.5;
+  for (const s of SATS) {
+    const cx = s.x * w;
+    const r = 110 + breath * 8;
+    const g = ctx.createRadialGradient(cx, cy, 30, cx, cy, r);
+    g.addColorStop(0, `rgba(${s.rgb},0.20)`);
+    g.addColorStop(0.5, `rgba(${s.rgb},0.05)`);
+    g.addColorStop(1, `rgba(${s.rgb},0)`);
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fill();
+  }
+  // Thin connecting lines (very faint)
+  ctx.strokeStyle = 'rgba(120,180,255,0.20)';
+  ctx.lineWidth = 0.6;
+  for (let i = 0; i < SATS.length - 1; i++) {
+    ctx.beginPath();
+    ctx.moveTo(SATS[i].x * w + 65, cy);
+    ctx.lineTo(SATS[i+1].x * w - 65, cy);
+    ctx.stroke();
+  }
+}
+
+function drawV5_ParticleStream(ctx, w, h, t) {
+  // Many particles flowing horizontally
+  const cy = h / 2;
+  ctx.save();
+  for (let i = 0; i < 80; i++) {
+    const speed = 0.02 + (i % 7) * 0.005;
+    const phase = (t * speed / 100 + i * 0.13) % 1;
+    const x = phase * w;
+    const yOff = ((i * 37) % 100 - 50) * 0.6;
+    const y = cy + yOff;
+    // Skip if inside a satellite area
+    let inside = false;
+    for (const s of SATS) {
+      if (Math.hypot(x - s.x * w, y - cy) < 60) { inside = true; break; }
+    }
+    if (inside) continue;
+    const a = 0.20 + Math.sin(t * 0.003 + i) * 0.10;
+    ctx.fillStyle = `rgba(120,180,255,${a.toFixed(3)})`;
+    ctx.beginPath(); ctx.arc(x, y, 0.9, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.restore();
+}
+
+function drawV6_EnergyCore(ctx, w, h, t) {
+  // Pulsing concentric rings emanating from each satellite
+  const cy = h / 2;
+  ctx.save();
+  for (const s of SATS) {
+    const cx = s.x * w;
+    for (let k = 0; k < 3; k++) {
+      const phase = ((t / 2500) + k * 0.33) % 1;
+      const r = 70 + phase * 100;
+      const a = (1 - phase) * 0.30;
+      ctx.strokeStyle = `rgba(${s.rgb},${a.toFixed(3)})`;
+      ctx.lineWidth = 0.8;
+      ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.stroke();
+    }
+  }
+  ctx.restore();
+}
+
+function drawV7_WireframeHud(ctx, w, h, t) {
+  // Bracketed frame with crosshair marks at the cell midlines
+  const xS = SATS[0].x * w - 95, xE = SATS[2].x * w + 95;
+  const yT = h * 0.08, yB = h * 0.92;
+  ctx.save();
+  // 4 corner brackets only (no full border)
+  ctx.strokeStyle = 'rgba(120,180,255,0.75)';
+  ctx.lineWidth = 1.4;
+  ctx.lineCap = 'round';
+  const arm = 18, pad = 4;
+  // top-left
+  ctx.beginPath();
+  ctx.moveTo(xS + pad, yT + arm + pad); ctx.lineTo(xS + pad, yT + pad); ctx.lineTo(xS + arm + pad, yT + pad);
+  ctx.stroke();
+  // top-right
+  ctx.beginPath();
+  ctx.moveTo(xE - arm - pad, yT + pad); ctx.lineTo(xE - pad, yT + pad); ctx.lineTo(xE - pad, yT + arm + pad);
+  ctx.stroke();
+  // bottom-left
+  ctx.beginPath();
+  ctx.moveTo(xS + pad, yB - arm - pad); ctx.lineTo(xS + pad, yB - pad); ctx.lineTo(xS + arm + pad, yB - pad);
+  ctx.stroke();
+  // bottom-right
+  ctx.beginPath();
+  ctx.moveTo(xE - arm - pad, yB - pad); ctx.lineTo(xE - pad, yB - pad); ctx.lineTo(xE - pad, yB - arm - pad);
+  ctx.stroke();
+  // Crosshair marks between satellites
+  for (let i = 0; i < SATS.length - 1; i++) {
+    const mx = (SATS[i].x + SATS[i+1].x) / 2 * w;
+    const my = h / 2;
+    ctx.strokeStyle = 'rgba(120,180,255,0.45)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(mx - 7, my); ctx.lineTo(mx + 7, my);
+    ctx.moveTo(mx, my - 7); ctx.lineTo(mx, my + 7);
+    ctx.stroke();
+    // Tiny circle outside the crosshair
+    ctx.beginPath(); ctx.arc(mx, my, 3, 0, Math.PI * 2); ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawV8_GridDotsAxis(ctx, w, h, t) {
+  // Sparse dot grid + horizontal axis through the centre
+  const xS = SATS[0].x * w - 80, xE = SATS[2].x * w + 80;
+  const cy = h / 2;
+  ctx.save();
+  // Horizontal axis with tick marks
+  ctx.strokeStyle = 'rgba(120,180,255,0.30)';
+  ctx.lineWidth = 0.8;
+  ctx.beginPath(); ctx.moveTo(xS, cy); ctx.lineTo(xE, cy); ctx.stroke();
+  // Ticks
+  for (let x = xS + 30; x < xE - 30; x += 30) {
+    let inSat = false;
+    for (const s of SATS) {
+      if (Math.abs(x - s.x * w) < 70) { inSat = true; break; }
+    }
+    if (inSat) continue;
+    ctx.beginPath(); ctx.moveTo(x, cy - 4); ctx.lineTo(x, cy + 4); ctx.stroke();
+  }
+  // Sparse dot grid
+  ctx.fillStyle = 'rgba(120,180,255,0.18)';
+  const step = 20;
+  for (let y = h * 0.20; y < h * 0.80; y += step) {
+    for (let x = xS; x < xE; x += step) {
+      let inSat = false;
+      for (const s of SATS) {
+        if (Math.hypot(x - s.x * w, y - cy) < 80) { inSat = true; break; }
+      }
+      if (inSat) continue;
+      ctx.beginPath(); ctx.arc(x, y, 0.7, 0, Math.PI * 2); ctx.fill();
+    }
+  }
+  ctx.restore();
+}
+
+function drawV9_TopographicContours(ctx, w, h, t) {
+  // Wavy parallel horizontal lines like elevation map contours
+  const xS = SATS[0].x * w - 95, xE = SATS[2].x * w + 95;
+  const cy = h / 2;
+  ctx.save();
+  ctx.strokeStyle = 'rgba(120,180,255,0.16)';
+  ctx.lineWidth = 0.7;
+  const drift = (t / 8000) % 1;
+  for (let line = 0; line < 9; line++) {
+    const baseY = h * 0.10 + line * (h * 0.10);
+    ctx.beginPath();
+    for (let x = xS; x <= xE; x += 4) {
+      const wave = Math.sin((x / w) * 6 * Math.PI + line * 0.4 + drift * 4) * 6;
+      // Skip the area inside satellites
+      let inSat = false;
+      for (const s of SATS) {
+        if (Math.hypot(x - s.x * w, baseY + wave - cy) < 75) { inSat = true; break; }
+      }
+      if (inSat) { ctx.moveTo(x, baseY + wave); continue; }
+      if (x === xS) ctx.moveTo(x, baseY + wave);
+      else          ctx.lineTo(x, baseY + wave);
+    }
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawV10_PcbTraces(ctx, w, h, t) {
+  // Right-angle circuit traces with vias between the 3 satellites
+  const cy = h / 2;
+  ctx.save();
+  ctx.strokeStyle = 'rgba(120,180,255,0.45)';
+  ctx.lineWidth = 1.4;
+  ctx.lineCap = 'square';
+  ctx.lineJoin = 'miter';
+  // Trace 1: TOTAL → ACTIVE, routed through a step
+  const A = SATS[0], B = SATS[1], C = SATS[2];
+  const r1 = 75; // satellite "exclusion" approx
+  // Top trace
+  ctx.beginPath();
+  ctx.moveTo(A.x * w + r1, cy - 35);
+  ctx.lineTo((A.x + B.x) / 2 * w, cy - 35);
+  ctx.lineTo((A.x + B.x) / 2 * w, cy - 65);
+  ctx.lineTo((B.x + C.x) / 2 * w, cy - 65);
+  ctx.lineTo((B.x + C.x) / 2 * w, cy - 35);
+  ctx.lineTo(C.x * w - r1, cy - 35);
+  ctx.stroke();
+  // Bottom trace
+  ctx.beginPath();
+  ctx.moveTo(A.x * w + r1, cy + 35);
+  ctx.lineTo((A.x + B.x) / 2 * w + 20, cy + 35);
+  ctx.lineTo((A.x + B.x) / 2 * w + 20, cy + 70);
+  ctx.lineTo((B.x + C.x) / 2 * w - 20, cy + 70);
+  ctx.lineTo((B.x + C.x) / 2 * w - 20, cy + 35);
+  ctx.lineTo(C.x * w - r1, cy + 35);
+  ctx.stroke();
+  // Vias (small filled circles at trace corners)
+  const vias = [
+    { x: (A.x + B.x) / 2 * w,      y: cy - 35 },
+    { x: (A.x + B.x) / 2 * w,      y: cy - 65 },
+    { x: (B.x + C.x) / 2 * w,      y: cy - 65 },
+    { x: (B.x + C.x) / 2 * w,      y: cy - 35 },
+    { x: (A.x + B.x) / 2 * w + 20, y: cy + 35 },
+    { x: (A.x + B.x) / 2 * w + 20, y: cy + 70 },
+    { x: (B.x + C.x) / 2 * w - 20, y: cy + 70 },
+    { x: (B.x + C.x) / 2 * w - 20, y: cy + 35 },
+  ];
+  for (const v of vias) {
+    ctx.fillStyle = '#06121f';
+    ctx.beginPath(); ctx.arc(v.x, v.y, 3, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = 'rgba(120,180,255,0.85)';
+    ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.arc(v.x, v.y, 3, 0, Math.PI * 2); ctx.stroke();
+  }
+  // Travelling dot on one trace (signal flow)
+  const tt = (t / 2000) % 1;
+  const xS = A.x * w + r1, xE = C.x * w - r1;
+  const px = xS + (xE - xS) * tt;
+  ctx.fillStyle = `rgba(120,180,255,0.95)`;
+  ctx.shadowColor = `rgba(120,180,255,0.85)`;
+  ctx.shadowBlur = 6;
+  ctx.beginPath(); ctx.arc(px, cy - 35, 2.2, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
+
+function drawV11_EqBars(ctx, w, h, t) {
+  // Vertical EQ-style bars below the satellite row, heights bouncing
+  const xS = SATS[0].x * w - 90, xE = SATS[2].x * w + 90;
+  const baseY = h * 0.85;
+  const maxH = h * 0.45;
+  const barW = 5, gap = 2;
+  ctx.save();
+  for (let x = xS, i = 0; x < xE; x += barW + gap, i++) {
+    // Skip under satellites' horizontal range to keep the look clean
+    let inSat = false;
+    for (const s of SATS) {
+      if (Math.abs(x - s.x * w) < 70) { inSat = true; break; }
+    }
+    if (inSat) continue;
+    const phase = i * 0.18 + t * 0.003;
+    const hh = (Math.sin(phase) * 0.5 + 0.5) * maxH * (0.4 + (i % 5) * 0.12);
+    const a = 0.20 + (Math.sin(phase * 0.5) + 1) * 0.20;
+    const grad = ctx.createLinearGradient(0, baseY - hh, 0, baseY);
+    grad.addColorStop(0, `rgba(120,180,255,${a.toFixed(3)})`);
+    grad.addColorStop(1, `rgba(120,180,255,0.05)`);
+    ctx.fillStyle = grad;
+    ctx.fillRect(x, baseY - hh, barW, hh);
+  }
+  ctx.restore();
+}
+
+function drawV12_Constellation(ctx, w, h, t) {
+  // Random "star field" with thin lines clustering near satellites
+  const cy = h / 2;
+  ctx.save();
+  // Stars
+  const seed = (n) => (Math.sin(n * 12.9898) * 43758.5453) % 1;
+  ctx.fillStyle = 'rgba(220,230,255,0.55)';
+  const stars = [];
+  for (let i = 0; i < 80; i++) {
+    const sx = Math.abs(seed(i + 1)) * w;
+    const sy = h * 0.15 + Math.abs(seed(i + 17)) * h * 0.70;
+    let inSat = false;
+    for (const s of SATS) {
+      if (Math.hypot(sx - s.x * w, sy - cy) < 70) { inSat = true; break; }
+    }
+    if (inSat) continue;
+    const twinkle = 0.4 + 0.6 * (Math.sin(t * 0.001 + i) * 0.5 + 0.5);
+    const sr = (Math.abs(seed(i + 31)) > 0.85) ? 1.5 : 0.7;
+    ctx.globalAlpha = 0.25 + twinkle * 0.45;
+    ctx.beginPath(); ctx.arc(sx, sy, sr, 0, Math.PI * 2); ctx.fill();
+    stars.push({ x: sx, y: sy });
+  }
+  ctx.globalAlpha = 1;
+  // Thin lines between near stars (clusters)
+  ctx.strokeStyle = 'rgba(120,180,255,0.10)';
+  ctx.lineWidth = 0.5;
+  for (let i = 0; i < stars.length; i++) {
+    for (let j = i + 1; j < stars.length; j++) {
+      const d = Math.hypot(stars[i].x - stars[j].x, stars[i].y - stars[j].y);
+      if (d < 80) {
+        ctx.beginPath();
+        ctx.moveTo(stars[i].x, stars[i].y);
+        ctx.lineTo(stars[j].x, stars[j].y);
+        ctx.stroke();
+      }
+    }
+  }
+  ctx.restore();
+}
+
+function drawV13_HyperspaceRadial(ctx, w, h, t) {
+  // Lines radiating from canvas centre outward — Star Wars jump look
+  const cx = w / 2, cy = h / 2;
+  ctx.save();
+  const N = 40;
+  for (let i = 0; i < N; i++) {
+    const a = (i / N) * Math.PI * 2 + t * 0.00015;
+    const rr1 = 60 + ((t / 20 + i * 60) % 200);
+    const rr2 = rr1 + 30;
+    const x1 = cx + Math.cos(a) * rr1;
+    const y1 = cy + Math.sin(a) * rr1;
+    const x2 = cx + Math.cos(a) * rr2;
+    const y2 = cy + Math.sin(a) * rr2;
+    // Skip if inside satellites
+    let inSat = false;
+    for (const s of SATS) {
+      if (Math.hypot((x1 + x2) / 2 - s.x * w, (y1 + y2) / 2 - cy) < 75) { inSat = true; break; }
+    }
+    if (inSat) continue;
+    ctx.strokeStyle = `rgba(120,180,255,${(0.05 + (1 - rr1 / 260) * 0.35).toFixed(3)})`;
+    ctx.lineWidth = 0.9;
+    ctx.beginPath();
+    ctx.moveTo(x1, y1); ctx.lineTo(x2, y2);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawV14_NeonUnderline(ctx, w, h, t) {
+  // Minimal — single neon line under the 3 satellites + side fade glow
+  const cy = h * 0.70;
+  const xS = SATS[0].x * w - 60, xE = SATS[2].x * w + 60;
+  ctx.save();
+  // Long horizontal line with gradient fade at ends
+  const g = ctx.createLinearGradient(xS, 0, xE, 0);
+  g.addColorStop(0, 'rgba(120,180,255,0)');
+  g.addColorStop(0.15, 'rgba(120,180,255,0.85)');
+  g.addColorStop(0.85, 'rgba(120,180,255,0.85)');
+  g.addColorStop(1, 'rgba(120,180,255,0)');
+  ctx.strokeStyle = g;
+  ctx.lineWidth = 1.6;
+  ctx.shadowColor = 'rgba(120,180,255,0.85)';
+  ctx.shadowBlur = 8;
+  ctx.beginPath();
+  ctx.moveTo(xS, cy); ctx.lineTo(xE, cy);
+  ctx.stroke();
+  // Small "spotlight" glow under each satellite
+  for (const s of SATS) {
+    const cx = s.x * w;
+    const sg = ctx.createRadialGradient(cx, cy, 0, cx, cy, 70);
+    sg.addColorStop(0, `rgba(${s.rgb},0.22)`);
+    sg.addColorStop(1, `rgba(${s.rgb},0)`);
+    ctx.fillStyle = sg;
+    ctx.beginPath(); ctx.arc(cx, cy, 70, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.restore();
+}
+
+function drawV15_HoloMesh(ctx, w, h, t) {
+  // Perspective wireframe mesh receding into distance
+  const xS = SATS[0].x * w - 95, xE = SATS[2].x * w + 95;
+  const cy = h / 2;
+  ctx.save();
+  ctx.strokeStyle = 'rgba(120,180,255,0.20)';
+  ctx.lineWidth = 0.6;
+  // Horizontal lines with perspective compression toward the middle
+  for (let i = 0; i < 8; i++) {
+    const y = h * 0.15 + i * (h * 0.10);
+    const persp = 1 - Math.abs((y - cy) / cy) * 0.8;
+    const lxS = xS + (xE - xS) * 0.5 - ((xE - xS) * 0.5) * persp;
+    const lxE = xS + (xE - xS) * 0.5 + ((xE - xS) * 0.5) * persp;
+    ctx.beginPath(); ctx.moveTo(lxS, y); ctx.lineTo(lxE, y); ctx.stroke();
+  }
+  // Vertical "spokes" emanating from a vanishing point at midband
+  const vpx = (xS + xE) / 2, vpy = cy;
+  for (let i = 0; i < 11; i++) {
+    const tt = i / 10;
+    const x = xS + tt * (xE - xS);
+    ctx.beginPath(); ctx.moveTo(x, h * 0.15); ctx.lineTo(vpx, vpy); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x, h * 0.85); ctx.lineTo(vpx, vpy); ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawV16_ThermalHeatmap(ctx, w, h, t) {
+  // Soft warm gradient blobs around each satellite — thermal camera look
+  const cy = h / 2;
+  ctx.save();
+  for (let i = 0; i < SATS.length; i++) {
+    const s = SATS[i];
+    const cx = s.x * w;
+    const breath = 0.5 + 0.5 * Math.sin(t * 0.0012 + i * 1.4);
+    // Outer red wash
+    const g1 = ctx.createRadialGradient(cx, cy, 30, cx, cy, 130 + breath * 12);
+    g1.addColorStop(0, 'rgba(255,140,80,0.12)');
+    g1.addColorStop(1, 'rgba(255,140,80,0)');
+    ctx.fillStyle = g1;
+    ctx.beginPath(); ctx.arc(cx, cy, 140, 0, Math.PI * 2); ctx.fill();
+    // Inner yellow core
+    const g2 = ctx.createRadialGradient(cx, cy, 0, cx, cy, 70);
+    g2.addColorStop(0, 'rgba(255,225,150,0.18)');
+    g2.addColorStop(1, 'rgba(255,225,150,0)');
+    ctx.fillStyle = g2;
+    ctx.beginPath(); ctx.arc(cx, cy, 70, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.restore();
+}
+
+const VARIANTS = {
+  '1': drawV1_ConnectionLines,
+  '2': drawV2_GlassScanlines,
+  '3': drawV3_Blueprint,
+  '4': drawV4_SoftHalos,
+  '5': drawV5_ParticleStream,
+  '6': drawV6_EnergyCore,
+  '7': drawV7_WireframeHud,
+  '8': drawV8_GridDotsAxis,
+  '9':  drawV9_TopographicContours,
+  '10': drawV10_PcbTraces,
+  '11': drawV11_EqBars,
+  '12': drawV12_Constellation,
+  '13': drawV13_HyperspaceRadial,
+  '14': drawV14_NeonUnderline,
+  '15': drawV15_HoloMesh,
+  '16': drawV16_ThermalHeatmap,
+};
+
+// Init all canvases
+const ALL = [];
+for (const cv of document.querySelectorAll('canvas[data-variant]')) {
+  const v = cv.getAttribute('data-variant');
+  const { ctx, w, h } = setupHiDPI(cv);
+  ALL.push({ ctx, w, h, draw: VARIANTS[v] });
+}
+
+function frame(t) {
+  for (const item of ALL) {
+    item.ctx.clearRect(0, 0, item.w, item.h);
+    // Draw backdrop
+    if (item.draw) item.draw(item.ctx, item.w, item.h, t);
+    // Draw the 3 satellites on top
+    const r = Math.min(item.w * 0.06, item.h * 0.30);
+    for (const s of SATS) {
+      drawSatellite(item.ctx, s.x * item.w, item.h / 2, r, s);
+    }
+  }
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+// Resize handler — re-init on viewport changes
+window.addEventListener('resize', () => {
+  for (let i = 0; i < ALL.length; i++) {
+    const cv = document.querySelectorAll('canvas[data-variant]')[i];
+    const r = setupHiDPI(cv);
+    ALL[i].ctx = r.ctx; ALL[i].w = r.w; ALL[i].h = r.h;
+  }
+});
+</script>
+
+</body>
+</html>

@@ -1393,262 +1393,65 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
       ctx.setLineDash([]);
       ctx.restore();
 
-      // 0.0.252-fx — "Aurora Sweep HUD". User: "fundo futurista
-      // e qie impressione". Layered effect across the central
-      // hub band — bottom: hex tile pattern; mid: travelling
-      // horizontal energy pulse (left↔right sweep); top: thin
-      // neon top/bottom borders with brackets at the 4 corners;
-      // plus a centred holographic tag "▌ HUB.CORE ▐" above the
-      // band. Everything stays inside the band area, skips the
-      // satellites, and uses theme-aware colours.
+      // 0.0.257 — Hub band backdrop, "Glassmorphic + Scanlines".
+      // User picked option 2 from `pilots/hub-backdrop.html`.
+      // Four layers, all bounded to the satellite-span panel:
+      //   1. Vertical gradient glass fill (subtle frost)
+      //   2. Hairline border around the panel
+      //   3. Faint horizontal scanlines every 4 px (CRT feel)
+      //   4. One bright scan beam slowly sweeping top→bottom (~4 s)
       // Toggle live via `window.__hubGrid = true | false`.
       if (readHubBandGrid()) {
         const satRForGrid = Math.max(40, hubRadius);
-        const satYForGrid = hubCy;
         const satXsForGrid = [w * 0.18, w / 2, w * 0.82];
-        const SAT_PAD = satRForGrid + 12;
         const tc = Date.now();
-        // Accent rgb — cyan-ish for dark, indigo for light.
         const accent = dk ? "120,180,255" : "70,90,180";
-        // 0.0.257 — Horizontal bounds tied to the satellite span.
-        // User: "ela não pode sair da areas central" — the
-        // previous version drew hexes / borders / labels all the
-        // way to the canvas edges, which made the effect look
-        // like it was spilling past the leftmost TOTAL and the
-        // rightmost RESOLVED. Now the whole HUD is clipped to a
-        // panel that starts ~one satellite-radius left of TOTAL
-        // and ends ~one satellite-radius right of RESOLVED. Side
-        // labels (SECT.A / SECT.B) sit just inside that boundary.
+        // Horizontal bounds tied to the satellite span so the
+        // panel never spills past TOTAL on the left or RESOLVED
+        // on the right.
         const PANEL_PAD_X = satRForGrid + 16;
         const xStart = Math.max(0, satXsForGrid[0] - PANEL_PAD_X);
         const xEnd   = Math.min(w, satXsForGrid[satXsForGrid.length - 1] + PANEL_PAD_X);
         const panelW = xEnd - xStart;
-        // ── Hex tile substrate — alpha per hex depends on the
-        // animation variant picked via `window.__hubAnim`:
-        //   1 wave   crest travels L→R (6 s)
-        //   2 radial crest expands from centre (5 s)
-        //   3 breath whole grid pulses in unison (4 s)
-        //   4 static fixed faint alpha
-        ctx.save();
-        const hexR = Math.max(14, Math.min(22, w * 0.014));
-        const hexW = hexR * Math.sqrt(3);
-        const hexH = hexR * 1.5;
-        ctx.lineWidth = 1.1;
-        const anim = readHubAnim();
-        const hubMidY = (hubBandTop + hubBandBottom) / 2;
-        // Precompute time-based phases per variant.
-        const wavePhase    = (tc % 6000) / 6000;          // 0..1
-        const radialPhase  = (tc % 5000) / 5000;          // 0..1
-        const breathAlpha  = 0.10 + ((Math.sin(tc * 0.0016) + 1) / 2) * 0.20; // 0.10..0.30
-        // Radial wave reach (px) — expands from 0 to half-width
-        const radialReach  = radialPhase * (w * 0.55);
-        const radialWidth  = Math.max(60, w * 0.08);
-        for (let row = 0, ry = hubBandTop + hexR; ry < hubBandBottom + hexR; ry += hexH, row++) {
-          const rowOffset = (row % 2) * (hexW / 2);
-          // 0.0.257 — Restrict hex centres to within the
-          // satellite-span panel. Snap to the hex grid by
-          // starting at the first hexW step inside `xStart`.
-          const xLoopStart = xStart + ((rowOffset - xStart) % hexW + hexW) % hexW;
-          for (let cx2 = xLoopStart; cx2 < xEnd; cx2 += hexW) {
-            // Skip hex centres inside the satellites.
-            let inside = false;
-            for (let s = 0; s < satXsForGrid.length; s++) {
-              if (Math.hypot(cx2 - satXsForGrid[s], ry - satYForGrid) < SAT_PAD) {
-                inside = true; break;
-              }
-            }
-            if (inside) continue;
-            let alpha = 0.15;
-            let isLit = false; // for variant 4 (static circuit pattern)
-            if (anim === 1) {
-              // Horizontal travelling crest (wave)
-              const localPhase = (cx2 / w) - wavePhase;
-              const cosVal = Math.cos(localPhase * 6 * 2 * Math.PI);
-              const crest = Math.pow(Math.max(0, cosVal), 4);
-              alpha = 0.08 + crest * 0.47;
-            } else if (anim === 2) {
-              // Radial wave from canvas centre
-              const d = Math.hypot(cx2 - w / 2, ry - hubMidY);
-              const delta = Math.abs(d - radialReach);
-              const norm = Math.min(1, delta / radialWidth);
-              const crest = Math.pow(1 - norm, 4);
-              alpha = 0.08 + crest * 0.50;
-            } else if (anim === 3) {
-              // Breath — uniform alpha pulse
-              alpha = breathAlpha;
-            } else {
-              // 4 — Static circuit. Deterministic "lit" hex
-              // pattern based on integer grid coords — same hexes
-              // are bright every render so it reads as an etched
-              // circuit board, not a flicker.
-              const ix = Math.round(cx2 / hexW);
-              const iy = Math.round(ry / hexH);
-              // Pseudo-hash → 25 % of hexes are "lit".
-              const hash = (ix * 73856093) ^ (iy * 19349663);
-              isLit = (Math.abs(hash) % 7) < 2;
-              alpha = isLit ? 0.45 : 0.13;
-            }
-            // Stroke the hex.
-            ctx.strokeStyle = `rgba(${accent},${alpha.toFixed(3)})`;
-            ctx.beginPath();
-            for (let i = 0; i < 6; i++) {
-              const a = (Math.PI / 3) * i - Math.PI / 2;
-              const px = cx2 + Math.cos(a) * hexR;
-              const py = ry + Math.sin(a) * hexR;
-              if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
-            }
-            ctx.closePath();
-            ctx.stroke();
-            // Static variant only: fill the "lit" hexes faintly
-            // so they read as "active circuit cells" instead of
-            // just brighter outlines.
-            if (anim === 4 && isLit) {
-              ctx.fillStyle = `rgba(${accent},0.10)`;
-              ctx.fill();
-            }
-          }
-        }
-        ctx.restore();
+        const panelH = hubBandBottom - hubBandTop;
 
-        // 0.0.254 — Variant 4 (static) extras: graduated tick
-        // marks along the top and bottom neon borders, plus
-        // bigger double-bracket corners and a thin horizontal
-        // hub-line connecting the satellites. All STATIC, no
-        // animation — reads as an etched instrument panel.
-        if (anim === 4) {
-          ctx.save();
-          ctx.strokeStyle = `rgba(${accent},0.55)`;
-          ctx.lineWidth = 1;
-          ctx.lineCap = "round";
-          // Tick marks every ~50 px along top + bottom borders,
-          // bounded to the satellite-span panel.
-          const tickStep = Math.max(40, Math.min(60, panelW * 0.05));
-          for (let tx = xStart + tickStep; tx < xEnd - tickStep; tx += tickStep) {
-            const isMajor = (Math.round((tx - xStart) / tickStep) % 4) === 0;
-            const tlen = isMajor ? 4 : 2;
-            ctx.beginPath();
-            ctx.moveTo(tx, hubBandTop);
-            ctx.lineTo(tx, hubBandTop + tlen);
-            ctx.moveTo(tx, hubBandBottom);
-            ctx.lineTo(tx, hubBandBottom - tlen);
-            ctx.stroke();
-          }
-          // Thin horizontal hub-line at midband, dashed, within
-          // the panel span.
-          ctx.setLineDash([4, 6]);
-          ctx.strokeStyle = `rgba(${accent},0.18)`;
-          ctx.lineWidth = 0.6;
-          ctx.beginPath();
-          ctx.moveTo(xStart, hubMidY);
-          ctx.lineTo(xEnd, hubMidY);
-          ctx.stroke();
-          ctx.setLineDash([]);
-          // Side labels — sit just INSIDE the panel edges so they
-          // stay within the satellite-span and never reach the
-          // canvas edges.
-          ctx.font = `600 8px "Roboto Mono","SF Mono",monospace`;
-          ctx.fillStyle = `rgba(${accent},0.55)`;
-          ctx.save();
-          ctx.translate(xStart + 14, hubMidY);
-          ctx.rotate(-Math.PI / 2);
-          ctx.textAlign = "center";
-          ctx.textBaseline = "middle";
-          ctx.fillText("SECT.A", 0, 0);
-          ctx.restore();
-          ctx.save();
-          ctx.translate(xEnd - 14, hubMidY);
-          ctx.rotate(Math.PI / 2);
-          ctx.textAlign = "center";
-          ctx.textBaseline = "middle";
-          ctx.fillText("SECT.B", 0, 0);
-          ctx.restore();
-          ctx.restore();
+        // ── Layer 1: glass fill (vertical gradient) ──────────
+        ctx.save();
+        const glassGrad = ctx.createLinearGradient(0, hubBandTop, 0, hubBandBottom);
+        glassGrad.addColorStop(0,   `rgba(${accent},0.04)`);
+        glassGrad.addColorStop(0.5, `rgba(${accent},0.08)`);
+        glassGrad.addColorStop(1,   `rgba(${accent},0.04)`);
+        ctx.fillStyle = glassGrad;
+        ctx.fillRect(xStart, hubBandTop, panelW, panelH);
+
+        // ── Layer 2: subtle hairline border ──────────────────
+        ctx.strokeStyle = `rgba(${accent},0.20)`;
+        ctx.lineWidth = 0.8;
+        ctx.strokeRect(
+          xStart + 0.5,
+          hubBandTop + 0.5,
+          panelW - 1,
+          panelH - 1,
+        );
+
+        // ── Layer 3: CRT-style scanlines (faint) ─────────────
+        ctx.fillStyle = `rgba(${accent},0.025)`;
+        for (let y = hubBandTop; y < hubBandBottom; y += 4) {
+          ctx.fillRect(xStart, y, panelW, 1);
         }
 
-        // ── Layer 3: Neon top + bottom borders with glow ────
-        // Bounded to the satellite-span panel (xStart..xEnd).
-        ctx.save();
-        ctx.shadowColor = `rgba(${accent},0.55)`;
-        ctx.shadowBlur = 4;
-        ctx.strokeStyle = `rgba(${accent},0.75)`;
-        ctx.lineWidth = 1.2;
-        ctx.beginPath();
-        ctx.moveTo(xStart, hubBandTop);
-        ctx.lineTo(xEnd, hubBandTop);
-        ctx.moveTo(xStart, hubBandBottom);
-        ctx.lineTo(xEnd, hubBandBottom);
-        ctx.stroke();
+        // ── Layer 4: slow sweep beam top → bottom (~4 s) ────
+        const SWEEP_PERIOD_MS = 4000;
+        const sweepPhase = (tc % SWEEP_PERIOD_MS) / SWEEP_PERIOD_MS; // 0..1
+        const sweepY = hubBandTop + sweepPhase * panelH;
+        const beamH = 24;
+        const sweepGrad = ctx.createLinearGradient(0, sweepY - beamH / 2, 0, sweepY + beamH / 2);
+        sweepGrad.addColorStop(0,   `rgba(${accent},0)`);
+        sweepGrad.addColorStop(0.5, `rgba(${accent},0.18)`);
+        sweepGrad.addColorStop(1,   `rgba(${accent},0)`);
+        ctx.fillStyle = sweepGrad;
+        ctx.fillRect(xStart, sweepY - beamH / 2, panelW, beamH);
         ctx.restore();
-
-        // ── Layer 4: L-bracket markers at the 4 panel corners ─
-        // Anchored to xStart/xEnd so they hug the satellite span.
-        ctx.save();
-        ctx.strokeStyle = `rgba(${accent},0.85)`;
-        ctx.lineWidth = 1.6;
-        ctx.lineCap = "round";
-        const bArm = 14;
-        const bIn = 6;
-        // top-left
-        ctx.beginPath();
-        ctx.moveTo(xStart + bIn, hubBandTop + bArm);
-        ctx.lineTo(xStart + bIn, hubBandTop + bIn);
-        ctx.lineTo(xStart + bIn + bArm, hubBandTop + bIn);
-        ctx.stroke();
-        // top-right
-        ctx.beginPath();
-        ctx.moveTo(xEnd - bIn - bArm, hubBandTop + bIn);
-        ctx.lineTo(xEnd - bIn, hubBandTop + bIn);
-        ctx.lineTo(xEnd - bIn, hubBandTop + bArm);
-        ctx.stroke();
-        // bottom-left
-        ctx.beginPath();
-        ctx.moveTo(xStart + bIn, hubBandBottom - bArm);
-        ctx.lineTo(xStart + bIn, hubBandBottom - bIn);
-        ctx.lineTo(xStart + bIn + bArm, hubBandBottom - bIn);
-        ctx.stroke();
-        // bottom-right
-        ctx.beginPath();
-        ctx.moveTo(xEnd - bIn - bArm, hubBandBottom - bIn);
-        ctx.lineTo(xEnd - bIn, hubBandBottom - bIn);
-        ctx.lineTo(xEnd - bIn, hubBandBottom - bArm);
-        ctx.stroke();
-        ctx.restore();
-
-        // ── Layer 5: Centre tag "▌ HUB.CORE ▐" + 2 LED dots ─
-        // Sits ABOVE the band (in the gap between the top row's
-        // bottom and hubBandTop). Includes 2 blinking LED dots
-        // flanking the tag for "system live" feel.
-        const tagY = hubBandTop - 12;
-        if (tagY > 14) {
-          ctx.save();
-          ctx.font = `700 11px "Roboto Mono","SF Mono",monospace`;
-          ctx.textAlign = "center";
-          ctx.textBaseline = "middle";
-          ctx.shadowColor = `rgba(${accent},0.55)`;
-          ctx.shadowBlur = 5;
-          ctx.fillStyle = `rgba(${accent},0.92)`;
-          const tag = `▌ HUB.CORE.001 ▐`;
-          ctx.fillText(tag, w / 2, tagY);
-          ctx.restore();
-
-          // LEDs flanking the tag with phase-shifted blink.
-          const blinkA = 0.4 + ((Math.sin(tc * 0.005) + 1) / 2) * 0.55;
-          const blinkB = 0.4 + ((Math.sin(tc * 0.005 + Math.PI) + 1) / 2) * 0.55;
-          ctx.save();
-          ctx.font = `700 11px "Roboto Mono","SF Mono",monospace`;
-          const tagW = ctx.measureText(`▌ HUB.CORE.001 ▐`).width;
-          ctx.shadowColor = `rgba(${accent},0.55)`;
-          ctx.shadowBlur = 4;
-          ctx.fillStyle = `rgba(${accent},${blinkA.toFixed(3)})`;
-          ctx.beginPath();
-          ctx.arc(w / 2 - tagW / 2 - 8, tagY, 2, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.fillStyle = `rgba(${accent},${blinkB.toFixed(3)})`;
-          ctx.beginPath();
-          ctx.arc(w / 2 + tagW / 2 + 8, tagY, 2, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.restore();
-        }
       }
     } else if (layout.length > 0) {
       // Hub-free layout (Segments page): draw dotted dividers between
@@ -4448,27 +4251,9 @@ function readHubBandGrid(): boolean {
 // "hubGrid","0")`.
 const HUB_GRID_DEFAULT_LOCAL = true;
 
-// 0.0.256 — Animation variant for the hub-band hex backdrop.
-// Default = 4 (Static circuit) after user sign-off. To pick a
-// different variant set `window.__hubAnim = 1..3` or
-// `localStorage.setItem("hubAnim","1..3")`.
-function readHubAnim(): 1 | 2 | 3 | 4 {
-  try {
-    if (typeof window === "undefined") return 4;
-    const g = (window as unknown as { __hubAnim?: number | string }).__hubAnim;
-    const cand: Array<unknown> = [g];
-    try { cand.push(window.localStorage?.getItem("hubAnim")); } catch { /* private mode */ }
-    for (const raw of cand) {
-      if (raw === undefined || raw === null) continue;
-      const v = String(raw).toLowerCase();
-      if (v === "1" || v === "wave") return 1;
-      if (v === "2" || v === "radial") return 2;
-      if (v === "3" || v === "breath") return 3;
-      if (v === "4" || v === "static") return 4;
-    }
-    return 4;
-  } catch { return 4; }
-}
+// 0.0.257 — `readHubAnim` removed. Hub backdrop is now a single
+// design (Glassmorphic + scanlines, picked from the pilot HTML
+// in `pilots/hub-backdrop.html`). No per-variant switch needed.
 function readFxVariant(): FxVariant {
   try {
     if (typeof window === "undefined") return FX_DEFAULT_LOCAL;
