@@ -4091,6 +4091,15 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
 //     `0x03`), and a slow vertical scan beam. All clipped to the
 //     disc — nothing leaks outside, so the harmony with the
 //     surrounding category cells is preserved.
+//   • `7` (or `holo` / `hud`) — **Holo HUD**. Most "futurist"
+//     option so far: wide soft halo + crisp inner neon ring +
+//     6 cardinal tick marks + rotating arc-sweep at r+16 +
+//     triple concentric inner rings + bracketed monospace label
+//     above (`[ TOT-001 ]`) + 3 shimmer dots at the bottom of
+//     the disc (data-indicator pulse). Decorations stay within
+//     a tight halo budget so they don't bleed into the cells
+//     around them. NOT enabled by default — opt-in via
+//     `window.__fx = 7` or `localStorage.setItem("fx","7")`.
 //
 // The value is re-read on every frame (cheap — three property
 // reads) so toggling at runtime via devtools is instant. When
@@ -4098,7 +4107,7 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
 // so it's obvious from the UI which variant is active.
 // Local-test only for now — DO NOT deploy until the design is
 // signed off.
-type FxVariant = 0 | 1 | 2 | 3 | 4 | 5 | 6;
+type FxVariant = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
 declare global {
   // eslint-disable-next-line no-var
   var __fx: number | string | undefined;
@@ -4139,6 +4148,7 @@ function readFxVariant(): FxVariant {
       if (v === "4" || v === "reactor" || v === "core") return 4;
       if (v === "5" || v === "backdrop" || v === "tinted") return 5;
       if (v === "6" || v === "tech" || v === "substrate") return 6;
+      if (v === "7" || v === "holo" || v === "hud") return 7;
     }
     // No override → default to the impactful skin in local dev
     return FX_DEFAULT_LOCAL;
@@ -4466,6 +4476,8 @@ function drawSatellite(
     drawQuantumPulseOverlay(ctx, cx, cy, r, rgb);
   } else if (fxNow === 4) {
     drawReactorCoreOverlay(ctx, cx, cy, r, rgb, label);
+  } else if (fxNow === 7) {
+    drawHoloHudOverlay(ctx, cx, cy, r, rgb, label);
   }
   // fx=5 (Tinted Backdrop) has no overlay — its only effect is
   // the disc-fill replacement above.
@@ -4966,6 +4978,154 @@ function drawTechSubstrateInner(
   ctx.fill();
 
   ctx.restore(); // end disc clip
+}
+
+/** 0.0.236-fx v7 — "Holo HUD" overlay. Highest-impact futurist
+ *  variant for the central TOTAL / ACTIVE / RESOLVED rings.
+ *  Selected via `?fx=7`, `window.__fx = 7`, or
+ *  `localStorage.setItem("fx","7")`. Layers (back to front):
+ *    1. Wide soft halo via radial gradient at r * 2 — extends
+ *       past the ring with low alpha, gives the satellite a
+ *       "projected hologram" presence without dominating the
+ *       cells around it (alpha tapers fast so the bleed is
+ *       confined).
+ *    2. Triple concentric inner rings at r-1, r-3, r-6 — each
+ *       progressively thinner + lower alpha. Reads as a
+ *       multi-layer instrument bezel.
+ *    3. Crisp neon outer accent at r + 4, thin, shadowBlur 8.
+ *       Sits just outside the main ring, sharp definition.
+ *    4. Rotating arc sweep at r + 14 — 75° wide bright arc,
+ *       full rotation in ~6 s. The "scanner" element.
+ *    5. 6 cardinal+intercardinal tick marks (every 60°) at
+ *       r + 8, short solid strokes — instrument tick pattern.
+ *    6. Top bracket label `[ TOT-001 ]` / `[ ACT-002 ]` /
+ *       `[ RES-003 ]` above the ring, monospace with a soft
+ *       glow — reads as a HUD callout.
+ *    7. 3 shimmer dots at the bottom of the disc (just above
+ *       the trend-pill area) — phase-shifted blink as
+ *       data-stream indicator. */
+function drawHoloHudOverlay(
+  ctx: CanvasRenderingContext2D,
+  cx: number, cy: number, r: number,
+  rgb: string,
+  label: string,
+) {
+  const tc = Date.now();
+  const breathe = 0.6 + Math.sin(tc * 0.0015) * 0.4; // 0.2..1.0 over ~4s
+
+  // ── Layer 1: wide soft halo ─────────────────────────────────
+  ctx.save();
+  const halo = ctx.createRadialGradient(cx, cy, r, cx, cy, r * 2);
+  halo.addColorStop(0,    `rgba(${rgb},${(0.18 + breathe * 0.10).toFixed(3)})`);
+  halo.addColorStop(0.4,  `rgba(${rgb},${(0.08 * breathe).toFixed(3)})`);
+  halo.addColorStop(1,    `rgba(${rgb},0)`);
+  ctx.fillStyle = halo;
+  ctx.beginPath();
+  ctx.arc(cx, cy, r * 2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+
+  // ── Layer 2: triple concentric inner rings ──────────────────
+  ctx.save();
+  ctx.strokeStyle = `rgba(${rgb},0.35)`;
+  ctx.lineWidth = 0.8;
+  ctx.beginPath();
+  ctx.arc(cx, cy, r - 1, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.strokeStyle = `rgba(${rgb},0.22)`;
+  ctx.lineWidth = 0.6;
+  ctx.beginPath();
+  ctx.arc(cx, cy, r - 3, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.strokeStyle = `rgba(${rgb},0.14)`;
+  ctx.lineWidth = 0.5;
+  ctx.beginPath();
+  ctx.arc(cx, cy, r - 6, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.restore();
+
+  // ── Layer 3: crisp neon outer accent ────────────────────────
+  ctx.save();
+  ctx.shadowColor = `rgb(${rgb})`;
+  ctx.shadowBlur = 8;
+  ctx.strokeStyle = `rgba(${rgb},0.85)`;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.arc(cx, cy, r + 4, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.restore();
+
+  // ── Layer 4: rotating arc sweep ─────────────────────────────
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.rotate(tc * 0.0011);
+  ctx.shadowColor = `rgb(${rgb})`;
+  ctx.shadowBlur = 12;
+  ctx.strokeStyle = `rgba(${rgb},0.92)`;
+  ctx.lineWidth = 2.5;
+  ctx.lineCap = "round";
+  const sweepWidth = (Math.PI * 2) * (75 / 360); // 75°
+  ctx.beginPath();
+  ctx.arc(0, 0, r + 14, 0, sweepWidth);
+  ctx.stroke();
+  ctx.restore();
+
+  // ── Layer 5: 6 tick marks at 60° intervals ──────────────────
+  ctx.save();
+  ctx.strokeStyle = `rgba(${rgb},0.55)`;
+  ctx.lineWidth = 1.2;
+  ctx.lineCap = "round";
+  const tickIn = r + 5;
+  const tickOut = r + 10;
+  for (let i = 0; i < 6; i++) {
+    const a = (Math.PI / 3) * i - Math.PI / 2;
+    const cosA = Math.cos(a), sinA = Math.sin(a);
+    ctx.beginPath();
+    ctx.moveTo(cx + cosA * tickIn, cy + sinA * tickIn);
+    ctx.lineTo(cx + cosA * tickOut, cy + sinA * tickOut);
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  // ── Layer 6: bracketed HUD label above the ring ─────────────
+  const idCode = label === "TOTAL"    ? "TOT-001"
+               : label === "ACTIVE"   ? "ACT-002"
+               : label === "RESOLVED" ? "RES-003"
+               : `${label.slice(0, 3).toUpperCase()}-001`;
+  const tagText = `[ ${idCode} ]`;
+  const tagY = cy - r - 17;
+  ctx.save();
+  ctx.font = `700 10px "Roboto Mono", "SF Mono", monospace`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.shadowColor = `rgb(${rgb})`;
+  ctx.shadowBlur = 6;
+  ctx.fillStyle = `rgba(${rgb},0.95)`;
+  ctx.fillText(tagText, cx, tagY);
+  ctx.restore();
+
+  // ── Layer 7: 3 shimmer dots at the bottom of the disc ──────
+  // Sit just above the trend-pill area inside the disc (clipped
+  // to disc so they don't escape into the cell). Phase-shifted
+  // blink — reads as "data-stream live".
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(cx, cy, r - 1, 0, Math.PI * 2);
+  ctx.clip();
+  const dotY = cy + r * 0.62;
+  const dotSpacing = r * 0.14;
+  const dotR = Math.max(1.4, r * 0.025);
+  for (let i = -1; i <= 1; i++) {
+    const phase = (Math.sin(tc * 0.005 + i * 1.2) + 1) / 2;
+    const alpha = 0.25 + phase * 0.6;
+    ctx.fillStyle = `rgba(${rgb},${alpha.toFixed(3)})`;
+    ctx.shadowColor = `rgb(${rgb})`;
+    ctx.shadowBlur = 4 * phase;
+    ctx.beginPath();
+    ctx.arc(cx + i * dotSpacing, dotY, dotR, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
 }
 
 // Memoized export — see PulseVisualizer for the same rationale.

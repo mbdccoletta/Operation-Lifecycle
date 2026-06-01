@@ -4765,50 +4765,50 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
    (was 380 px) extends coverage to Z Fold 5/6 cover screens
    which sit at 392-408 CSS px. */
 @media (max-width: 420px) {
-  /* 0.0.231 — Rebuilt the header layout from flex-wrap (which
-     was leaving phantom rows on Z Fold cover even with
-     align-content: flex-start) to FLEX COLUMN. Each child stacks
-     vertically with content-height rows, zero implicit gaps.
+  /* 0.0.237 — Rebuilt the header layout as a CSS GRID with two
+     columns so smaller chips (Aa Display + Segment) share a row
+     instead of each claiming a full vertical strip. User
+     feedback: "reorganixar esta visao para preencher espaços
+     vazios" — the previous flex-column wasted half the row when
+     a small chip was the only item.
+     Layout:
+       Row 1: [Aa Display] | [Segment chip]   (1fr each)
+       Row 2: [Refresh group  (auto-refresh + status + version)] (span 2)
+       Row 3: [Timeframe Today < >]                              (span 2)
      `display: contents` on .neo-header-left/-right keeps the
-     existing JSX tree intact while letting their children
-     participate as direct flex children of .neo-header — the
-     refresh group, segment selector, timeframe and display
-     panel become 4 stacked rows. Order props pick the visual
-     sequence (refresh first, segment, timeframe, display last). */
+     existing JSX tree intact while the children participate
+     directly in the grid. */
   .neo-header {
-    display: flex !important;
-    flex-direction: column !important;
-    flex-wrap: nowrap !important;
-    align-items: stretch !important;
-    justify-content: flex-start !important;
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    align-items: center !important;
     padding: 2px 6px !important;
     gap: 2px !important;
-    row-gap: 2px !important;
   }
   .neo-header-left,
   .neo-header-right { display: contents !important; }
-  /* Every direct flex child = its own row, full-width, content-
-     tall, zero residual height from min-height defaults. */
+  /* Every child gets `min-width: 0` so flex/grid items can
+     shrink below their content's intrinsic width. */
   .neo-header > *,
   .neo-header-left > *,
   .neo-header-right > * {
-    width: 100% !important;
     min-width: 0 !important;
     min-height: 0 !important;
-    flex: 0 0 auto !important;
+    width: auto !important;
   }
-  /* Visual stack order: refresh > segment > timeframe > display */
-  .neo-refresh-group { order: 1; gap: 2px !important; min-height: 0 !important; }
-  /* Strato SegmentSelector & TimeframeSelector are rendered by
-     the library with their own wrapper. Target by attribute /
-     partial-class so the order applies regardless of internal
-     class hashes. */
-  .neo-header [class*="SegmentSelector"],
-  .neo-header [data-testid*="segment"] { order: 2; }
+  /* Refresh group + Timeframe span the full two-column row so
+     they have room to breathe. The DisplaySettings + Segment
+     chip get one column each (default — no grid-column rule
+     needed since `grid-template-columns: 1fr 1fr` slots them
+     automatically). */
+  .neo-refresh-group {
+    grid-column: 1 / -1 !important;
+    gap: 2px !important;
+  }
   .neo-header [class*="TimeframeSelector"],
-  .neo-header [data-testid*="timeframe"] { order: 3; }
-  .neo-header [class*="DisplaySettings"],
-  .neo-header [data-testid*="display"] { order: 4; }
+  .neo-header [data-testid*="timeframe"] {
+    grid-column: 1 / -1 !important;
+  }
   /* 0.0.236 — Meta info (refresh status + version) moved to the
      FIRST row of the refresh group, filling the empty space the
      user pointed out at the top of the page header ("mover para
