@@ -307,8 +307,20 @@ export const TrendAnalysis = () => {
           <DisplaySettingsPanel inline />
         </div>
         <div className="neo-header-right">
-          {isMobileOrTablet && <SegmentSelector />}
-          <TimeframeSelector value={timeframe} onChange={handleTimeframeChange} clearable={false} />
+          {isMobileOrTablet && (
+            <div className="neo-seg-slot">
+              <SegmentSelector />
+            </div>
+          )}
+          {/* 0.0.261 — Wrapped in `.neo-tf-slot` so the narrow-
+              viewport CSS in theme.css can force the timeframe
+              row to span both grid columns. Without this the
+              "Today" label clipped to "T..." on Z Fold cover
+              when clicking into Trends (Overview already had
+              the wrapper from v0.0.240). */}
+          <div className="neo-tf-slot">
+            <TimeframeSelector value={timeframe} onChange={handleTimeframeChange} clearable={false} />
+          </div>
           <div className="neo-refresh-group" role="group" aria-label="Refresh controls">
             <button
               type="button"
