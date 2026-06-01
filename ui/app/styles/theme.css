@@ -8800,94 +8800,67 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
    Two sections (Intensity, Font size) with 3-button toggles
    each.
 ─────────────────────────────────────────────────────────────── */
+/* 0.0.245 — Rewritten as a CLEAN chip (matches Strato Button
+   look) + JS-positioned popover. User feedback: the previous
+   floating panel had a heavy box-shadow that read as "flutuando"
+   and the trigger chip didn't match TimeframeSelector /
+   SegmentSelector. The new look is a plain transparent-bg button
+   with a soft border, and the popover (rendered with
+   `position: fixed` from JS) sits flush under the chip with the
+   same border + surface treatment Strato uses for its own
+   dropdowns. */
 .neo-display-panel {
   position: fixed;
-  /* Anchored to the TOP-RIGHT of the viewport so the trigger is
-     persistently visible at the very top of the app — the user
-     reported the previous bottom-left position felt tucked away.
-     The expanded panel body grows DOWNWARD from the chip (natural
-     flex flow), which matches the standard "top-right settings
-     menu" pattern Dynatrace's own shell uses. */
   top: 12px;
   right: 12px;
   z-index: 9998;
   background: var(--neo-surface-2);
   border: 1px solid var(--neo-border);
-  border-radius: 10px;
+  border-radius: 8px;
   color: var(--neo-text);
   font-family: "SF Mono", "JetBrains Mono", monospace;
   font-size: calc(11px * var(--neo-fs-mult, 1));
   font-weight: 600;
-  backdrop-filter: blur(8px) saturate(140%);
-  -webkit-backdrop-filter: blur(8px) saturate(140%);
-  box-shadow: 0 10px 30px rgba(0,0,0,0.32);
   user-select: none;
-}
-.neo-display-panel[data-collapsed="false"] {
-  /* Slightly stronger shadow when open so the popover lifts off
-     the page clearly. */
-  box-shadow: 0 14px 40px rgba(0,0,0,0.42);
 }
 
 /* Inline variant — used when the panel is rendered inside a
    page header next to other controls (SegmentSelector etc).
-   Drops `position: fixed` so the chip sits inline; the
-   expanded body becomes an absolute-positioned flyout that
-   anchors to the chip's bottom-right corner. */
+   Drops `position: fixed` and strips the chip backplate so the
+   trigger button takes on a plain Strato chip look. The popover
+   is rendered separately (position: fixed by JS). */
 .neo-display-panel-inline {
   position: relative;
   top: auto !important;
   right: auto !important;
   bottom: auto !important;
   left: auto !important;
-}
-.neo-display-panel-inline .neo-display-panel-body {
-  position: absolute;
-  top: 100%;
-  /* Anchor to the LEFT edge of the chip so the popover grows
-     rightward into the page. Previously anchored `right: 0`
-     which extended the body leftward off the viewport when the
-     chip sat near the left edge of the header (next to the
-     SegmentSelector). */
-  left: 0;
-  margin-top: 4px;
-  /* Clamp width so the popover never overflows the viewport on
-     narrow pages — picks the lesser of its natural width and
-     `100vw - 32px`. */
-  max-width: calc(100vw - 32px);
-  background: var(--neo-bg);
-  border: 1px solid var(--neo-border);
-  border-radius: 10px;
-  box-shadow: 0 14px 40px rgba(0,0,0,0.42);
-  /* Match the floating variant's body padding. */
-  padding: 8px 12px 12px;
-}
-/* Mobile override — flip the flyout's anchor from the chip's
-   LEFT edge to its RIGHT edge. On small viewports the chip sits
-   near the right side of the header row, so growing leftward
-   from the chip's right edge keeps the body fully on-screen.
-   This rule MUST appear after the base `.neo-display-panel-
-   inline .neo-display-panel-body` rule above for the cascade
-   to flip — equal specificity means later wins. */
-@media (max-width: 720px) {
-  .neo-display-panel-inline .neo-display-panel-body {
-    left: auto;
-    right: 0;
-  }
+  background: transparent !important;
+  border: none !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
 }
 
 .neo-display-panel-toggle {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 10px;
-  background: transparent;
-  border: none;
+  padding: 6px 12px;
+  background: var(--neo-surface);
+  border: 1px solid var(--neo-border);
+  border-radius: 4px;
   cursor: pointer;
-  color: var(--neo-text-2);
+  color: var(--neo-text);
   font: inherit;
-  letter-spacing: 0.06em;
-  width: 100%;
+  letter-spacing: 0.04em;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+.neo-display-panel-toggle:hover {
+  background: var(--neo-surface-hover);
+  border-color: var(--neo-border-active);
+}
+.neo-display-panel-toggle[aria-expanded="true"] {
+  border-color: var(--neo-border-active);
 }
 .neo-display-panel-glyph {
   color: var(--neo-accent);
@@ -8902,13 +8875,25 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
 }
 
 .neo-display-panel-body {
-  padding: 4px 12px 12px;
+  padding: 12px;
   display: flex;
   flex-direction: column;
   gap: 12px;
   min-width: 240px;
-  border-top: 1px solid var(--neo-border);
-  margin-top: 4px;
+}
+/* 0.0.245 — Popover variant. Rendered by JS at fixed coords just
+   below the trigger chip. Clean Strato look: surface fill, soft
+   border, NO heavy shadow (user: "remover a sombra que parece
+   estar flutuando"). Border-radius matches the trigger. */
+.neo-display-panel-popover {
+  background: var(--neo-bg);
+  border: 1px solid var(--neo-border);
+  border-radius: 6px;
+  box-shadow: none;
+}
+[data-theme="light"] .neo-display-panel-popover {
+  background: var(--neo-bg);
+  border-color: var(--neo-border);
 }
 
 .neo-display-panel-section { display: flex; flex-direction: column; gap: 6px; }

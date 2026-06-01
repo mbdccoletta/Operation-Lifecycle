@@ -2,19 +2,20 @@
 // app routes so the user can dial intensity / font size from ANY
 // page (Incidents, Trends, etc) without having to navigate back to
 // a settings screen. Collapsed by default to a compact chip;
-// clicking it opens an inline panel with two 3-button toggles.
+// clicking it opens a JS-positioned popover beneath the chip.
 //
-// 0.0.243 — On narrow viewports (<=420 px, Z Fold cover and small
-// phones) the inline expansion overflows the grid cell and gets
-// clipped. The panel now renders its body inside a Strato `Modal`
-// when the viewport is narrow, keeping the design-system pattern
-// the user asked for ("Utilizar componente strato no Display
-// para manter padrao").
+// 0.0.245 — Removed the Strato Modal mobile path. User feedback:
+// the modal opened in the centre of the screen, breaking the
+// expectation set by TimeframeSelector / SegmentSelector (which
+// drop dropdowns under their chip) and carried a heavy shadow
+// that "parece estar flutuando". The popover is now JS-positioned
+// against the trigger chip's bounding rect with a 16 px viewport
+// gutter — same pattern the MetricChip popover uses (see
+// `.neo-metric-popover` in v0.0.221). No shadow, plain border,
+// drops directly under the chip on every viewport.
 
-import React, { useEffect, useRef, useState } from "react";
-import { Modal } from "@dynatrace/strato-components-preview/overlays";
+import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useIntensity, type FontScale, type Intensity } from "../contexts/IntensityContext";
-import { useDevice } from "../hooks/useDevice";
 
 // Two user-facing controls:
 //   • Font size (small / normal / large) — scales every text
@@ -50,13 +51,6 @@ interface DisplaySettingsPanelProps {
 
 export const DisplaySettingsPanel: React.FC<DisplaySettingsPanelProps> = ({ inline = false }) => {
   const { fontScale, setFontScale, intensity, setIntensity } = useIntensity();
-  const { isMobile, forcedMobileByUA } = useDevice();
-  // 0.0.243 — Use Strato Modal when on a narrow viewport so the
-  // panel body never clips out of its grid cell. Reuses the
-  // existing `isMobile` flag plus the UA override so the
-  // experience matches the user's device type (Strato pattern
-  // = consistent design system).
-  const useModal = isMobile || forcedMobileByUA;
   // Map the stored `intensity` value to one of the 3 picker
   // options. "subtle" (legacy, no longer exposed) folds into
   // "normal" so old localStorage entries don't leave users with
@@ -66,27 +60,60 @@ export const DisplaySettingsPanel: React.FC<DisplaySettingsPanelProps> = ({ inli
     intensity === "medium" ? "medium" :
     "normal";
   const [collapsed, setCollapsed] = useState(true);
-  const panelRef = useRef<HTMLDivElement | null>(null);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const popoverRef = useRef<HTMLDivElement | null>(null);
+  const [popPos, setPopPos] = useState<{ left: number; top: number; maxWidth: number } | null>(null);
 
-  // Click outside → collapse. Listener only attached while the
-  // panel is open AND we're rendering inline (the Modal handles
-  // its own dismissal). Skipped in modal mode to avoid double-
-  // handling clicks.
+  // Click outside → collapse. Tracks BOTH the trigger and the
+  // popover; clicking inside either keeps the panel open.
   useEffect(() => {
     if (collapsed) return;
-    if (useModal) return;
     const onDown = (e: MouseEvent) => {
       const t = e.target as Node | null;
-      if (panelRef.current && t && !panelRef.current.contains(t)) {
-        setCollapsed(true);
-      }
+      const insideTrigger = !!(triggerRef.current && t && triggerRef.current.contains(t));
+      const insidePopover = !!(popoverRef.current && t && popoverRef.current.contains(t));
+      if (!insideTrigger && !insidePopover) setCollapsed(true);
     };
     document.addEventListener("mousedown", onDown);
     return () => document.removeEventListener("mousedown", onDown);
-  }, [collapsed, useModal]);
+  }, [collapsed]);
 
-  // Body content shared between the inline expansion and the
-  // mobile Modal. Extracted so the two modes don't drift.
+  // Measure the trigger rect to position the popover. Re-measures
+  // on resize + scroll so the popover follows the chip if the
+  // page layout shifts. Uses position: fixed so the popover stays
+  // anchored even when the trigger is inside an overflow-clipped
+  // ancestor.
+  useLayoutEffect(() => {
+    if (collapsed) { setPopPos(null); return; }
+    const compute = () => {
+      const trig = triggerRef.current;
+      if (!trig) return;
+      const r = trig.getBoundingClientRect();
+      const GUTTER = 16; // px from viewport edge
+      const vw = window.innerWidth;
+      const POPOVER_W = 280;
+      // Anchor left edge of popover to the chip's left, clamped
+      // so the right edge stays inside the viewport.
+      let left = r.left;
+      const maxLeft = vw - GUTTER - POPOVER_W;
+      if (left > maxLeft) left = maxLeft;
+      if (left < GUTTER) left = GUTTER;
+      const maxWidth = Math.min(POPOVER_W, vw - 2 * GUTTER);
+      const top = r.bottom + 4;
+      setPopPos({ left, top, maxWidth });
+    };
+    compute();
+    const onChange = () => compute();
+    window.addEventListener("resize", onChange);
+    window.addEventListener("scroll", onChange, true);
+    return () => {
+      window.removeEventListener("resize", onChange);
+      window.removeEventListener("scroll", onChange, true);
+    };
+  }, [collapsed]);
+
+  // Body content (Contrast + Font size sections). Plain JSX so
+  // the inline expansion and the popover share the same markup.
   const body = (
     <>
       <section className="neo-display-panel-section">
@@ -140,20 +167,17 @@ export const DisplaySettingsPanel: React.FC<DisplaySettingsPanelProps> = ({ inli
 
   return (
     <div
-      ref={panelRef}
       className={`neo-display-panel${inline ? " neo-display-panel-inline" : ""}`}
       data-collapsed={collapsed ? "true" : "false"}
     >
       <button
+        ref={triggerRef}
         type="button"
         className="neo-display-panel-toggle"
         onClick={() => setCollapsed((v) => !v)}
         title={collapsed ? "Open display settings" : "Close display settings"}
         aria-expanded={!collapsed}
       >
-        {/* Sun-and-text glyph "Aa" reads as the universal "text
-            size / display" icon. Kept text-only (no SVG) to match
-            the app's chip-style affordance. */}
         <span className="neo-display-panel-glyph" aria-hidden="true">Aa</span>
         <span>Display</span>
         <span className="neo-display-panel-caret" aria-hidden="true">
@@ -161,22 +185,27 @@ export const DisplaySettingsPanel: React.FC<DisplaySettingsPanelProps> = ({ inli
         </span>
       </button>
 
-      {/* Desktop / tablet: inline expansion under the chip */}
-      {!collapsed && !useModal && (
-        <div className="neo-display-panel-body">{body}</div>
+      {/* JS-positioned popover — anchored under the chip via
+          fixed coordinates so it never clips out of a parent
+          (grid cell, overflow:hidden ancestor, etc.). */}
+      {!collapsed && popPos && (
+        <div
+          ref={popoverRef}
+          className="neo-display-panel-body neo-display-panel-popover"
+          style={{
+            position: "fixed",
+            left: popPos.left,
+            top: popPos.top,
+            width: popPos.maxWidth,
+            maxWidth: popPos.maxWidth,
+            zIndex: 100000,
+          }}
+          role="dialog"
+          aria-label="Display settings"
+        >
+          {body}
+        </div>
       )}
-      {/* Mobile / UA-forced mobile: Strato Modal — keeps the
-          panel within the viewport regardless of where the chip
-          itself was placed in the wrapping grid. */}
-      <Modal
-        show={!collapsed && useModal}
-        title="Display"
-        size="small"
-        onDismiss={() => setCollapsed(true)}
-        dismissible
-      >
-        <div className="neo-display-panel-body neo-display-panel-body-modal">{body}</div>
-      </Modal>
     </div>
   );
 };
