@@ -4792,13 +4792,19 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
     min-height: 0 !important;
     width: auto !important;
   }
-  /* Refresh group still claims a full row — it carries the
-     ↻ button + Auto-refresh select + meta info (status +
-     version), better to keep them together than risk a tighter
-     wrap that splits them. */
+  /* 0.0.267 — Flatten refresh-group with `display: contents` so
+     its children (↻ button, Off select, refreshed text) become
+     direct flex-items of `.neo-header` and pack on the same row
+     as Display + Seg instead of being forced onto their own
+     full-width row. User: "muitos espaços em branco ainda e
+     diferente da pagina trends" — comparing screenshots, the
+     previous layout had FOUR rows; now it folds to ~2 rows
+     because everything packs left-to-right until the next chip
+     doesn't fit, then wraps naturally.
+     The `width: 100%` / `order: 1` rule from the 960 px block
+     stops applying once the box is gone via display:contents. */
   .neo-refresh-group {
-    flex: 1 1 100% !important;
-    gap: 2px !important;
+    display: contents !important;
   }
   /* 0.0.265 — Both slots now content-sized so they pack on the
      same flex-wrap row as Display. Previous `width: 100%` /
@@ -4854,56 +4860,34 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
     padding-top: max(0px, env(safe-area-inset-top, 0px)) !important;
     padding-bottom: 0 !important;
   }
-  /* 0.0.236 — Meta info (refresh status + version) moved to the
-     FIRST row of the refresh group, filling the empty space the
-     user pointed out at the top of the page header ("mover para
-     a area vazia superior"). The refresh button + select sit
-     below as the second row. Achieved with:
-       • flex-wrap + flex-direction: row on .neo-refresh-group
-       • order: -1 on .neo-refresh-status and .neo-app-version
-         so they precede the button + select
-       • ::after pseudo-element with width: 100%, order: 0
-         forces the row break between meta row (order: -1) and
-         controls row (order: 1) */
-  .neo-refresh-group {
-    flex-wrap: wrap !important;
-    flex-direction: row !important;
-    align-items: center !important;
-  }
-  .neo-refresh-group::after {
-    content: "";
-    width: 100%;
-    height: 0;
-    order: 0;
-  }
-  /* 0.0.266 — `flex: 1 1 auto` was making the refresh status
-     grow to fill the row width, which pushed the version chip
-     to the far right edge and left a visible gap between them
-     (user: comparing Overview vs Trend — Trend looked cleaner
-     because it has no version chip). With `flex: 0 0 auto` the
-     status sizes to its content, and the version chip lands
-     packed immediately after it. */
+  /* 0.0.267 — refresh-group is `display: contents` (above), so
+     these former "internal" rules now apply to children that sit
+     directly in `.neo-header`'s flex flow. They pack left-to-
+     right by source order (Display, Seg, tf, ↻, Off, refreshed,
+     version) until a chip won't fit, then wrap. The dedicated
+     `::after` row-break is gone — wrapping happens naturally on
+     overflow, not via a synthetic 100%-wide pseudo. */
   .neo-refresh-status {
     display: inline-block !important;
     font-size: 10px !important;
-    order: -1 !important;
     flex: 0 0 auto !important;
     width: auto !important;
     margin: 0 !important;
     opacity: 0.7;
   }
+  /* 0.0.267 — Hide the version chip in mobile to match the
+     Trend page (which never renders it). User: "diferente da
+     pagina trends" — comparing screenshots side-by-side, the
+     version chip is the ONLY meta element Overview shows that
+     Trend doesn't, so removing it visually unifies the two
+     headers. Version is still visible in desktop + still
+     reachable via the `Aa Display` panel's title attr. */
   .neo-app-version {
-    font-size: 9px !important;
-    order: -1 !important;
-    flex: 0 0 auto !important;
-    margin: 0 0 0 6px !important;
-    letter-spacing: 0 !important;
-    opacity: 0.7;
+    display: none !important;
   }
-  /* Refresh button + select fall to the SECOND row inside the
-     group, after the ::after break. */
-  .neo-refresh-btn { order: 1 !important; flex: 0 0 auto !important; }
-  .neo-refresh-interval { order: 1 !important; flex: 1 1 auto !important; }
+  /* ↻ button + Off select pack inline as content-sized chips. */
+  .neo-refresh-btn { flex: 0 0 auto !important; }
+  .neo-refresh-interval { flex: 0 0 auto !important; }
   /* Trim individual control heights so 4 stacked rows take
      ~4×26 + 3×2 = 110 px instead of ~4×32 + 3×8 = 152 px. */
   .neo-header .neo-refresh-btn,
