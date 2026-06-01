@@ -4761,44 +4761,43 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
    (was 380 px) extends coverage to Z Fold 5/6 cover screens
    which sit at 392-408 CSS px. */
 @media (max-width: 420px) {
-  /* 0.0.237 — Rebuilt the header layout as a CSS GRID with two
-     columns so smaller chips (Aa Display + Segment) share a row
-     instead of each claiming a full vertical strip. User
-     feedback: "reorganixar esta visao para preencher espaços
-     vazios" — the previous flex-column wasted half the row when
-     a small chip was the only item.
-     Layout:
-       Row 1: [Aa Display] | [Segment chip]   (1fr each)
-       Row 2: [Refresh group  (auto-refresh + status + version)] (span 2)
-       Row 3: [Timeframe Today < >]                              (span 2)
-     `display: contents` on .neo-header-left/-right keeps the
-     existing JSX tree intact while the children participate
-     directly in the grid. */
+  /* 0.0.264 — Switched FROM 2-col grid (which left empty
+     half-cells whenever a chip was smaller than 1fr) TO a flex-
+     wrap row where every chip is content-sized. Items pack
+     tight, the row wraps only when the next chip wouldn't fit,
+     and there's no implicit "column 2 is empty" wasted band.
+     User: "muito espaço em livre, otimizar layout".
+     Refresh group is the only item that explicitly claims a
+     full row (it carries multiple inline children that should
+     stay together). */
   .neo-header {
-    display: grid !important;
-    grid-template-columns: 1fr 1fr !important;
+    display: flex !important;
+    flex-direction: row !important;
+    flex-wrap: wrap !important;
     align-items: center !important;
     padding: 2px 6px !important;
-    gap: 2px !important;
+    gap: 4px !important;
+    row-gap: 2px !important;
   }
   .neo-header-left,
   .neo-header-right { display: contents !important; }
-  /* Every child gets `min-width: 0` so flex/grid items can
-     shrink below their content's intrinsic width. */
+  /* 0.0.264 — Items are content-sized (`flex: 0 0 auto`) so the
+     row packs tight. No more 1fr 1fr grid cells leaving empty
+     gutters to the right of chip-sized elements. */
   .neo-header > *,
   .neo-header-left > *,
   .neo-header-right > * {
+    flex: 0 0 auto !important;
     min-width: 0 !important;
     min-height: 0 !important;
     width: auto !important;
   }
-  /* Refresh group + Timeframe span the full two-column row so
-     they have room to breathe. The DisplaySettings + Segment
-     chip get one column each (default — no grid-column rule
-     needed since `grid-template-columns: 1fr 1fr` slots them
-     automatically). */
+  /* Refresh group still claims a full row — it carries the
+     ↻ button + Auto-refresh select + meta info (status +
+     version), better to keep them together than risk a tighter
+     wrap that splits them. */
   .neo-refresh-group {
-    grid-column: 1 / -1 !important;
+    flex: 1 1 100% !important;
     gap: 2px !important;
   }
   /* 0.0.240 — TimeframeSelector full-row coverage. The previous
@@ -4833,16 +4832,7 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
     min-width: 0 !important;
     order: 0 !important;
   }
-  /* 0.0.262 — Slim down the Auto-refresh select: smaller font,
-     tighter padding. Combined with the JSX label shortening
-     ("Off" / "5 min" / etc.), the select now takes ~50% less
-     horizontal space than v0.0.261.
-     0.0.263 — Width tied to content (not stretched). With
-     `flex: 0 0 auto` the select shrinks to fit just "Off" + the
-     dropdown arrow (~50 px) instead of filling the refresh
-     group's row. The remaining row width stays empty, which
-     is fine — the auto-refresh select isn't important enough
-     to dominate the row. */
+  /* Slim Auto-refresh select. */
   .neo-header .neo-refresh-interval {
     font-size: 11px !important;
     padding: 0 22px 0 8px !important;
@@ -4851,18 +4841,25 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
     flex: 0 0 auto !important;
     min-width: 0 !important;
   }
-  /* 0.0.263 — Kill the dead band between the fixed tabbar and
-     the page header. `.neo-page` was reserving 40 px on the
-     cover but the tabbar itself collapses to ~32 px, leaving
-     an 8 px black gap (user: "remover esse espaço"). Drop the
-     page clearance to 32 px and zero out the header's own
-     top padding so the first row of header content (Aa Display
-     + Segment) sits flush below the tabbar. */
+  /* 0.0.264 — Aggressive clearance trim. `.neo-page` was at
+     32 px (v0.0.263); user reports a visible gap remains
+     between the tabbar and Aa Display ("muito espaço em
+     livre"). Drop to 24 px — accepts a 4-6 px overlap risk on
+     viewports where the tabbar is slightly taller, in trade
+     for killing the gap on Z Fold cover where the tabbar
+     actually collapses to ~28 px. */
   .neo-page {
-    padding-top: calc(32px + env(safe-area-inset-top, 0px)) !important;
+    padding-top: calc(24px + env(safe-area-inset-top, 0px)) !important;
   }
   .neo-header {
     padding-top: 0 !important;
+  }
+  /* 0.0.264 — Tabbar at <=420 px collapses to its content
+     height (icons + labels). Trim its own internal padding
+     further so it's as compact as possible. */
+  .neo-tabbar {
+    padding-top: max(0px, env(safe-area-inset-top, 0px)) !important;
+    padding-bottom: 0 !important;
   }
   /* 0.0.236 — Meta info (refresh status + version) moved to the
      FIRST row of the refresh group, filling the empty space the
