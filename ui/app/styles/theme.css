@@ -636,22 +636,16 @@ span,p,div,h1,h2,h3,h4,h5,h6,label { color: var(--neo-text); }
   background: var(--neo-surface);
 }
 .neo-pulse {
-  /* 0.0.203 — clamp() for fully fluid scaling so the chart never
-     dominates the viewport ("grafico de barra ainda muito largo
-     ... otimizar para mostrar circulos maiores"). Tuned so:
-       • 1080p (height 1080): 7 vh ≈ 76 px → uses preferred
-       • 4K   (height 2160): 7 vh = 151 px → capped at 88 px
-       • 768 p (height 768): 7 vh ≈ 54 px → uses min 64 px
-     Net: large monitors stop wasting space, small laptops keep
-     the bars readable. All freed pixels go into the constellation
-     via the reservation drop below. */
-  width: 100%; height: clamp(64px, 7vh, 88px); position: relative;
+  /* 0.0.247 — Bumped from clamp(64,7vh,88) to clamp(82,9vh,112).
+     User: "aumentar um pouco o grafico". Net +24-28 %. With the
+     green CLOSED strip removed (only ACTIVE bars now), the chart
+     has more vertical room available without competing with the
+     constellation below it. */
+  width: 100%; height: clamp(82px, 9vh, 112px); position: relative;
 }
 @media (max-width: 1023px) {
-  /* Tablet — clamp tuned for typical portrait/landscape heights
-     (768-1180 px). Lower bound 80 px guarantees legend + bars +
-     X-axis ticks fit without overlap. */
-  .neo-pulse { height: clamp(80px, 8vh, 100px); }
+  /* Tablet — proportional bump to match the desktop change. */
+  .neo-pulse { height: clamp(100px, 10vh, 128px); }
 }
 @media (max-width: 640px) {
   /* Mobile — 0.0.210 bump from clamp(48,5vh,64) to clamp(96,14vh,120).

@@ -143,16 +143,18 @@ const PulseVisualizerImpl: React.FC<PulseVisualizerProps> = ({
     return filtered.length >= 2 ? filtered : bars;
   }, [bars, selectedRange]);
 
-  // 0.0.151 — when the chart is fed an ACTIVE-only series (the
-  // default since 0.0.147), the tooltip shouldn't list Closed/Total
-  // rows that always read zero. Otherwise the bucket "Total" looks
-  // like it contradicts the central TOTAL ring (which is cumulative
-  // across the timeframe, not a single bucket). User: "closed e
-  // total do grafico de barras nao bate com os circulos centrais."
-  const hasClosedSeries = React.useMemo(
-    () => bars.some((b) => b.closed > 0),
-    [bars],
-  );
+  // 0.0.247 — User asked to remove the green CLOSED strip
+  // ("remover este fundo verde"). Forcing `hasClosedSeries` to
+  // `false` does the right thing in three places at once:
+  //   • Drops the CLOSED chip from the top-left legend.
+  //   • Suppresses the Closed/Total rows in the hover tooltip.
+  //   • Combined with the `if (hasClosedSeries)` wrap added in
+  //     the CLOSED bar block below, also skips the bar fill —
+  //     the chart now shows ACTIVE only, top of frame.
+  // The old derivation (`bars.some(b => b.closed > 0)`) is kept
+  // in case we want to flip back via a prop later.
+  // const _legacyHasClosed = bars.some((b) => b.closed > 0);
+  const hasClosedSeries = false;
 
   const draw = useCallback(() => {
     const c = canvasRef.current;
@@ -387,7 +389,10 @@ const PulseVisualizerImpl: React.FC<PulseVisualizerProps> = ({
       }
 
       // CLOSED segment (bottom) — neon teal
-      if (closedH > 0.3) {
+      // 0.0.247 — Wrapped in `hasClosedSeries` so the user's
+      // request to drop the green strip is honoured (currently
+      // `hasClosedSeries === false` always, see derivation).
+      if (hasClosedSeries && closedH > 0.3) {
         const yClosedTop = baseY - closedH;
         const grad = ctx.createLinearGradient(0, yClosedTop, 0, baseY);
         const a = isHover ? 1.0 : 0.85;

@@ -1392,6 +1392,72 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
 
       ctx.setLineDash([]);
       ctx.restore();
+
+      // 0.0.247-fx — Discrete dot grid + 4 cardinal chevrons.
+      // Read live so the feature can be toggled at runtime via
+      // `window.__hubGrid = true | false`.
+      if (readHubBandGrid()) {
+        const satRForGrid = Math.max(40, hubRadius);
+        const satYForGrid = hubCy;
+        const satXsForGrid = [w * 0.18, w / 2, w * 0.82];
+        const SAT_PAD = satRForGrid + 10;
+        // Step scales with width so the dot density stays
+        // consistent from Z Fold cover to a 4K display.
+        const step = Math.max(10, Math.min(16, w * 0.012));
+        const dotR = 0.8;
+        ctx.save();
+        ctx.fillStyle = dk ? "rgba(160,180,220,0.10)" : "rgba(60,80,120,0.10)";
+        for (let y = hubBandTop + step / 2; y < hubBandBottom; y += step) {
+          for (let x = step / 2; x < w; x += step) {
+            // Skip dots that fall inside any satellite's bubble
+            // area so the rings render cleanly on top.
+            let inside = false;
+            for (let s = 0; s < satXsForGrid.length; s++) {
+              if (Math.hypot(x - satXsForGrid[s], y - satYForGrid) < SAT_PAD) {
+                inside = true; break;
+              }
+            }
+            if (inside) continue;
+            ctx.beginPath();
+            ctx.arc(x, y, dotR, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        }
+        // 4 cardinal chevrons at the band's extremities,
+        // pointing inward. Discreet alpha. Subtle indicator
+        // that this is a self-contained "central" strip.
+        ctx.strokeStyle = dk ? "rgba(160,180,220,0.32)" : "rgba(60,80,120,0.32)";
+        ctx.lineWidth = 1.2;
+        ctx.lineCap = "round";
+        ctx.lineJoin = "round";
+        const cheLen = 6;
+        const cxC = w / 2;
+        // top — ▼
+        ctx.beginPath();
+        ctx.moveTo(cxC - cheLen, hubBandTop + 4);
+        ctx.lineTo(cxC,          hubBandTop + 4 + cheLen);
+        ctx.lineTo(cxC + cheLen, hubBandTop + 4);
+        ctx.stroke();
+        // bottom — ▲
+        ctx.beginPath();
+        ctx.moveTo(cxC - cheLen, hubBandBottom - 4);
+        ctx.lineTo(cxC,          hubBandBottom - 4 - cheLen);
+        ctx.lineTo(cxC + cheLen, hubBandBottom - 4);
+        ctx.stroke();
+        // left — ▶
+        ctx.beginPath();
+        ctx.moveTo(4,          satYForGrid - cheLen);
+        ctx.lineTo(4 + cheLen, satYForGrid);
+        ctx.lineTo(4,          satYForGrid + cheLen);
+        ctx.stroke();
+        // right — ◀
+        ctx.beginPath();
+        ctx.moveTo(w - 4,          satYForGrid - cheLen);
+        ctx.lineTo(w - 4 - cheLen, satYForGrid);
+        ctx.lineTo(w - 4,          satYForGrid + cheLen);
+        ctx.stroke();
+        ctx.restore();
+      }
     } else if (layout.length > 0) {
       // Hub-free layout (Segments page): draw dotted dividers between
       // every adjacent column and row, matching the category page style.
@@ -4158,6 +4224,32 @@ declare global {
 // untouched. Reachable from devtools (`window.__fx = 0`) to
 // revert to the original look.
 const FX_DEFAULT_LOCAL: FxVariant = 8;
+// 0.0.247-fx (LOCAL ONLY — flip to `false` before deploy unless
+// the design is signed off). Discrete futuristic backdrop for
+// the central hub band: faint dot grid + 4 cardinal chevrons
+// at the band's extremities. User picked option B from the v8
+// follow-up: "Grid de pontos só no hub band". Drawn behind the
+// satellites so they keep their visual dominance; dots inside
+// the satellites' bubble area are skipped to keep the rings
+// crisp. Read live (per frame) so a tester can flip via
+// `window.__hubGrid = true | false` without a reload. */
+function readHubBandGrid(): boolean {
+  try {
+    if (typeof window === "undefined") return HUB_GRID_DEFAULT_LOCAL;
+    const g = (window as unknown as { __hubGrid?: boolean | string }).__hubGrid;
+    if (g === true || g === "true" || g === "1") return true;
+    if (g === false || g === "false" || g === "0") return false;
+    try {
+      const ls = window.localStorage?.getItem("hubGrid");
+      if (ls === "true" || ls === "1") return true;
+      if (ls === "false" || ls === "0") return false;
+    } catch { /* private mode */ }
+    return HUB_GRID_DEFAULT_LOCAL;
+  } catch {
+    return HUB_GRID_DEFAULT_LOCAL;
+  }
+}
+const HUB_GRID_DEFAULT_LOCAL = true;
 function readFxVariant(): FxVariant {
   try {
     if (typeof window === "undefined") return FX_DEFAULT_LOCAL;
