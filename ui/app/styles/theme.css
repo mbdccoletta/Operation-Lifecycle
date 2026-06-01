@@ -4819,6 +4819,8 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
     width: auto !important;
     min-width: 0 !important;
     flex: 0 0 auto !important;
+    /* 0.0.268 — Order 10: lands on row 2 immediately before seg. */
+    order: 10 !important;
   }
   .neo-tf-slot button {
     max-width: none !important;
@@ -4829,7 +4831,8 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
     width: auto !important;
     min-width: 0 !important;
     flex: 0 0 auto !important;
-    order: 0 !important;
+    /* 0.0.268 — Order 11: sits on row 2 next to tf-slot. */
+    order: 11 !important;
   }
   /* Slim Auto-refresh select. */
   .neo-header .neo-refresh-interval {
@@ -4860,34 +4863,42 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
     padding-top: max(0px, env(safe-area-inset-top, 0px)) !important;
     padding-bottom: 0 !important;
   }
-  /* 0.0.267 — refresh-group is `display: contents` (above), so
-     these former "internal" rules now apply to children that sit
-     directly in `.neo-header`'s flex flow. They pack left-to-
-     right by source order (Display, Seg, tf, ↻, Off, refreshed,
-     version) until a chip won't fit, then wrap. The dedicated
-     `::after` row-break is gone — wrapping happens naturally on
-     overflow, not via a synthetic 100%-wide pseudo. */
+  /* 0.0.268 — Explicit two-row mobile layout per user spec:
+     "Colocar Display, refresh e auto refresh no topo. Seletor
+      de time frame e Segments abaixo."
+     Row 1: Display (1) + ↻ (2) + Off (3) + refresh-status (4)
+     Row 2: tf-slot (10) + seg-slot (11)
+     The `.neo-header::after` pseudo with flex-basis: 100% and
+     order: 5 forces the row break between order ≤4 and order ≥10
+     regardless of how much horizontal space is left on row 1 —
+     a known flexbox row-break trick. Without it, narrow chips
+     on row 1 would let tf-slot try to squeeze in next to them. */
+  .neo-header::after {
+    content: "";
+    flex-basis: 100% !important;
+    width: 100% !important;
+    height: 0 !important;
+    order: 5 !important;
+  }
+  /* Display panel (the only direct child of .neo-header-left). */
+  .neo-header-left > * { order: 1 !important; }
+  .neo-refresh-btn { order: 2 !important; flex: 0 0 auto !important; }
+  .neo-refresh-interval { order: 3 !important; flex: 0 0 auto !important; }
   .neo-refresh-status {
     display: inline-block !important;
     font-size: 10px !important;
     flex: 0 0 auto !important;
     width: auto !important;
     margin: 0 !important;
+    order: 4 !important;
     opacity: 0.7;
   }
   /* 0.0.267 — Hide the version chip in mobile to match the
-     Trend page (which never renders it). User: "diferente da
-     pagina trends" — comparing screenshots side-by-side, the
-     version chip is the ONLY meta element Overview shows that
-     Trend doesn't, so removing it visually unifies the two
-     headers. Version is still visible in desktop + still
-     reachable via the `Aa Display` panel's title attr. */
+     Trend page (which never renders it). Version stays visible
+     on desktop + reachable via the `Aa Display` title attr. */
   .neo-app-version {
     display: none !important;
   }
-  /* ↻ button + Off select pack inline as content-sized chips. */
-  .neo-refresh-btn { flex: 0 0 auto !important; }
-  .neo-refresh-interval { flex: 0 0 auto !important; }
   /* Trim individual control heights so 4 stacked rows take
      ~4×26 + 3×2 = 110 px instead of ~4×32 + 3×8 = 152 px. */
   .neo-header .neo-refresh-btn,
