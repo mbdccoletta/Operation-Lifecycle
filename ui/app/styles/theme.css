@@ -24,6 +24,21 @@
   --neo-border:        var(--dt-colors-border-neutral-default,          rgba(255,255,255,0.06));
   --neo-border-active: var(--dt-colors-border-primary-default,          rgba(99,102,241,0.4));
 
+  /* 0.0.234 — Pill backplate tokens. Used by the modal mode-pills
+     (TOP/Stuck/Total) and any other "muted dark/light fill" that
+     needs to flip with the theme. The hardcoded `rgba(11,15,26,…)`
+     values that lived in inline styles read as solid black blobs
+     on the light theme. These tokens carry the same dark navy
+     near-opaque in dark mode and a near-white near-opaque in
+     light mode so the pill keeps its visual weight either way. */
+  --neo-pill-bg-strong: rgba(11,15,26,0.96);
+  --neo-pill-bg-muted:  rgba(11,15,26,0.85);
+  /* Alpha-zero variant of the page background — used when a CSS
+     gradient needs to fade to nothing without the interpolation
+     passing through an unrelated colour (which would create a
+     dark-band artefact on the light theme). */
+  --neo-bg-transparent: rgba(5,8,15,0);
+
   /* Text — single semantic source for all four contrast levels.
      Theme-aware: in light mode Strato flips these automatically so
      we no longer need the `[data-theme="light"]` overrides below. */
@@ -219,6 +234,13 @@
   --neo-surface-hover: var(--dt-colors-background-container-neutral-emphasized, rgba(99,102,241,0.05));
   --neo-border:        var(--dt-colors-border-neutral-default,          rgba(0,0,0,0.06));
   --neo-border-active: var(--dt-colors-border-primary-default,          rgba(99,102,241,0.3));
+  /* 0.0.234 — Light-theme pill backplates (see dark-theme block
+     for rationale). Flips the modal mode-pill backgrounds so
+     they read as raised white panels on the light page instead
+     of as solid black blobs. */
+  --neo-pill-bg-strong: rgba(248,250,252,0.98);
+  --neo-pill-bg-muted:  rgba(248,250,252,0.88);
+  --neo-bg-transparent: rgba(248,250,252,0);
   --neo-text:          var(--dt-colors-text-neutral-default,            #0f172a);
   --neo-text-2:        var(--dt-colors-text-neutral-subdued,            #475569);
   --neo-text-3:        var(--dt-colors-text-neutral-disabled,           #94a3b8);

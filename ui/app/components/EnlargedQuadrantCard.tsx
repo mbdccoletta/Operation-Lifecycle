@@ -737,8 +737,11 @@ export const EnlargedQuadrantCard = ({
                   right: 0,
                   bottom: 0,
                   height: 72,
+                  // 0.0.234 — Use theme-aware fade-to-zero so the
+                  // gradient doesn't drag a dark band through the
+                  // light-theme background interpolation.
                   background:
-                    "linear-gradient(to top, var(--neo-bg) 55%, rgba(11,15,26,0) 100%)",
+                    "linear-gradient(to top, var(--neo-bg) 55%, var(--neo-bg-transparent) 100%)",
                   pointerEvents: "none",
                   zIndex: 1,
                 }}
@@ -869,9 +872,14 @@ export const EnlargedQuadrantCard = ({
                         // (highlighted bubble's dashed ring) doesn't
                         // bleed THROUGH the pill text. User reported
                         // "animação não deve sobrepor texto".
+                        // 0.0.234 — Inactive pill backgrounds use
+                        // theme-aware tokens so light mode shows a
+                        // raised white panel instead of a solid
+                        // black blob. See `--neo-pill-bg-*` in
+                        // theme.css.
                         background: isActive
                           ? accent
-                          : (count > 0 ? "rgba(11,15,26,0.96)" : "rgba(11,15,26,0.85)"),
+                          : (count > 0 ? "var(--neo-pill-bg-strong)" : "var(--neo-pill-bg-muted)"),
                         backdropFilter: "blur(6px)",
                         WebkitBackdropFilter: "blur(6px)",
                         border: `1px solid ${accent}`,
