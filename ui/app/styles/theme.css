@@ -1650,6 +1650,39 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   max-width: 100%;
 }
 
+/* 0.0.274 — Rising / Stuck row variants.
+   Two cells (1fr 1fr) instead of three, tight against the row above
+   (padding-top: 0). Accent palette: orange for Rising (matches the
+   `MTTR` MetricChip — "things moving" colour) and amber for Stuck
+   ("time delay" colour). Both inherit all the .neo-mobile-ring
+   base styles. */
+.neo-mobile-rings-2col {
+  grid-template-columns: 1fr 1fr;
+  padding-top: 0;
+}
+.neo-mobile-ring-rising { border-bottom-color: rgba(251,146,60,0.65); }
+.neo-mobile-ring-stuck  { border-bottom-color: rgba(245,158,11,0.65); }
+.neo-mobile-ring-rising .neo-mobile-ring-label { color: rgba(251,146,60,0.95); }
+.neo-mobile-ring-stuck  .neo-mobile-ring-label { color: rgba(245,158,11,0.95); }
+.neo-mobile-ring-rising.is-active {
+  background: rgba(251,146,60,0.08);
+  border-color: rgba(251,146,60,0.55);
+}
+.neo-mobile-ring-stuck.is-active {
+  background: rgba(245,158,11,0.08);
+  border-color: rgba(245,158,11,0.55);
+}
+/* Sub-label rendered below the value — mirrors the trend pill's
+   vertical position from the first row so the two rows align
+   visually. Lower-case + low-contrast so it reads as metadata. */
+.neo-mobile-ring-sub {
+  font: 500 10px var(--neo-mono);
+  letter-spacing: 0;
+  color: var(--neo-text-3);
+  opacity: 0.7;
+  margin-top: 2px;
+}
+
 /* Trend chip rendered below the value — same `▲ +N /1h` / `▼ -N` /
    `— neutral` vocabulary the desktop ring uses. Re-mounts via React
    `key` whenever the delta flips, which restarts the keyframe

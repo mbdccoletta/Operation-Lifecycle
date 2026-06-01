@@ -1209,6 +1209,32 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
     return { active, closed };
   }, [problems]);
 
+  // 0.0.274 — Rising / Stuck totals for the second mobile-rings row.
+  // Sources:
+  //   • Rising  → `newlyStartedByCategory` (ACTIVE problems whose
+  //               event.start is within the last 1 h, server-side).
+  //               Matches the constellation's Rising sub-bubble cue
+  //               and the `expectedListTotal` math at line ~1130.
+  //   • Stuck   → `stuckByCategory` (ACTIVE problems with
+  //               event.start < stuck-cutoff, default 4 h).
+  // Respect the active category filter so totals match the visible
+  // chip strip (same pattern `expectedListTotal` uses).
+  const mobileSubsetTotals = useMemo(() => {
+    if (!constellationCountOverrides) return { rising: 0, stuck: 0 };
+    const cats = Array.from(catFilter);
+    const sumOf = (m: Record<string, number> | undefined): number => {
+      if (!m) return 0;
+      if (cats.length === 0) {
+        return Object.values(m).reduce((a, n) => a + (Number.isFinite(n) ? n : 0), 0);
+      }
+      return cats.reduce((a, c) => a + (m[c] || 0), 0);
+    };
+    return {
+      rising: sumOf(constellationCountOverrides.newlyStartedByCategory),
+      stuck:  sumOf(constellationCountOverrides.stuckByCategory),
+    };
+  }, [constellationCountOverrides, catFilter]);
+
   // ── Grouping resolution (category vs segment mode) ────────────────
   // In "category" mode the 6 Davis categories are the quadrants and
   // every problem has a known category — `groupings` and
@@ -2594,6 +2620,45 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
             {/* RESOLVED is cumulative — show last-hour CLOSURE rate
                 (never decreases), green because resolutions are good. */}
             <MobileRingTrend mode="rate" value={mobileRingTrends.resolvedRate} risingIsBad={false} />
+          </button>
+        </div>
+      )}
+
+      {/* 0.0.274 — Second mobile-rings row: Rising + Stuck. Same
+          design language as the TOTAL / ACTIVE / RESOLVED row above
+          (card with accent border + uppercase label + monospaced
+          value) but split into TWO cells instead of three so each
+          card has more breathing room.
+          Clicking either toggles the same `highlightedSubsetMode`
+          state the constellation sub-bubbles use — pin Rising and
+          the list narrows to ACTIVE problems started in the last
+          hour; pin Stuck and the list narrows to ACTIVE problems
+          older than the stuck cutoff (default 4 h). Re-click to
+          clear. Mirrors the desktop affordance the user already
+          knows from the constellation. */}
+      {isMobileOrTablet && (
+        <div className="neo-mobile-rings neo-mobile-rings-2col" role="group" aria-label="Active subsets">
+          <button
+            type="button"
+            className={`neo-mobile-ring neo-mobile-ring-rising${highlightedSubsetMode === "rising" ? " is-active" : ""}`}
+            onClick={() => setHighlightedSubsetMode(highlightedSubsetMode === "rising" ? null : "rising")}
+            aria-pressed={highlightedSubsetMode === "rising"}
+            title="Filter list to problems started in the last hour"
+          >
+            <span className="neo-mobile-ring-label">RISING</span>
+            <span className="neo-mobile-ring-value">{mobileSubsetTotals.rising}</span>
+            <span className="neo-mobile-ring-sub">started /1h</span>
+          </button>
+          <button
+            type="button"
+            className={`neo-mobile-ring neo-mobile-ring-stuck${highlightedSubsetMode === "open_time" ? " is-active" : ""}`}
+            onClick={() => setHighlightedSubsetMode(highlightedSubsetMode === "open_time" ? null : "open_time")}
+            aria-pressed={highlightedSubsetMode === "open_time"}
+            title="Filter list to active problems older than the stuck cutoff"
+          >
+            <span className="neo-mobile-ring-label">STUCK</span>
+            <span className="neo-mobile-ring-value">{mobileSubsetTotals.stuck}</span>
+            <span className="neo-mobile-ring-sub">active &gt; 4h</span>
           </button>
         </div>
       )}
