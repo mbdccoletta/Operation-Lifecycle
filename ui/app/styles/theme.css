@@ -4716,38 +4716,49 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
   .neo-pulse { height: 64px; }
 }
 
-/* 0.0.227 — Ultra-narrow viewport guard. Catches Z Fold FOLDED
-   (cover display, ~280-380 px CSS width), older small phones,
-   and the Dynatrace shell's left icon strip eating ~50 px on
-   any device. Goals at this width:
+/* 0.0.227 — Ultra-narrow viewport guard. Catches:
+     • Galaxy Z Fold 4 / 5 / 6 cover displays (376-408 CSS px)
+     • Galaxy S8 / S9 / S10e (360 px)
+     • iPhone SE 1st gen (320 px)
+     • Older / mid-tier Android phones (360-400 px)
+     • Any phone in a split-screen / multi-window mode
+   Goals at this width:
    1. Stop horizontal clipping of the refresh-status row by:
-      • hiding the "v0.0.226" version badge (metadata, not
-        primary UI — user can still long-press the refresh
-        status `title` tooltip to see it)
-      • shrinking "refreshed Xm ago" to just `Xm` so it fits
-        next to the Auto-refresh Select.
-   2. Make sure nothing else has min-width forcing horizontal
-      scroll. Existing card layouts already flex, but a
-      `overflow-x: hidden` on the page wrapper is a belt-and-
-      braces guard for any rogue element.
-   User reported "no z fold ficou cortando" on the folded
-   cover display — this rule targets that case specifically. */
-@media (max-width: 380px) {
-  /* Drop the metadata version chip — long-press the refresh
-     status to read it from the tooltip. */
+      • hiding the "v0.0.227" version badge (metadata, not
+        primary UI — long-press the refresh status to read it
+        from its native title tooltip)
+      • hiding the "refreshed Xm ago" stamp entirely. At this
+        width even the compact 70 px wide form was still being
+        clipped on Z Fold 5/6 cover. The refresh time is
+        secondary info — the Auto-refresh Select is the primary
+        control and must always fit.
+   2. Cut the header's own padding + gap roughly in half so the
+      controls themselves get more horizontal real estate.
+   3. Belt-and-braces overflow-x: hidden on the outermost app
+      root to neutralise any rogue min-width that might still
+      sneak in via a third-party component.
+   User reported "tala fechada Z fold esta cortando a
+   nomenclatura da versao ...ajustar e diminuir espaços em
+   branco" — this rule targets that case. The 420 px ceiling
+   (was 380 px) extends coverage to Z Fold 5/6 cover screens
+   which sit at 392-408 CSS px. */
+@media (max-width: 420px) {
+  /* Drop the metadata version chip + refresh status. Both are
+     reachable from the title tooltips for power users. */
   .neo-app-version { display: none !important; }
-  /* Compact the refresh status to its bare minimum: "Xm ago"
-     becomes "Xm" via overflow + max-width so the Select still
-     fits next to it. */
-  .neo-refresh-status {
-    max-width: 70px;
-    overflow: hidden;
-    text-overflow: clip;
-    font-size: calc(10px * var(--neo-fs-mult, 1));
+  .neo-refresh-status { display: none !important; }
+  /* Tighten the wrapping header so each row gets every pixel
+     possible. Padding 8/12 → 4/8 (33-50 % reduction).
+     Gap 8 → 4. */
+  .neo-header {
+    padding: 4px 8px !important;
+    gap: 4px !important;
   }
+  /* Tighten the refresh group's internal gap as well — it
+     gains real estate it can use for the Auto-refresh Select. */
+  .neo-refresh-group { gap: 4px !important; }
   /* Belt-and-braces: kill any rogue horizontal scroll on the
-     outermost app root. Each card/row should already flex, but
-     this catches anything still using min-width. */
+     outermost app root. */
   .neo-app, .neo-page, .neo-page-overview {
     overflow-x: hidden;
   }
