@@ -1393,38 +1393,34 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
       ctx.setLineDash([]);
       ctx.restore();
 
-      // 0.0.259 — Hub band backdrop, "Inset hex panel".
-      // User: "fundo deve ocupar toda a sessao interna ...
-      // ainda vejo sobreposiçao na parte inferior". The previous
-      // panel used hubBandTop / hubBandBottom directly, which
-      // are the same y values where the top + bottom rows
-      // start, so the panel's borders / brackets were touching
-      // the neighbouring rows' content.
-      // Fix: inset the panel vertically by PANEL_PAD_Y (8 px on
-      // each side). The hex grid now fills the inset rectangle
-      // edge-to-edge, and the borders + brackets sit on the
-      // inset edge so there's a clear gap between the panel and
-      // the rows above / below. Toggle via window.__hubGrid.
+      // 0.0.260 — Hub band backdrop. User: "reencher todo o
+      // comprimento da sessao ... remover linhas superiores e
+      // inferiores". Strip the panel chrome entirely — the hex
+      // grid now fills the full hub-band width (canvas edge to
+      // edge) with no top/bottom borders, no L-brackets, no
+      // ticks, no side labels. Just the hex substrate + a thin
+      // dashed midline. Hexes still skip the satellite area so
+      // the rings render crisp on top. Toggle via window.__hubGrid.
       if (readHubBandGrid()) {
         const satRForGrid = Math.max(40, hubRadius);
         const satYForGrid = hubCy;
         const satXsForGrid = [w * 0.18, w / 2, w * 0.82];
         const SAT_PAD = satRForGrid + 12;
         const accent = dk ? "120,180,255" : "70,90,180";
-        // Horizontal + vertical bounds.
-        const PANEL_PAD_X = satRForGrid + 16;
+        // Full-width fill (no horizontal padding). Vertical
+        // inset of 8 px each side keeps a small gap between the
+        // hex pattern and the rows above / below so the
+        // substrate doesn't visually merge with them.
         const PANEL_PAD_Y = 8;
-        const xStart = Math.max(0, satXsForGrid[0] - PANEL_PAD_X);
-        const xEnd   = Math.min(w, satXsForGrid[satXsForGrid.length - 1] + PANEL_PAD_X);
+        const xStart = 0;
+        const xEnd   = w;
         const yTop    = hubBandTop + PANEL_PAD_Y;
         const yBottom = hubBandBottom - PANEL_PAD_Y;
         const panelW = xEnd - xStart;
         const panelH = yBottom - yTop;
         const hubMidY = (yTop + yBottom) / 2;
 
-        // ── Hex tile substrate — clipped to the inset panel
-        // so the pattern fills edge-to-edge with no half-hex
-        // bleeding past the panel borders. ────────────────────
+        // ── Hex tile substrate — clipped to the band ────────
         ctx.save();
         ctx.beginPath();
         ctx.rect(xStart, yTop, panelW, panelH);
@@ -1433,10 +1429,9 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
         const hexW = hexR * Math.sqrt(3);
         const hexH = hexR * 1.5;
         ctx.lineWidth = 1;
-        // Start one row above so the top edge is fully covered.
         for (let row = -1, ry = yTop + hexR - hexH; ry < yBottom + hexR; ry += hexH, row++) {
           const rowOffset = (row % 2 + 2) % 2 * (hexW / 2);
-          const xLoopStart = xStart + ((rowOffset - xStart) % hexW + hexW) % hexW - hexW;
+          const xLoopStart = ((rowOffset) % hexW + hexW) % hexW - hexW;
           for (let cx2 = xLoopStart; cx2 < xEnd + hexW; cx2 += hexW) {
             let inside = false;
             for (let s = 0; s < satXsForGrid.length; s++) {
@@ -1468,23 +1463,8 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
         }
         ctx.restore();
 
-        // ── Static extras: tick marks + midline + side labels ─
+        // ── Single dashed midline through the hub centre ────
         ctx.save();
-        ctx.strokeStyle = `rgba(${accent},0.25)`;
-        ctx.lineWidth = 1;
-        ctx.lineCap = "round";
-        const tickStep = Math.max(40, Math.min(60, panelW * 0.05));
-        for (let tx = xStart + tickStep; tx < xEnd - tickStep; tx += tickStep) {
-          const isMajor = (Math.round((tx - xStart) / tickStep) % 4) === 0;
-          const tlen = isMajor ? 4 : 2;
-          ctx.beginPath();
-          ctx.moveTo(tx, yTop);
-          ctx.lineTo(tx, yTop + tlen);
-          ctx.moveTo(tx, yBottom);
-          ctx.lineTo(tx, yBottom - tlen);
-          ctx.stroke();
-        }
-        // Dashed midline
         ctx.setLineDash([4, 6]);
         ctx.strokeStyle = `rgba(${accent},0.10)`;
         ctx.lineWidth = 0.6;
@@ -1493,64 +1473,6 @@ const ConstellationViewImpl: React.FC<ConstellationViewProps> = ({
         ctx.lineTo(xEnd, hubMidY);
         ctx.stroke();
         ctx.setLineDash([]);
-        // Side labels SECT.A / SECT.B
-        ctx.font = `600 8px "Roboto Mono","SF Mono",monospace`;
-        ctx.fillStyle = `rgba(${accent},0.30)`;
-        ctx.save();
-        ctx.translate(xStart + 14, hubMidY);
-        ctx.rotate(-Math.PI / 2);
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        ctx.fillText("SECT.A", 0, 0);
-        ctx.restore();
-        ctx.save();
-        ctx.translate(xEnd - 14, hubMidY);
-        ctx.rotate(Math.PI / 2);
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        ctx.fillText("SECT.B", 0, 0);
-        ctx.restore();
-        ctx.restore();
-
-        // ── Neon top + bottom borders at the inset edges ────
-        ctx.save();
-        ctx.strokeStyle = `rgba(${accent},0.35)`;
-        ctx.lineWidth = 0.9;
-        ctx.beginPath();
-        ctx.moveTo(xStart, yTop);
-        ctx.lineTo(xEnd, yTop);
-        ctx.moveTo(xStart, yBottom);
-        ctx.lineTo(xEnd, yBottom);
-        ctx.stroke();
-        ctx.restore();
-
-        // ── L-bracket markers at the 4 panel corners ─────────
-        ctx.save();
-        ctx.strokeStyle = `rgba(${accent},0.40)`;
-        ctx.lineWidth = 1.2;
-        ctx.lineCap = "round";
-        const bArm = 14;
-        const bIn = 6;
-        ctx.beginPath();
-        ctx.moveTo(xStart + bIn, yTop + bArm);
-        ctx.lineTo(xStart + bIn, yTop + bIn);
-        ctx.lineTo(xStart + bIn + bArm, yTop + bIn);
-        ctx.stroke();
-        ctx.beginPath();
-        ctx.moveTo(xEnd - bIn - bArm, yTop + bIn);
-        ctx.lineTo(xEnd - bIn, yTop + bIn);
-        ctx.lineTo(xEnd - bIn, yTop + bArm);
-        ctx.stroke();
-        ctx.beginPath();
-        ctx.moveTo(xStart + bIn, yBottom - bArm);
-        ctx.lineTo(xStart + bIn, yBottom - bIn);
-        ctx.lineTo(xStart + bIn + bArm, yBottom - bIn);
-        ctx.stroke();
-        ctx.beginPath();
-        ctx.moveTo(xEnd - bIn - bArm, yBottom - bIn);
-        ctx.lineTo(xEnd - bIn, yBottom - bIn);
-        ctx.lineTo(xEnd - bIn, yBottom - bArm);
-        ctx.stroke();
         ctx.restore();
       }
     } else if (layout.length > 0) {
