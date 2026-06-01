@@ -636,17 +636,18 @@ span,p,div,h1,h2,h3,h4,h5,h6,label { color: var(--neo-text); }
   background: var(--neo-surface);
 }
 .neo-pulse {
-  /* 0.0.203 — clamp() for fully fluid scaling so the chart never
-     dominates the viewport.
-     0.0.248 — Reverted from v0.0.247 height bump after the
-     ACTIVE-only render made the chart look broken (user:
-     "voltar versao funcionando ... pessimo isso"). Back to the
-     v0.0.246 stacked-bar geometry. */
-  width: 100%; height: clamp(64px, 7vh, 88px); position: relative;
+  /* 0.0.251 — Height bumped clamp(64,7vh,88) → clamp(96,11vh,132).
+     User: "aumentar a altura para ficar mais claro o eixo". The
+     Y-axis labels (3 ticks + 0) were stacking at ~12 px apart in
+     the previous height — bumping the chart ~50 % spreads them
+     out so each label reads clearly. Safe to do now since the
+     stacked ACTIVE+CLOSED bars are back (v0.0.248) and the
+     per-bar halo wash is gone (v0.0.250). */
+  width: 100%; height: clamp(96px, 11vh, 132px); position: relative;
 }
 @media (max-width: 1023px) {
-  /* Tablet — clamp tuned for typical portrait/landscape heights. */
-  .neo-pulse { height: clamp(80px, 8vh, 100px); }
+  /* Tablet — proportional bump to match. */
+  .neo-pulse { height: clamp(110px, 12vh, 144px); }
 }
 @media (max-width: 640px) {
   /* Mobile — 0.0.210 bump from clamp(48,5vh,64) to clamp(96,14vh,120).
