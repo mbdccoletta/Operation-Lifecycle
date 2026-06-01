@@ -2759,18 +2759,15 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
                row list — semantically empty there.)
           When in list view the Rising/Stuck chip ALSO acts as a row
           filter (see the `filtered` useMemo below). */}
-      {(() => {
+      {!isMobileOrTablet && (() => {
+        // 0.0.280 — Hidden on mobile / tablet per user request:
+        // the RISING / STUCK cards in `.neo-mobile-rings-2col`
+        // above already provide the same toggleable filter via the
+        // same `highlightedSubsetMode` state, so this strip was
+        // duplicate UI for the small viewports. Desktop still
+        // renders it (the constellation view uses it as the
+        // sub-bubble legend; the list view as the row filter).
         const inList = viewMode === "list";
-        // 0.0.127 follow-up — the previous attempt hid this strip
-        // entirely on mobile, but the user actually wanted it
-        // visible (the "embedded into GROUP BY" duplicate strip
-        // was the real complaint, which is now removed below).
-        // Strip is back on mobile + desktop, both views.
-        // 0.0.127 — Total chip removed from the lifted strip in both
-        // views. Drilldown to the "all active" list is still available
-        // via the central TOTAL hub ring and the enlarged-quadrant
-        // Total pill (which carries a category filter). The strip is
-        // now strictly a Rising / Stuck triage lens.
         const chips: Array<{ mode: typeof highlightedSubsetMode; label: string; hint: string }> = [
           { mode: "rising"    as const, label: "Rising", hint: "Net increase in active count in the last hour" },
           { mode: "open_time" as const, label: "Stuck",  hint: "Problems active for more than 4 hours" },
