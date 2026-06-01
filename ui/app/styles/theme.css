@@ -4743,20 +4743,41 @@ body[data-app-view="neural"] .neo-category-filters-status-row {
    (was 380 px) extends coverage to Z Fold 5/6 cover screens
    which sit at 392-408 CSS px. */
 @media (max-width: 420px) {
-  /* Drop the metadata version chip + refresh status. Both are
-     reachable from the title tooltips for power users. */
-  .neo-app-version { display: none !important; }
-  .neo-refresh-status { display: none !important; }
-  /* Tighten the wrapping header so each row gets every pixel
-     possible. Padding 8/12 → 4/8 (33-50 % reduction).
-     Gap 8 → 4. */
-  .neo-header {
-    padding: 4px 8px !important;
-    gap: 4px !important;
+  /* Version chip — kept visible, but ULTRA compact. User wants
+     to see the build number ("nao vejo a versao") even on the
+     cover display. 9 px font + zero margin + appearing as a
+     trailing badge after the refresh group's last visible item. */
+  .neo-app-version {
+    font-size: 9px !important;
+    margin-left: 4px !important;
+    letter-spacing: 0 !important;
+    opacity: 0.7;
   }
-  /* Tighten the refresh group's internal gap as well — it
-     gains real estate it can use for the Auto-refresh Select. */
-  .neo-refresh-group { gap: 4px !important; }
+  /* "refreshed Xm ago" stamp still hidden — the version IS the
+     primary metadata users want; the refresh time is in the
+     Auto-refresh select's title tooltip. */
+  .neo-refresh-status { display: none !important; }
+  /* Crush the header so the controls stack tight, no big black
+     gaps between rows. Padding 8/12 → 2/6, gap 8 → 2. The 2 px
+     gap is barely visible to the eye but stops the buttons
+     from touching, which matters for touch targets. */
+  .neo-header {
+    padding: 2px 6px !important;
+    gap: 2px !important;
+  }
+  .neo-refresh-group { gap: 2px !important; }
+  /* Trim individual control heights — Strato selects default to
+     ~32 px tall, which at 4 wrapped rows = 128 px just for the
+     header. Reducing to ~26 px tall buys 24 px of vertical
+     space back for the content below. */
+  .neo-header .neo-refresh-btn,
+  .neo-header .neo-refresh-interval,
+  .neo-header select {
+    min-height: 26px !important;
+    height: 26px !important;
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
+  }
   /* Belt-and-braces: kill any rogue horizontal scroll on the
      outermost app root. */
   .neo-app, .neo-page, .neo-page-overview {
