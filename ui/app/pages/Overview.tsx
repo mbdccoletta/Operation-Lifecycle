@@ -1930,7 +1930,22 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
     // semantic — Total = all active = no filter). In constellation
     // mode the same chip drives bubble highlight only, NOT row
     // filtering, so the gate keys off viewMode.
-    if (viewMode === "list" && (highlightedSubsetMode === "rising" || highlightedSubsetMode === "open_time")) {
+    //
+    // 0.0.283 — `&& !selectedRange` guard. Rising / Stuck are
+    // defined RELATIVE TO NOW ("started in the last hour", "active
+    // for more than 4 h"). A drilldown / brush `selectedRange` is a
+    // FIXED HISTORICAL window. Composing the two is almost always
+    // contradictory: clicking a Trend-chart bucket at 12:00-13:00
+    // sets that range, but the default-armed "Rising" filter then
+    // also demands `event.status == ACTIVE AND start >= now-1h` —
+    // a now-relative window that rarely intersects the historical
+    // bucket, AND the bucket's problems are mostly CLOSED (the MTTR
+    // line counts resolved problems). Net result was a always-empty
+    // drilldown list. User: "ao clicar em qualquer ponto do grafico,
+    // não vejo nenhum problema no drilldown". When a range is
+    // active, the range IS the filter — suppress the now-relative
+    // subset lens so the bucket's problems actually show.
+    if (!selectedRange && viewMode === "list" && (highlightedSubsetMode === "rising" || highlightedSubsetMode === "open_time")) {
       const now = Date.now();
       const RISING_WINDOW = 3_600_000;     // < 1 h
       out = out.filter((p) => {
