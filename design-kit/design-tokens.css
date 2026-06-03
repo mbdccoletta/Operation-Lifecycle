@@ -1,0 +1,117 @@
+/* ============================================================
+   PROBLEM LIFECYCLE — DESIGN TOKENS (source of truth)
+   Drop-in stylesheet. Import once at app root:
+     import "./design-kit/design-tokens.css";
+   Every value maps a Strato `--dt-*` token with a literal
+   fallback, so the app inherits the platform theme (light/dark
+   auto-flip) and still renders if Strato CSS hasn't loaded.
+   Consume ONLY the `--neo-*` aliases in your components.
+   ============================================================ */
+
+:root {
+  /* ─── Surfaces & containers ─── */
+  --neo-bg:            var(--dt-colors-background-base-default,                  #05080f);
+  --neo-surface:       var(--dt-colors-background-surface-default,              rgba(255,255,255,0.03));
+  --neo-surface-2:     var(--dt-colors-background-container-neutral-default,    rgba(255,255,255,0.06));
+  --neo-surface-hover: var(--dt-colors-background-container-neutral-emphasized, rgba(255,255,255,0.08));
+  --neo-border:        var(--dt-colors-border-neutral-default,                  rgba(255,255,255,0.06));
+  --neo-border-active: var(--dt-colors-border-primary-default,                  rgba(99,102,241,0.4));
+
+  /* Strong/muted backplates (pills, modals) — flip with theme */
+  --neo-pill-bg-strong: rgba(11,15,26,0.96);
+  --neo-pill-bg-muted:  rgba(11,15,26,0.85);
+  --neo-bg-transparent: rgba(5,8,15,0);
+
+  /* ─── Text (3 contrast levels) ─── */
+  --neo-text:   var(--dt-colors-text-neutral-default,   #e2e8f0);
+  --neo-text-2: var(--dt-colors-text-neutral-subdued,   #94a3b8);
+  --neo-text-3: var(--dt-colors-text-neutral-disabled,  #475569);
+
+  /* ─── Semantic status ─── */
+  --neo-critical:    var(--dt-colors-text-critical-default,                 #ef4444);
+  --neo-critical-bg: var(--dt-colors-background-container-critical-default, rgba(239,68,68,0.08));
+  --neo-warning:     var(--dt-colors-text-warning-default,                  #f59e0b);
+  --neo-warning-bg:  var(--dt-colors-background-container-warning-default,  rgba(245,158,11,0.08));
+  --neo-good:        var(--dt-colors-text-primary-default,                  #60a5fa);
+  --neo-good-bg:     var(--dt-colors-background-container-primary-default,  rgba(96,165,250,0.08));
+  --neo-success:     var(--dt-colors-text-success-default,                  #22c55e);
+  --neo-success-bg:  var(--dt-colors-background-container-success-default,  rgba(34,197,94,0.08));
+  --neo-neutral:     var(--dt-colors-text-neutral-subdued,                  #94a3b8);
+  --neo-info:        var(--dt-colors-text-primary-default,                  #60a5fa);
+  --neo-accent:      var(--dt-colors-text-primary-default,                  #6366f1);
+  --neo-accent-glow: rgba(99,102,241,0.3);
+  --neo-purple:      #a855f7;
+  --neo-cyan:        #22d3ee;
+
+  /* ─── App-specific status literals (DO NOT theme-swap these) ─── */
+  --neo-status-active:   #ff4d6a;   /* ACTIVE / open problem — ALWAYS red */
+  --neo-status-resolved: #22d3a0;   /* CLOSED / resolved — ALWAYS green */
+
+  /* ─── Metric series colors ─── */
+  --neo-metric-mtta: #818CF8;  /* purple */
+  --neo-metric-mttr: #FB923C;  /* orange */
+  --neo-metric-mtbf: #34D399;  /* green  */
+  --neo-metric-mttf: #22D3EE;  /* cyan   */
+
+  /* ─── Davis category colors (hues >40deg apart) ─── */
+  --neo-cat-availability:           #3a5fa3;  /* dark slate blue */
+  --neo-cat-error:                  #e89567;  /* coral */
+  --neo-cat-slowdown:               #6fa8d8;  /* steel blue */
+  --neo-cat-resource-contention:    #9c6fb4;  /* plum magenta */
+  --neo-cat-custom-alert:           #5fb5c4;  /* soft teal */
+  --neo-cat-monitoring-unavailable: #cbb46a;  /* sand */
+
+  /* ─── Typography ─── */
+  --neo-sans: var(--dt-typography-text-base-default-family,
+              "Bernina Sans", "DynatraceFlow", "Roboto", "Helvetica",
+              -apple-system, system-ui, sans-serif);
+  --neo-mono: var(--dt-typography-code-base-default-family,
+              "JetBrains Mono", "Roboto Mono", "SF Mono", monospace);
+
+  --neo-fs-xs:  calc(var(--dt-typography-text-small-default-size, 12px) * var(--neo-fs-mult, 1));
+  --neo-fs-sm:  calc(var(--dt-typography-text-base-default-size,  14px) * var(--neo-fs-mult, 1));
+  --neo-fs-md:  calc(var(--dt-typography-heading-level-6-size,    16px) * var(--neo-fs-mult, 1));
+  --neo-fs-lg:  calc(var(--dt-typography-heading-level-4-size,    20px) * var(--neo-fs-mult, 1));
+  --neo-fs-xl:  calc(var(--dt-typography-heading-level-3-size,    24px) * var(--neo-fs-mult, 1));
+  --neo-fs-xxl: calc(var(--dt-typography-heading-level-1-size,    32px) * var(--neo-fs-mult, 1));
+
+  --neo-fw-regular: 400;
+  --neo-fw-medium:  500;
+  --neo-fw-bold:    700;
+
+  --neo-lh-tight:   1.25;
+  --neo-lh-base:    1.42857;
+  --neo-lh-relaxed: 1.5;
+
+  --neo-fs-mult: 1;
+
+  /* ─── Shape & motion ─── */
+  --neo-radius:    var(--dt-borders-radius-container-default, 12px);
+  --neo-radius-sm: var(--dt-borders-radius-field-default,      8px);
+  /* fully-rounded pills: use border-radius: 999px */
+  --neo-transition: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* ─── Light mode: only the literal fallbacks need flipping ─── */
+[data-theme="light"] {
+  --neo-bg:            var(--dt-colors-background-base-default,                  #f8fafc);
+  --neo-surface:       var(--dt-colors-background-surface-default,              rgba(0,0,0,0.02));
+  --neo-surface-2:     var(--dt-colors-background-container-neutral-default,    rgba(0,0,0,0.04));
+  --neo-surface-hover: var(--dt-colors-background-container-neutral-emphasized, rgba(99,102,241,0.05));
+  --neo-border:        var(--dt-colors-border-neutral-default,                  rgba(0,0,0,0.06));
+  --neo-border-active: var(--dt-colors-border-primary-default,                  rgba(99,102,241,0.3));
+  --neo-pill-bg-strong: rgba(248,250,252,0.98);
+  --neo-pill-bg-muted:  rgba(248,250,252,0.88);
+  --neo-bg-transparent: rgba(248,250,252,0);
+  --neo-text:   var(--dt-colors-text-neutral-default,  #0f172a);
+  --neo-text-2: var(--dt-colors-text-neutral-subdued,  #475569);
+  --neo-text-3: var(--dt-colors-text-neutral-disabled, #94a3b8);
+}
+
+/* ─── Font-scale (accessibility) — text scales, layout doesn't ─── */
+[data-font-scale="small"]  { font-size: 14.5px; --neo-fs-mult: 0.92; }
+[data-font-scale="normal"] { font-size: 16px;   --neo-fs-mult: 1;    }
+[data-font-scale="large"]  { font-size: 18.5px; --neo-fs-mult: 1.16; }
+
+/* ─── Signature page fade-in ─── */
+@keyframes neo-fade-in { from { opacity: 0; } to { opacity: 1; } }
