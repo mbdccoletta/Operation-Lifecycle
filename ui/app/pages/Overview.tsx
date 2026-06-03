@@ -2173,6 +2173,22 @@ export const Overview = ({ groupBy = "category" }: OverviewProps) => {
     const stuckRaw = searchParams.get("stuck");
     const stuckNum = stuckRaw ? Number(stuckRaw) : null;
     setStuckHoursFilter(stuckNum != null && Number.isFinite(stuckNum) && stuckNum > 0 ? stuckNum : null);
+    // 0.0.284 — Clear the sticky Rising/Stuck subset lens when
+    // arriving via a drilldown. `highlightedSubsetMode` defaults to
+    // "rising" on desktop — a triage convenience for the BARE
+    // Incidents view — but it silently contradicts any targeted
+    // drilldown. Rising/Stuck both require `event.status == ACTIVE
+    // AND started-in-last-hour`, so they intersect to ZERO with:
+    //   • status=CLOSED  (Resolution Rate / MTTR KPI cards)
+    //   • stuck=4 (>4h)  (Stuck KPI card — "<1h" vs ">4h")
+    // and under-show on status=ACTIVE (only last-hour actives). The
+    // drilldown's own filters (status / stuck / entity / rce /
+    // selectedRange) carry the intent — the sticky subset lens must
+    // not ride along. User: "ao fazer drilldown destas sessoes, não
+    // vejo nada na lista".
+    const hasDrilldownParam = ["status", "stuck", "entity", "rce", "metric"]
+      .some((k) => searchParams.get(k) != null);
+    if (hasDrilldownParam) setHighlightedSubsetMode(null);
   }, [searchParams]);
 
   // Write viewMode + dataMode + tf + cat back to URL whenever they
